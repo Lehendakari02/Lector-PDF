@@ -27,10 +27,14 @@ def main(argv: list[str] | None = None) -> int:
     prepare_application(qt_app)
 
     window = MainWindow()
+    window.reporter.install(window)
     window.show()
     if autoclose:
         QTimer.singleShot(0, qt_app.quit)
-    return qt_app.exec()
+    try:
+        return qt_app.exec()
+    finally:
+        window.reporter.uninstall()
 
 
 if __name__ == "__main__":

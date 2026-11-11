@@ -16,9 +16,11 @@ from PySide6.QtWidgets import (
 
 from app import APP_NAME, BUILD_LABEL, __version__
 from app.core.document import engine_version
+from app.core.error_log import running_from_source_or_test_build
 from app.core.paths import data_dir, is_portable
 from app.core.settings import Settings
 from app.ui.command_palette import CommandPalette
+from app.ui.error_reporting import ErrorReporter, ProvokedError
 from app.ui.features import FEATURES, MODES, Feature, Mode, features_of, translate
 from app.ui.theme import THEME_SETTING, Theme, apply_theme
 
@@ -30,9 +32,12 @@ STATUS_MESSAGE_MS = 6000
 class MainWindow(QMainWindow):
     """Top-level window of the program."""
 
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(
+        self, settings: Settings | None = None, reporter: ErrorReporter | None = None
+    ) -> None:
         super().__init__()
         self.settings = settings if settings is not None else Settings()
+        self.reporter = reporter if reporter is not None else ErrorReporter(parent=self)
         self.setWindowTitle(APP_NAME)
         self.resize(1100, 750)
 
@@ -158,6 +163,22 @@ class MainWindow(QMainWindow):
         self.finder_action.triggered.connect(self.open_command_palette)
         help_menu.addAction(self.finder_action)
 
+        help_menu.addSeparator()
+        self.copy_report_action = QAction(self.tr("Copiar informe de error"), self)
+        self.copy_report_action.setStatusTip(
+            self.tr("Copia los últimos errores para que puedas pegarlos donde quieras")
+        )
+        self.copy_report_action.triggered.connect(self.copy_error_report)
+        help_menu.addAction(self.copy_report_action)
+
+        self.test_error_action = QAction(self.tr("Provocar un error de prueba"), self)
+        self.test_error_action.setStatusTip(
+            self.tr("Solo en versiones de prueba: comprueba que los errores se registran")
+        )
+        self.test_error_action.triggered.connect(self.raise_test_error)
+        self.test_error_action.setVisible(running_from_source_or_test_build())
+        help_menu.addAction(self.test_error_action)
+
     def _build_welcome(self) -> QWidget:
         title = QLabel(f"{APP_NAME} {__version__}")
         title.setObjectName("placeholderTitle")
@@ -252,3 +273,13 @@ class MainWindow(QMainWindow):
             ),
             STATUS_MESSAGE_MS,
         )
+
+    def copy_error_report(self) -> None:
+        self.reporter.copy_report()
+        self.statusBar().showMessage(
+            self.tr("Informe de error copiado. Pégalo donde quieras con Ctrl+V."),
+            STATUS_MESSAGE_MS,
+        )
+
+    def raise_test_error(self) -> None:
+        raise ProvokedError("Error de prueba provocado desde el menú Ayuda")
