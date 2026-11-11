@@ -11,6 +11,7 @@ copies finished images to the screen, which is what keeps scrolling smooth.
 import bisect
 import math
 from collections import OrderedDict
+from pathlib import Path
 
 from PySide6.QtCore import QEvent, QRect, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPalette
@@ -136,6 +137,10 @@ class PdfView(QAbstractScrollArea):
         """Close the document and stop the helper process."""
         self.close_document()
         self.service.shutdown()
+
+    @property
+    def document_path(self) -> Path | None:
+        return self._document.path if self._document is not None else None
 
     @property
     def page_count(self) -> int:

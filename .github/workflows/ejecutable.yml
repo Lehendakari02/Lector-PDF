@@ -87,6 +87,11 @@ jobs:
           "" >> $env:GITHUB_STEP_SUMMARY
           ("Instalador: {0:N0} MB" -f $installer) >> $env:GITHUB_STEP_SUMMARY
 
+      - name: Check the packaged program can sign
+        run: |
+          $run = Start-Process dist\Lector-PDF\Lector-PDF.exe -Wait -PassThru -ArgumentList "--check-signing", "tests\ejemplos\formulario.pdf", "tests\ejemplos\certificado-prueba.p12", "prueba"
+          if ($run.ExitCode -ne 0) { throw "The packaged program cannot sign (exit code $($run.ExitCode))." }
+
       - name: Check the portable version left nothing outside its folder
         run: |
           if (Test-Path "$env:LOCALAPPDATA\Lector-PDF") {
