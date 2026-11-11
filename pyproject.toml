@@ -16,10 +16,10 @@ dependencies = [
     # Qt for Python, LGPL-3.0. "Essentials" only: the full PySide6 package also
     # pulls in WebEngine (a whole web browser) and other add-ons we do not use.
     "PySide6_Essentials==6.12.0",
-    # PDF engine, AGPL-3.0. Kept on the 1.x series on purpose: PyMuPDF 2.x
-    # requires onnxruntime, numpy and bundled machine-learning layout models,
-    # which this project neither needs nor wants (see CLAUDE.md, "Sin IA").
-    "PyMuPDF==1.28.2",
+    # PDF engine, AGPL-3.0. Version 2 also installs machine-learning layout
+    # tools (onnxruntime, numpy, model files). The program does not use them and
+    # packaging/build.py leaves them out of the Windows program.
+    "PyMuPDF==2.1",
     # Certificate signatures (PAdES), MIT.
     "pyHanko==0.38.1",
 ]

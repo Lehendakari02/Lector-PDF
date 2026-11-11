@@ -255,9 +255,9 @@ de empresa o colaboración en línea.
   Mac/Linux sin esfuerzo extra, pero solo se prueba y publica para Windows.
 - **Python + PySide6 (Qt)**: interfaz de escritorio (con soporte de lápiz y táctil).
 - **PyMuPDF**: mostrar, buscar, anotar, rellenar, organizar, tapar datos, exportar.
-  Se usa la serie 1.x: la 2.x obliga a instalar componentes de inteligencia artificial
-  (análisis de páginas con modelos) que no se usan, chocan con el principio "Sin IA"
-  y engordan mucho el programa.
+  Se usa la versión 2. Trae consigo componentes de inteligencia artificial (análisis
+  de páginas con modelos) que el programa no usa: no se cargan ni se incluyen en el
+  `.exe`. Usarlos algún día sería una decisión aparte (principio "Sin IA").
 - **pyHanko**: firma con certificado (PAdES, sellos de tiempo, DNIe por PKCS#11).
 - Instalador `.exe` y versión portátil generados automáticamente en GitHub (GitHub
   Actions) y publicados en "Releases".
