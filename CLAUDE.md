@@ -270,7 +270,11 @@ de empresa o colaboración en línea.
 - La lógica PDF (`core/`) no depende de la interfaz (`ui/`), para poder probarla sola
   y, en el futuro, reutilizarla en otra versión.
 - Renderizado de páginas en segundo plano (sin bloquear la interfaz) y por partes,
-  para que los PDFs enormes vayan fluidos.
+  para que los PDFs enormes vayan fluidos. Las páginas se dibujan en un **proceso
+  ayudante** aparte (`core/render_service.py`), no en un hilo: PyMuPDF para el resto
+  de Python mientras dibuja (medido en la tarea 0.6). El ayudante abre su propia
+  copia del documento, así que cuando haya cambios (anotaciones, Fase 2) hay que
+  hacérselos llegar.
 - Repositorio privado hasta la versión 0.1; después, público (aviso de versiones,
   descargas para cualquiera, minutos de GitHub Actions ilimitados y opción de firma
   de código gratuita para proyectos libres con SignPath).

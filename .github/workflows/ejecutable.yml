@@ -79,6 +79,10 @@ jobs:
         run: |
           python packaging/measure.py "Versión portátil (carpeta)" dist\Lector-PDF\Lector-PDF.exe --size-of dist\Lector-PDF
           if ($LASTEXITCODE -ne 0) { throw "The program does not start." }
+          python packaging/measure.py "Abrir un PDF de 520 páginas" dist\Lector-PDF\Lector-PDF.exe --size-of dist\Lector-PDF --open tests\ejemplos\largo.pdf
+          if ($LASTEXITCODE -ne 0) { throw "The program cannot show a PDF." }
+          python packaging/measure.py "Abrir un PDF escaneado" dist\Lector-PDF\Lector-PDF.exe --size-of dist\Lector-PDF --open tests\ejemplos\escaneado.pdf
+          if ($LASTEXITCODE -ne 0) { throw "The program cannot show a scanned PDF." }
           $installer = (Get-Item dist\Lector-PDF-instalador.exe).Length / 1MB
           "" >> $env:GITHUB_STEP_SUMMARY
           ("Instalador: {0:N0} MB" -f $installer) >> $env:GITHUB_STEP_SUMMARY

@@ -1,11 +1,12 @@
 """Report how big a build is and how long the program takes to open.
 
 Usage:
-    python packaging/measure.py NAME PATH_TO_EXE [--runs N]
+    python packaging/measure.py NAME PATH_TO_EXE [--runs N] [--open FILE]
 
 Starts the program several times with ``--autoclose`` (open the window, then
-quit) and prints a Markdown table row. On GitHub the row is also added to the
-summary page of the run. Fails if the program does not start correctly.
+quit; with ``--open FILE``, quit when the first page of that PDF is on screen)
+and prints a Markdown table row. On GitHub the row is also added to the summary
+page of the run. Fails if the program does not start correctly.
 """
 
 import argparse
@@ -24,9 +25,10 @@ def size_mb(path: Path) -> float:
     return sum(f.stat().st_size for f in files) / (1024 * 1024)
 
 
-def time_start(exe: Path) -> float:
+def time_start(exe: Path, document: Path | None = None) -> float:
+    command = [str(exe), "--autoclose"] + ([str(document)] if document else [])
     started = time.perf_counter()
-    result = subprocess.run([str(exe), "--autoclose"], timeout=START_TIMEOUT_SECONDS, check=False)
+    result = subprocess.run(command, timeout=START_TIMEOUT_SECONDS, check=False)
     elapsed = time.perf_counter() - started
     if result.returncode != 0:
         raise SystemExit(f"{exe} exited with code {result.returncode}")
@@ -39,9 +41,14 @@ def main() -> int:
     parser.add_argument("exe", type=Path)
     parser.add_argument("--runs", type=int, default=5)
     parser.add_argument("--size-of", type=Path, help="measure this path instead of the exe")
+    parser.add_argument(
+        "--open", type=Path, help="open this PDF and wait until its first page is on screen"
+    )
     options = parser.parse_args()
+    if options.open and not options.open.is_file():
+        raise SystemExit(f"{options.open} does not exist")
 
-    times = [time_start(options.exe) for _ in range(options.runs)]
+    times = [time_start(options.exe, options.open) for _ in range(options.runs)]
     size = size_mb(options.size_of or options.exe)
     row = (
         f"| {options.name} | {size:.0f} MB | {times[0]:.1f} s | "

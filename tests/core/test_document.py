@@ -5,7 +5,7 @@ from pathlib import Path
 import pymupdf
 import pytest
 
-from app.core.document import PdfOpenError, engine_version, read_document_info
+from app.core.document import PdfDocument, PdfOpenError, engine_version, read_document_info
 
 
 def make_pdf(path: Path, pages: int = 1, password: str | None = None) -> Path:
@@ -67,3 +67,41 @@ def test_does_not_keep_the_file_locked(tmp_path):
 
 def test_engine_version_is_reported():
     assert engine_version()
+
+
+def test_pdf_document_gives_page_count_and_sizes(sample):
+    with PdfDocument(sample("boe.pdf")) as document:
+        assert document.page_count == 39
+        sizes = document.page_sizes()
+        assert len(sizes) == 39
+        assert round(sizes[0].width) == 595 and round(sizes[0].height) == 842
+        assert not document.needs_password
+
+
+def test_pdf_document_reads_520_page_sizes_quickly(sample):
+    import time
+
+    started = time.perf_counter()
+    with PdfDocument(sample("largo.pdf")) as document:
+        assert len(document.page_sizes()) == 520
+    assert time.perf_counter() - started < 2  # measured: about 10 ms
+
+
+def test_pdf_document_says_when_a_password_is_needed(sample):
+    with PdfDocument(sample("con-contrasena.pdf")) as document:
+        assert document.needs_password
+
+
+def test_pdf_document_rejects_missing_and_broken_files(tmp_path):
+    with pytest.raises(PdfOpenError):
+        PdfDocument(tmp_path / "no-existe.pdf")
+    broken = tmp_path / "roto.pdf"
+    broken.write_bytes(b"not a pdf at all")
+    with pytest.raises(PdfOpenError):
+        PdfDocument(broken)
+
+
+def test_pdf_document_can_be_closed_twice(sample):
+    document = PdfDocument(sample("boe.pdf"))
+    document.close()
+    document.close()

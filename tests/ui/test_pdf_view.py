@@ -1,0 +1,249 @@
+"""Tests for the continuous page view and opening documents in the window."""
+
+import pytest
+from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtGui import QWheelEvent
+
+from app.core.document import PdfDocument
+from app.main import AUTOCLOSE_FLAG, EXIT_PAGE_NOT_SHOWN, main
+from app.ui import pdf_view
+from app.ui.pdf_view import PdfView
+
+
+@pytest.fixture
+def view(qt_app):
+    made = PdfView()
+    made.resize(800, 600)
+    made.show()
+    qt_app.processEvents()
+    yield made
+    made.shutdown()
+    made.close()
+
+
+def show(view, path, wait_until):
+    view.set_document(PdfDocument(path))
+    wait_until(lambda: view.current_page in view.cached_pages())
+
+
+def fills_the_width(view) -> bool:
+    available = view.viewport().width() - 2 * pdf_view.SIDE_MARGIN
+    return abs(view._widths[0] - available) <= 1
+
+
+def wheel(view, steps: int) -> None:
+    event = QWheelEvent(
+        QPointF(100, 100),
+        QPointF(100, 100),
+        QPoint(0, 0),
+        QPoint(0, 120 * steps),
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.ControlModifier,
+        Qt.ScrollPhase.NoScrollPhase,
+        False,
+    )
+    view.wheelEvent(event)
+
+
+def test_empty_view_has_no_pages_and_starts_no_helper(view):
+    assert view.page_count == 0
+    assert view.current_page == -1
+    assert not view.service.is_running()
+
+
+def test_shows_the_first_page_fitted_to_the_width(view, sample, wait_until):
+    shown = []
+    view.first_page_shown.connect(lambda: shown.append(True))
+    show(view, sample("boe.pdf"), wait_until)
+    wait_until(lambda: shown)
+    assert view.page_count == 39
+    assert view.current_page == 0
+    # The page takes the whole width, minus the margins: no sideways scrolling.
+    assert fills_the_width(view)
+    assert view.horizontalScrollBar().maximum() == 0
+    assert view.verticalScrollBar().maximum() > 0
+
+
+def test_draws_only_the_pages_around_the_one_being_read(view, sample, wait_until):
+    show(view, sample("largo.pdf"), wait_until)
+    view.scroll_to_page(300)
+    wait_until(lambda: 300 in view.cached_pages() and 303 in view.cached_pages())
+    assert view.current_page == 300
+    cached = view.cached_pages()
+    assert all(page < 10 or 295 <= page <= 306 for page in cached), sorted(cached)
+
+
+def test_page_changed_tells_page_and_total(view, sample, wait_until):
+    seen = []
+    view.page_changed.connect(lambda page, total: seen.append((page, total)))
+    show(view, sample("boe.pdf"), wait_until)
+    view.scroll_to_page(9)
+    assert seen[0] == (1, 39)
+    assert seen[-1] == (10, 39)
+
+
+def test_zoom_in_and_out_keep_the_page_and_redraw_sharp(view, sample, wait_until):
+    show(view, sample("boe.pdf"), wait_until)
+    view.scroll_to_page(4)
+    before = view.zoom
+    view.zoom_in()
+    assert view.zoom == pytest.approx(before * pdf_view.ZOOM_STEP)
+    assert view.current_page == 4
+    wait_until(lambda: view.cached_pages().get(4) == view._render_zoom())
+    view.zoom_out()
+    assert view.zoom == pytest.approx(before)
+    assert view.current_page == 4
+
+
+def test_zoom_has_limits(view, sample, wait_until):
+    show(view, sample("escaneado.pdf"), wait_until)
+    view.set_zoom(1000)
+    assert view._zoom == pdf_view.MAX_ZOOM
+    view.set_zoom(0.0001)
+    assert view._zoom == pdf_view.MIN_ZOOM
+
+
+def test_set_zoom_100_percent_means_real_size(view, sample, wait_until):
+    show(view, sample("boe.pdf"), wait_until)
+    view.set_zoom(1.0)
+    # A4 is 595 points wide; at 100 % and 96 dots per inch that is 794 pixels.
+    assert view._widths[0] == 794
+
+
+def test_fit_width_follows_the_window_size(view, sample, wait_until, qt_app):
+    show(view, sample("boe.pdf"), wait_until)
+    view.resize(500, 600)
+    qt_app.processEvents()
+    assert fills_the_width(view)
+    view.set_zoom(2.0)
+    view.resize(700, 600)
+    qt_app.processEvents()
+    assert view.zoom == pytest.approx(2.0), "a zoom chosen by hand must not change on resize"
+    view.fit_width()
+    assert fills_the_width(view)
+
+
+def test_ctrl_wheel_zooms(view, sample, wait_until):
+    show(view, sample("boe.pdf"), wait_until)
+    before = view.zoom
+    wheel(view, 1)
+    assert view.zoom > before
+    wheel(view, -1)
+    assert view.zoom == pytest.approx(before)
+
+
+def test_keyboard_moves_through_the_document(view, sample, wait_until, qt_app):
+    from PySide6.QtTest import QTest
+
+    show(view, sample("boe.pdf"), wait_until)
+    QTest.keyClick(view, Qt.Key.Key_End)
+    assert view.current_page == 38
+    QTest.keyClick(view, Qt.Key.Key_Home)
+    assert view.current_page == 0
+    QTest.keyClick(view, Qt.Key.Key_PageDown)
+    assert view.verticalScrollBar().value() > 0
+
+
+def test_cache_forgets_the_farthest_pages(view, sample, wait_until, monkeypatch):
+    monkeypatch.setattr(pdf_view, "CACHE_BYTES", 6 * 1024 * 1024)
+    show(view, sample("largo.pdf"), wait_until)
+    for page in (50, 100, 150):
+        view.scroll_to_page(page)
+        wait_until(lambda page=page: page in view.cached_pages())
+    assert view._cache_bytes <= 6 * 1024 * 1024
+    assert 0 not in view.cached_pages()
+    assert 150 in view.cached_pages()
+
+
+def test_another_document_replaces_the_first(view, sample, wait_until):
+    show(view, sample("largo.pdf"), wait_until)
+    view.scroll_to_page(200)
+    show(view, sample("escaneado.pdf"), wait_until)
+    assert view.page_count == 3
+    assert view.current_page == 0
+    assert all(page < 3 for page in view.cached_pages())
+
+
+def test_pages_come_back_after_the_helper_crashes(view, sample, wait_until):
+    show(view, sample("largo.pdf"), wait_until)
+    view.service._process.kill()
+    wait_until(lambda: view.service.restarts == 1)
+    view.scroll_to_page(40)
+    wait_until(lambda: 40 in view.cached_pages())
+
+
+def test_close_document_empties_the_view(view, sample, wait_until):
+    show(view, sample("boe.pdf"), wait_until)
+    view.close_document()
+    assert view.page_count == 0
+    assert view.cached_pages() == {}
+    assert view.verticalScrollBar().maximum() == 0
+
+
+# ---- in the main window ----------------------------------------------------
+
+
+def test_window_opens_a_document_and_tells_where_you_are(window, sample, wait_until):
+    window.show_problem_dialogs = False
+    assert window.pages.currentWidget() is window.welcome
+    assert window.open_document(sample("boe.pdf"))
+    assert window.pages.currentWidget() is window.pdf_view
+    assert "boe.pdf" in window.windowTitle()
+    assert window.position_label.text().startswith("Página 1 de 39")
+    wait_until(lambda: 0 in window.pdf_view.cached_pages())
+    assert "ms" in window.speed_label.text()
+    window.pdf_view.scroll_to_page(11)
+    assert window.position_label.text().startswith("Página 12 de 39")
+
+
+def test_window_zoom_buttons_work(window, sample, wait_until):
+    window.show_problem_dialogs = False
+    window.open_document(sample("boe.pdf"))
+    before = window.pdf_view.zoom
+    window.feature_actions["zoom_in"].trigger()
+    assert window.pdf_view.zoom > before
+    assert f"{round(window.pdf_view.zoom * 100)} %" in window.position_label.text()
+    window.feature_actions["zoom_out"].trigger()
+    window.feature_actions["zoom_out"].trigger()
+    assert window.pdf_view.zoom < before
+    window.feature_actions["fit_width"].trigger()
+    assert window.pdf_view.zoom == pytest.approx(before)
+
+
+@pytest.mark.parametrize("name", ["no-existe.pdf", "roto.pdf"])
+def test_window_survives_files_it_cannot_open(window, tmp_path, name):
+    window.show_problem_dialogs = False
+    (tmp_path / "roto.pdf").write_bytes(b"not a pdf")
+    assert not window.open_document(tmp_path / name)
+    assert window.pages.currentWidget() is window.welcome
+    assert "No se puede abrir" in window.statusBar().currentMessage()
+
+
+def test_window_explains_password_documents(window, sample):
+    window.show_problem_dialogs = False
+    assert not window.open_document(sample("con-contrasena.pdf"))
+    assert "contraseña" in window.statusBar().currentMessage()
+
+
+def test_closing_the_window_stops_the_helper(qt_app, settings, sample, wait_until):
+    from app.ui.main_window import MainWindow
+
+    window = MainWindow(settings)
+    window.show_problem_dialogs = False
+    window.show()
+    window.open_document(sample("boe.pdf"))
+    wait_until(lambda: 0 in window.pdf_view.cached_pages())
+    process = window.pdf_view.service._process
+    window.close()
+    assert not process.is_alive()
+
+
+# ---- from the command line -------------------------------------------------
+
+
+def test_program_opens_the_file_it_is_given_and_shows_its_first_page(sample):
+    assert main(["lector-pdf", AUTOCLOSE_FLAG, str(sample("largo.pdf"))]) == 0
+
+
+def test_program_reports_a_file_it_cannot_show(tmp_path):
+    assert main(["lector-pdf", AUTOCLOSE_FLAG, str(tmp_path / "nada.pdf")]) == EXIT_PAGE_NOT_SHOWN

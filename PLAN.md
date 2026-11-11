@@ -18,7 +18,7 @@ Al acabar cada fase se publica una versión descargable en *Releases*.
 | 0.3 | PDFs de prueba en `tests/ejemplos/` (BOE, formulario, más de 500 páginas, escaneado, con OCR malo, con contraseña, firmado con certificado de prueba) | Existen y las pruebas automáticas los usan |✅ |
 | 0.4 | Esqueleto de la interfaz: pestañas de modos (Leer, Estudiar, Rellenar y firmar, Organizar), Ctrl+1…4, buscador de funciones (Ctrl+K), modo claro/oscuro | Cambio de modo y cambian las herramientas visibles |✅ |
 | 0.5 | Registro de errores local y botón "Copiar informe de error" | Provoco un error de prueba, copio el informe y lo pego |✅ |
-| 0.6 | Prueba de concepto: rendimiento (PDF de 500 páginas, renderizado en segundo plano, pantallas al 125/150 %) | Hago scroll por todo el documento sin tirones y el texto se ve nítido | ⬜ |
+| 0.6 | Prueba de concepto: rendimiento (PDF de 500 páginas, renderizado en segundo plano, pantallas al 125/150 %) | Hago scroll por todo el documento sin tirones y el texto se ve nítido | ✅ |
 | 0.7 | Prueba de concepto: buscador (sin tildes, palabras partidas con guion, la ñ no es n) | "articulo" encuentra "Artícu-lo" partido; "año" no encuentra "ano" | ⬜ |
 | 0.8 | Prueba de concepto: firma con certificado del almacén de Windows (FNMT) con pyHanko | Firmo un PDF con mi certificado instalado y Adobe/VALIDe lo dan por válido; si no sale, tengo explicadas las alternativas | ⬜ |
 | 0.9 | Prueba de concepto: OCR con Tesseract incluido en el `.exe` | Reconozco una página escaneada en español sin instalar nada aparte; sé cuánto crece el instalador | ⬜ |
@@ -30,6 +30,23 @@ La lista de lo que hay que probar en Windows al acabar la fase está en
 instalador 42 MB; versión portátil 59 MB en `.zip`. La portátil es una carpeta en `.zip`
 y no un único `.exe`: la carpeta abre en menos de 1 segundo y el `.exe` único tarda
 2,7 segundos cada vez, porque se descomprime en cada arranque.
+
+**Resultado de la tarea 0.6** (rendimiento, 11/11/2026):
+- Una página de texto se dibuja en 1 a 6 milésimas de segundo; una escaneada, en 30 a 150.
+  Leer el tamaño de las 520 páginas del PDF largo cuesta 10 milésimas: abrir es inmediato.
+- Hallazgo importante: mientras el motor PDF dibuja una página, el resto del programa
+  se queda parado, aunque se dibuje "en segundo plano" de la forma habitual (un hilo).
+  Con páginas escaneadas, la ventana daba tirones de 80 milésimas o más. Solución: las
+  páginas se dibujan en un **proceso ayudante** aparte. Así la ventana no para nunca
+  (parones medidos: unas 10 milésimas) y, si un PDF dañado tumba el motor, solo cae el
+  ayudante, que se reinicia solo.
+- Nitidez al 125 % y 150 %: cada punto de la página cae en un punto exacto de la
+  pantalla, sin estirar la imagen. Lo comprueba una prueba automática punto por punto.
+- Solo se dibujan las páginas a la vista y las vecinas; se guardan hasta 400 MB de
+  páginas ya dibujadas y se olvidan las más lejanas.
+- Queda para la Fase 1: dibujar por trozos con zoom muy alto (ahora una página nunca
+  pasa de 60 millones de puntos y a partir de ahí se estira), y que el ayudante se
+  entere de los cambios cuando haya anotaciones (Fase 2).
 
 ## Fase 1 – Lector
 | # | Tarea | Terminado cuando… | Estado |

@@ -1,13 +1,18 @@
 """Main window: the work modes, their tools and the function finder."""
 
+from pathlib import Path
+
 from PySide6.QtCore import QSize, Qt, qVersion
 from PySide6.QtGui import QAction, QActionGroup, QGuiApplication, QKeySequence
 from PySide6.QtWidgets import (
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QSizePolicy,
+    QStackedWidget,
     QTabBar,
     QToolBar,
     QVBoxLayout,
@@ -15,18 +20,20 @@ from PySide6.QtWidgets import (
 )
 
 from app import APP_NAME, BUILD_LABEL, __version__
-from app.core.document import engine_version
+from app.core.document import PdfDocument, PdfOpenError, engine_version
 from app.core.error_log import running_from_source_or_test_build
 from app.core.paths import data_dir, is_portable
 from app.core.settings import Settings
 from app.ui.command_palette import CommandPalette
 from app.ui.error_reporting import ErrorReporter, ProvokedError
 from app.ui.features import FEATURES, MODES, Feature, Mode, features_of, translate
+from app.ui.pdf_view import PdfView
 from app.ui.theme import THEME_SETTING, Theme, apply_theme
 
 # Big enough to press comfortably with a finger on a touch screen.
 MIN_BUTTON_HEIGHT = 40
 STATUS_MESSAGE_MS = 6000
+LAST_FOLDER_SETTING = "ultima_carpeta"
 
 
 class MainWindow(QMainWindow):
@@ -38,6 +45,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.settings = settings if settings is not None else Settings()
         self.reporter = reporter if reporter is not None else ErrorReporter(parent=self)
+        # Tests turn this off so that message boxes do not block them.
+        self.show_problem_dialogs = True
         self.setWindowTitle(APP_NAME)
         self.resize(1100, 750)
 
@@ -49,8 +58,35 @@ class MainWindow(QMainWindow):
         self._build_mode_bar()
         self._build_tool_bars()
         self._build_menus()
-        self.setCentralWidget(self._build_welcome())
+        self.welcome = self._build_welcome()
+        self.pdf_view = PdfView()
+        self.pages = QStackedWidget()
+        self.pages.addWidget(self.welcome)
+        self.pages.addWidget(self.pdf_view)
+        self.setCentralWidget(self.pages)
+
         self.statusBar().setSizeGripEnabled(True)
+        self.position_label = QLabel()
+        self.position_label.setObjectName("positionLabel")
+        self.speed_label = QLabel()
+        self.speed_label.setObjectName("speedLabel")
+        self.speed_label.setVisible(running_from_source_or_test_build())
+        self.statusBar().addPermanentWidget(self.speed_label)
+        self.statusBar().addPermanentWidget(self.position_label)
+        self._slowest_page = 0.0
+
+        self.pdf_view.page_changed.connect(self._update_position)
+        self.pdf_view.zoom_changed.connect(lambda _zoom: self._update_position())
+        self.pdf_view.page_drawn.connect(self._update_speed)
+        self.pdf_view.document_failed.connect(self._document_failed)
+
+        # Functions that already work. Every other one says it is not built yet.
+        self.feature_handlers = {
+            "open": self.choose_and_open,
+            "zoom_in": self.pdf_view.zoom_in,
+            "zoom_out": self.pdf_view.zoom_out,
+            "fit_width": self.pdf_view.fit_width,
+        }
 
         self.set_theme(Theme.from_setting(self.settings.get(THEME_SETTING)), remember=False)
         # Follow Windows when it switches between light and dark.
@@ -266,7 +302,10 @@ class MainWindow(QMainWindow):
         self.run_feature(feature)
 
     def run_feature(self, feature: Feature) -> None:
-        # No function is built yet: every button explains itself for now.
+        handler = self.feature_handlers.get(feature.id)
+        if handler is not None:
+            handler()
+            return
         self.statusBar().showMessage(
             self.tr("«{0}» todavía no está disponible. {1}.").format(
                 translate(feature.name), translate(feature.description)
@@ -283,3 +322,76 @@ class MainWindow(QMainWindow):
 
     def raise_test_error(self) -> None:
         raise ProvokedError("Error de prueba provocado desde el menú Ayuda")
+
+    # ---- documents ----------------------------------------------------
+
+    def choose_and_open(self) -> None:
+        start = str(self.settings.get(LAST_FOLDER_SETTING, ""))
+        path, _filter = QFileDialog.getOpenFileName(
+            self, self.tr("Abrir un PDF"), start, self.tr("Documentos PDF (*.pdf)")
+        )
+        if path:
+            self.settings.set(LAST_FOLDER_SETTING, str(Path(path).parent))
+            self.open_document(path)
+
+    def open_document(self, path: str | Path) -> bool:
+        """Show the PDF at ``path``. Problems give a message, never a crash."""
+        try:
+            document = PdfDocument(path)
+            if document.needs_password:
+                document.close()
+                self._show_problem(
+                    self.tr("Este PDF tiene contraseña"),
+                    self.tr("Todavía no se pueden abrir documentos con contraseña."),
+                )
+                return False
+            self._slowest_page = 0.0
+            self.pdf_view.set_document(document)
+        except PdfOpenError:
+            self._show_problem(
+                self.tr("No se puede abrir el documento"),
+                self.tr("El archivo «{0}» no existe, está dañado o no es un PDF.").format(
+                    Path(path).name
+                ),
+            )
+            return False
+        self.pages.setCurrentWidget(self.pdf_view)
+        self.pdf_view.setFocus()
+        self.setWindowTitle(f"{Path(path).name} – {APP_NAME}")
+        self._update_position()
+        return True
+
+    def _document_failed(self, _message: str) -> None:
+        self._show_problem(
+            self.tr("No se puede mostrar el documento"),
+            self.tr("El archivo está dañado o no es un PDF."),
+        )
+
+    def _show_problem(self, title: str, text: str) -> None:
+        self.statusBar().showMessage(f"{title}. {text}", STATUS_MESSAGE_MS)
+        if self.show_problem_dialogs:
+            QMessageBox.warning(self, title, text)
+
+    def _update_position(self, *_args: object) -> None:
+        if self.pdf_view.page_count == 0:
+            self.position_label.setText("")
+            return
+        self.position_label.setText(
+            self.tr("Página {0} de {1} · {2} %").format(
+                self.pdf_view.current_page + 1,
+                self.pdf_view.page_count,
+                round(self.pdf_view.zoom * 100),
+            )
+        )
+
+    def _update_speed(self, _page: int, seconds: float) -> None:
+        self._slowest_page = max(self._slowest_page, seconds)
+        self.speed_label.setText(
+            self.tr("Dibujo de página: {0} ms (la más lenta: {1} ms)").format(
+                round(seconds * 1000), round(self._slowest_page * 1000)
+            )
+        )
+
+    def closeEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        self.pdf_view.shutdown()
+        super().closeEvent(event)
