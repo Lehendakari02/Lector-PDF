@@ -12,6 +12,7 @@ time (it unpacks itself on each start) against under 1 s for the folder.
 """
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -39,6 +40,10 @@ EXCLUDED_MODULES = [
     "unittest",
     "pydoc",
 ]
+
+
+# Files the program reads while running; they keep the same path inside it.
+DATA_FOLDERS = ["app/recursos/tessdata"]  # Spanish language file for text recognition
 
 
 def write_build_info(label: str) -> None:
@@ -76,6 +81,8 @@ def run_pyinstaller(onefile: bool) -> None:
     ]
     for module in EXCLUDED_MODULES:
         command += ["--exclude-module", module]
+    for folder in DATA_FOLDERS:
+        command += ["--add-data", f"{ROOT / folder}{os.pathsep}{folder}"]
     if onefile:
         command += ["--onefile", "--distpath", str(ROOT / "dist" / "onefile")]
     else:

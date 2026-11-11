@@ -21,7 +21,7 @@ Al acabar cada fase se publica una versión descargable en *Releases*.
 | 0.6 | Prueba de concepto: rendimiento (PDF de 500 páginas, renderizado en segundo plano, pantallas al 125/150 %) | Hago scroll por todo el documento sin tirones y el texto se ve nítido | ✅ |
 | 0.7 | Prueba de concepto: buscador (sin tildes, palabras partidas con guion, la ñ no es n) | "articulo" encuentra "Artícu-lo" partido; "año" no encuentra "ano" | ✅ |
 | 0.8 | Prueba de concepto: firma con certificado del almacén de Windows (FNMT) con pyHanko | Firmo un PDF con mi certificado instalado y Adobe/VALIDe lo dan por válido; si no sale, tengo explicadas las alternativas | 🔄 construido; falta tu prueba con el certificado real |
-| 0.9 | Prueba de concepto: OCR con Tesseract incluido en el `.exe` | Reconozco una página escaneada en español sin instalar nada aparte; sé cuánto crece el instalador | ⬜ |
+| 0.9 | Prueba de concepto: OCR con Tesseract incluido en el `.exe` | Reconozco una página escaneada en español sin instalar nada aparte; sé cuánto crece el instalador | ✅ |
 
 La lista de lo que hay que probar en Windows al acabar la fase está en
 [`docs/pruebas-fase-0.md`](docs/pruebas-fase-0.md).
@@ -89,6 +89,24 @@ y no un único `.exe`: la carpeta abre en menos de 1 segundo y el `.exe` único 
   documentos, guardar sobre el mismo archivo y PDFs con contraseña.
 - Aviso para la Fase 2 (guardado): mientras un PDF está abierto, Windows no deja
   sustituir el archivo. Para "guardar en el mismo archivo" habrá que soltarlo un momento.
+
+**Resultado de la tarea 0.9** (reconocer texto, 11/11/2026):
+- Funciona sin instalar nada aparte. El motor Tesseract ya viene dentro de PyMuPDF, así
+  que no hace falta incluir otro programa: solo el archivo del idioma español (2,3 MB,
+  versión "rápida" de Tesseract, licencia Apache 2.0), en `app/recursos/tessdata`.
+- **El instalador crece unos 2 MB** por el reconocimiento de texto. (La firma de la
+  tarea 0.8 lo había subido de 42 a 52 MB.)
+- Calidad con el escaneado de prueba (torcido, gris y con ruido): lee bien más del 90 %
+  de las palabras, con tildes y eñes. Tarda 1 segundo por página.
+- Comprobada la cadena completa: página escaneada → texto reconocido → texto invisible
+  encima de la página (PDF estándar; la página se ve igual) → el buscador de la tarea
+  0.7 encuentra "articulo" y "camion" y los marca en su sitio.
+- Se reconoce a la resolución del propio escaneado: agrandarlo empeoraba el resultado.
+- Como dibujar páginas, reconocer va en un proceso aparte para no parar la ventana.
+- Queda para la Fase 2B: guardar la capa de texto en el PDF, hacerlo con todo el
+  documento con progreso y cancelar, enderezar y limpiar la imagen, rehacer un OCR malo
+  y decidir si compensa la versión "mejor" del idioma (unos 13 MB, más lenta) viendo
+  temarios escaneados de verdad.
 
 ## Fase 1 – Lector
 | # | Tarea | Terminado cuando… | Estado |
