@@ -1,6 +1,8 @@
 # Instrucciones del proyecto: Lector-PDF
 
-> Versión 0.4. Todas las decisiones principales están tomadas.
+> Versión 0.5 (11/11/2026). Todas las decisiones principales están tomadas.
+> Cambios de la 0.5: guardado y recuperación redefinidos, OCR como fase fija,
+> pruebas de concepto en la Fase 0 y decisiones de la revisión del plan.
 
 ## 1. Qué es y para quién
 Aplicación de escritorio gratuita y de código abierto para leer, estudiar, rellenar,
@@ -21,16 +23,20 @@ Sin ánimo de lucro: se podrá compartir con familia, amigos o publicarse.
 1. **Todo en local.** Ningún documento sale del ordenador. Sin cuentas, sin nube, sin
    telemetría. Solo dos excepciones, ambas desactivables: el sello de tiempo de la
    firma con certificado y la comprobación de nuevas versiones en GitHub.
+   Para informar de fallos hay un registro de errores local y un botón "Copiar
+   informe de error" que el usuario pega donde quiera; nunca se envía nada solo.
 2. **Sin muros de pago ni marcas de agua.**
 3. **PDF estándar siempre.** Todo lo que se guarda (subrayados, notas, formularios,
    firmas, márgenes, hojas añadidas) usa el estándar PDF y se ve igual en Adobe Reader,
    navegadores y otros visores. Nunca un formato que solo entienda este programa.
-4. **El usuario decide cómo guardar:**
+4. **Guardar es sencillo y seguro:**
    - **Guardar** (Ctrl+S): guarda los cambios en el mismo archivo.
    - **Guardar como** (Ctrl+Mayús+S): crea una copia nueva.
-   - Aviso si se va a modificar un PDF ya firmado (cambiarlo invalida la firma).
-5. **Nunca perder trabajo (autoguardado).** Imprescindible: un apagón, un cierre por
-   error o un fallo del programa no pueden borrar horas de estudio. Ver sección 5.
+   - El programa también guarda solo (ver sección 5), pero siempre se puede volver a
+     una versión anterior, y pregunta antes de guardar cuando importa (PDF firmado,
+     cambios fuertes).
+5. **Nunca perder trabajo.** Imprescindible: un apagón, un cierre por error o un fallo
+   del programa no pueden borrar horas de estudio. Ver sección 5.
 6. **Completo pero ordenado.** Ver sección 4. Cada cosa en su sitio: nunca todo a la
    vista a la vez, pero nada escondido ni difícil de encontrar.
 7. **Rápido**, incluso con PDFs de cientos de páginas.
@@ -67,22 +73,44 @@ Reglas:
 - Preparada para pantallas táctiles y lápiz (tabletas, Surface): botones con tamaño
   suficiente para el dedo.
 
-## 5. Autoguardado y recuperación (obligatorio desde la Fase 2)
-- **Diario de cambios:** cada cambio (subrayado, nota, texto, campo rellenado…) se
-  apunta al instante en un archivo de recuperación en la carpeta de datos del
-  programa (`%APPDATA%\Lector-PDF\recuperacion`). Escritura segura: se escribe en un
-  archivo temporal y se renombra, para que un apagón no lo deje a medias.
-- **Guardado automático en el propio PDF:** activado por defecto, cada pocos segundos
-  tras dejar de editar (y al cambiar de pestaña o cerrar). Se puede desactivar y
-  ajustar el intervalo en Ajustes.
-- **Copia de respaldo:** la primera vez que se modifica un PDF en cada sesión, se
-  guarda una copia del original en la carpeta de respaldos (se conservan las últimas).
-- **Recuperación:** al abrir el programa tras un cierre inesperado, ofrece recuperar
-  los cambios no guardados de cada documento.
-- **Indicador visible:** siempre se ve el estado ("Guardado", "Guardando…", "Cambios
-  sin guardar"). Al cerrar con cambios sin guardar, se avisa.
-- **Pruebas obligatorias:** simular cierres a la fuerza a mitad de edición y comprobar
-  que no se pierde nada ni se corrompe el PDF.
+## 5. Guardado, recuperación y versiones (obligatorio desde la Fase 2)
+Se copia lo bueno de otros programas (la autorrecuperación de Word, las versiones de
+Google Docs y Apple) y se evita lo malo (preguntar en cada cierre, hasta que se
+contesta "sí" sin leer).
+
+1. **Diario de recuperación (al instante, invisible).** Archivo pequeño, aparte del
+   PDF, en la carpeta de datos del programa. Cada cambio (subrayado, nota, texto,
+   campo, página…) se apunta en el momento. Escritura segura: nunca queda a medias.
+   Tras un apagón o un cierre inesperado, al abrir el programa ofrece recuperar los
+   cambios de cada documento. Cuando el PDF se guarda bien, esa parte se vacía.
+2. **Guardado automático en el PDF.** Activado por defecto:
+   - tras un rato sin editar (30 segundos por defecto, ajustable o desactivable);
+   - al cambiar de pestaña;
+   - al cerrar la pestaña o el programa: la X es "guardar y cerrar".
+   Nunca cada pocos segundos mientras se edita.
+3. **Escritura segura del PDF.** Se escribe en un archivo temporal completo junto al
+   original y luego se sustituye. Si falla (archivo bloqueado por otro programa,
+   OneDrive/Dropbox sincronizando, sin permisos), no se pierde nada: los cambios
+   siguen en el diario, se reintenta y se avisa.
+4. **Versiones anteriores (red de seguridad).** La primera vez que se cambia un PDF
+   en cada sesión se guarda una copia de cómo estaba. "Archivo → Versiones
+   anteriores" permite ver y restaurar cualquiera (se conservan las últimas; número
+   y espacio ajustables). Así, si se guardó algo que no se quería, se puede volver.
+5. **Pregunta antes de guardar solo cuando importa:**
+   - el PDF está firmado (guardar invalida la firma): nunca se guarda solo;
+   - hay cambios fuertes: borrar páginas, tapar datos, cambiar el texto original;
+   - el archivo no se puede guardar en su sitio (adjunto de correo en carpeta
+     temporal, solo lectura): ofrece "Guardar como";
+   - otro programa ha cambiado el archivo mientras estaba abierto.
+6. **Ajuste opcional** "Preguntar siempre antes de guardar al cerrar", desactivado
+   por defecto.
+7. **Indicador visible:** siempre se ve el estado ("Guardado", "Guardando…",
+   "Cambios sin guardar").
+8. **Diseño interno:** cada cambio es una "orden" que sabe aplicarse, deshacerse y
+   apuntarse en el diario. Deshacer/rehacer, diario y recuperación salen de esa misma
+   pieza, no de tres sistemas separados.
+9. **Pruebas obligatorias:** simular cierres a la fuerza a mitad de edición y a mitad
+   de guardado, y comprobar que no se pierde nada ni se corrompe el PDF.
 
 ## 6. Funciones por fases
 ### Fase 1 – Lector
@@ -93,7 +121,7 @@ Reglas:
 - Zoom, ajustar a ancho/página, rotar, pantalla completa.
 - **Buscador excelente:**
   - No distingue tildes ni mayúsculas: "articulo" encuentra "Artículo"; "camion",
-    "CAMIÓN".
+    "CAMIÓN". **La ñ no es una n**: "año" no encuentra "ano".
   - Encuentra palabras partidas con guion al final de línea y frases que saltan de
     línea (muy habitual en el BOE).
   - Lista de resultados con la frase alrededor; resaltado de todos en la página;
@@ -102,9 +130,13 @@ Reglas:
 - Seleccionar y copiar texto.
 - Modo oscuro y modo lectura (tono sepia/cálido para leer muchas horas).
 - Archivos recientes. Imprimir.
-- **Instalador** y **versión portátil** (un `.exe` que funciona sin instalar, por
-  ejemplo en el ordenador del trabajo).
-- **Aviso de nuevas versiones** (consulta GitHub Releases; desactivable).
+- **Instalador** y **versión portátil** (funciona sin instalar, por ejemplo en el
+  ordenador del trabajo). La versión portátil guarda ajustes, diario y versiones
+  junto al programa, nunca en `%APPDATA%`. Formato (un `.exe` o una carpeta en
+  `.zip`) según lo que tarde en arrancar.
+- Páginas nítidas en pantallas con escala 125 %/150 %.
+- **Aviso de nuevas versiones** (consulta GitHub Releases; desactivable). Requiere
+  que el repositorio sea público: se hará público al publicar la versión 0.1.
 
 ### Fase 2 – Estudiar y anotar (prioridad principal)
 Básico:
@@ -153,8 +185,18 @@ Para estudiar mejor:
     encontrado"; el subrayado y las notas se siguen viendo.
   - Limitación asumida: Adobe respeta estos enlaces; los navegadores (Edge, Chrome)
     suelen bloquearlos. El PDF sigue siendo válido en todos.
-- **Comparar dos versiones** de un documento: muestra qué texto se ha añadido, quitado
-  o cambiado (p. ej. cuando se modifica una ley del temario).
+### Fase 2B – Documentos escaneados, OCR (fase fija, entre anotar y estudiar)
+Muchos temarios son escaneados o traen un OCR de mala calidad. Todo lo de estudiar
+(buscar, subrayar, saltar a artículo, modo repaso, resumen) depende del texto, así
+que el OCR es una pieza central y se hace antes de las herramientas de estudio.
+- Detectar páginas sin texto (escaneadas) y ofrecer "Reconocer texto" sin molestar.
+- OCR en español (Tesseract, libre) que añade una capa de texto invisible: el PDF
+  se ve igual y se guarda como PDF estándar (se puede buscar también en Adobe).
+- En segundo plano, con progreso, cancelable, sin bloquear la lectura.
+- Enderezar y limpiar la imagen antes de reconocer, para mejorar el resultado.
+- Rehacer el OCR de PDFs que ya traen uno malo (todo o páginas concretas).
+- El buscador y el subrayado se prueban con texto de OCR real, no solo con PDFs
+  "limpios"; opción de búsqueda aproximada para fallos típicos (1/l, 0/O, rn/m).
 
 ### Fase 3 – Rellenar y firma manuscrita
 - Rellenar formularios PDF (campos, casillas, desplegables) y escribir en PDFs sin campos.
@@ -178,6 +220,10 @@ Para estudiar mejor:
 - Ver y comprobar las firmas que ya tiene un PDF.
 - Prueba de validez: los PDFs firmados deben validarse en VALIDe (Gobierno de España)
   y en Adobe Reader.
+- Riesgo conocido: pyHanko no usa directamente el almacén de certificados de Windows
+  (donde suele estar el certificado FNMT). Hace falta un puente propio con Windows.
+  Se comprueba con una prueba de concepto en la Fase 0; plan B si no sale: usar el
+  `.p12` exportado o apoyarse en AutoFirma.
 
 ### Fase 5 – Organizar y convertir
 - Unir, dividir, reordenar (arrastrando miniaturas), rotar, eliminar, extraer páginas.
@@ -189,12 +235,13 @@ Para estudiar mejor:
   texto e imágenes de una zona (DNI, cuenta bancaria…) antes de enviar, de forma que
   no se pueda recuperar.
 - Comprimir, poner/quitar contraseña.
+- **Comparar dos versiones** de un documento: muestra qué texto se ha añadido, quitado
+  o cambiado (p. ej. cuando se modifica una ley del temario).
 
 ### Fase 6 – Editar el texto original
 - Corregir o sustituir texto del documento, empezando por cambios puntuales.
 
 ### Ideas para más adelante
-- OCR (convertir PDFs escaneados en texto que se pueda buscar y subrayar).
 - Versión para tableta o móvil (por eso la lógica PDF va separada de la interfaz).
 - Mac/Linux si sale fácil.
 
@@ -213,20 +260,43 @@ de empresa o colaboración en línea.
   Actions) y publicados en "Releases".
 - Licencia: **AGPL-3.0** (software libre, obligatoria por usar PyMuPDF; compatible con
   compartirlo gratis o hacerlo público).
+- **Tesseract** (Apache 2.0) con el idioma español, incluido en el instalador: OCR.
 - La lógica PDF (`core/`) no depende de la interfaz (`ui/`), para poder probarla sola
   y, en el futuro, reutilizarla en otra versión.
+- Renderizado de páginas en segundo plano (sin bloquear la interfaz) y por partes,
+  para que los PDFs enormes vayan fluidos.
+- Repositorio privado hasta la versión 0.1; después, público (aviso de versiones,
+  descargas para cualquiera, minutos de GitHub Actions ilimitados y opción de firma
+  de código gratuita para proyectos libres con SignPath).
+
+### Letra pequeña del "PDF estándar"
+- Cuadros de texto: otros lectores solo garantizan unas pocas fuentes básicas; con
+  otras fuentes hay que incluir el aspecto dibujado para que se vean igual.
+- Trazos con presión del lápiz: el trazo estándar tiene un solo grosor; el grosor
+  variable se guarda como aspecto dibujado (Adobe y Edge lo respetan).
+- Márgenes ampliables y hojas añadidas cambian la geometría: cuidar que anotaciones
+  y enlaces no se muevan.
+- Por eso las pruebas de cada función que guarda algo incluyen abrir el resultado en
+  Edge y en Adobe y comparar.
 
 ## 8. Forma de trabajar
 - El usuario no programa: dirige, prueba y decide. Claude programa todo.
 - Explicar los avances en lenguaje sencillo, sin jerga.
 - Al terminar cada tarea: qué se ha hecho, cómo probarlo y qué sigue.
-- Las decisiones de diseño o funciones se consultan antes de implementarlas.
+- Los detalles pequeños de diseño los decide Claude y los explica. Se consultan
+  antes las decisiones que cambian qué hace el programa, añaden una función o una
+  dependencia, o tocan estos principios.
 - Trabajar fase a fase y en tareas pequeñas; mantener `PLAN.md` actualizado.
+- Cada tarea en su rama con un pull request. GitHub Actions ejecuta las pruebas en
+  Windows y genera un `.exe` de prueba de ese pull request. El usuario lo prueba y
+  se fusiona en `main`. Nunca se sube nada directamente a `main`.
+- Al cerrar cada fase, revisión del código de esa fase en un hilo aparte.
 - Código y comentarios en inglés; interfaz en español (preparada para traducir).
 - Pruebas automáticas para la lógica PDF; carpeta `tests/ejemplos/` con PDFs de prueba
-  (formulario, BOE, escaneado, con contraseña, muy largo, firmado).
+  (formulario, BOE, escaneado, con OCR malo, con contraseña, muy largo, firmado).
 - No añadir dependencias sin justificarlo (licencia, tamaño, mantenimiento).
 - Manejar bien PDFs con contraseña, dañados o enormes, sin que el programa se cierre.
+- Pensar en la accesibilidad con lectores de pantalla (NVDA) desde el principio.
 
 ## 9. Estructura prevista
 ```
