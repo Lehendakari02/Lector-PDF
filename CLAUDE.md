@@ -136,12 +136,23 @@ Para estudiar mejor:
   documento (leyes del BOE, temarios, contratos…).
 - **Modo repaso**: tapar lo subrayado para intentar recordarlo; se destapa con un clic.
   Sin algoritmos ni programación de repasos.
-- **Enlaces entre documentos** *(pendiente de confirmar)*: desde una nota o un
-  subrayado, crear un enlace que abre otro PDF en la página exacta (p. ej. desde el
-  tema, el artículo de la ley).
 - **Vista de dos documentos** lado a lado (p. ej. tema y ley).
 - **Biblioteca del temario**: carpeta con todos los temas, búsqueda en todos a la vez
   (con las mismas reglas del buscador) y progreso por tema (leído / subrayado / repasado).
+- **Enlaces entre documentos**: desde un texto o una nota, un enlace que abre otro
+  PDF en el sitio exacto (p. ej. desde el tema 5, el artículo 14 de la Constitución).
+  - Crear: seleccionar texto → clic derecho "Enlazar a…" → elegir documento (pestañas
+    abiertas o biblioteca) → elegir destino escribiendo "art. 14" o yendo a la página
+    y pulsando "Enlazar aquí".
+  - Abrir: clic en el enlace → el destino se abre al lado (vista de dos documentos).
+  - Se guarda como enlace PDF estándar a otro archivo (GoToR) con **ruta relativa**,
+    para que funcione en cualquier ordenador con la misma estructura de carpetas.
+  - Si el archivo se ha movido o renombrado: buscarlo en la biblioteca; si no aparece,
+    preguntar "¿dónde está ahora?" y corregir de una vez todos los enlaces a él.
+  - Si no existe (p. ej. el PDF se ha compartido sin el destino): aviso "documento no
+    encontrado"; el subrayado y las notas se siguen viendo.
+  - Limitación asumida: Adobe respeta estos enlaces; los navegadores (Edge, Chrome)
+    suelen bloquearlos. El PDF sigue siendo válido en todos.
 - **Comparar dos versiones** de un documento: muestra qué texto se ha añadido, quitado
   o cambiado (p. ej. cuando se modifica una ley del temario).
 

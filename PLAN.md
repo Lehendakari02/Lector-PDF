@@ -65,8 +65,8 @@ Al acabar cada fase se publica una versión descargable en *Releases*.
 | 2.21 | Exportar resumen | Saco un documento con todo lo subrayado, ordenado por página | ⬜ |
 | 2.22 | Modo repaso | Lo subrayado se tapa y lo descubro al hacer clic | ⬜ |
 | 2.23 | Vista de dos documentos lado a lado | Veo el tema y la ley a la vez | ⬜ |
-| 2.24 | Enlaces entre documentos *(pendiente de confirmar)* | Desde una nota del tema, un clic abre la ley en el artículo exacto | ⬜ |
-| 2.25 | Biblioteca del temario | Elijo mi carpeta de temas, busco en todos y veo mi progreso | ⬜ |
+| 2.24 | Biblioteca del temario | Elijo mi carpeta de temas, busco en todos y veo mi progreso | ⬜ |
+| 2.25 | Enlaces entre documentos (ver `CLAUDE.md`) | Desde el tema 5, un clic abre la Constitución al lado en el artículo 14; si muevo el archivo, el programa lo encuentra o me deja corregirlo | ⬜ |
 | 2.26 | Comparar dos versiones de un documento | Veo qué ha cambiado entre dos versiones de una ley | ⬜ |
 | 2.27 | Versión 0.3 | — | ⬜ |
 
