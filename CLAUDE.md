@@ -1,6 +1,6 @@
 # Instrucciones del proyecto: Lector PDF
 
-> Versión 0.2. Las partes marcadas con **[DECIDIR]** están pendientes de acordar.
+> Versión 0.3. Todas las decisiones principales están tomadas.
 
 ## 1. Qué es y para quién
 Aplicación de escritorio gratuita y de código abierto para leer, estudiar, rellenar,
@@ -25,11 +25,11 @@ Sin ánimo de lucro: se podrá compartir con familia, amigos o publicarse.
 4. **El usuario decide cómo guardar:**
    - **Guardar** (Ctrl+S): guarda los cambios en el mismo archivo.
    - **Guardar como** (Ctrl+Mayús+S): crea una copia nueva.
-   - Red de seguridad: copia de respaldo automática antes de sobrescribir y
-     autoguardado de recuperación por si se cierra el programa inesperadamente.
    - Aviso si se va a modificar un PDF ya firmado (cambiarlo invalida la firma).
-5. **Simple antes que completo.** Lo habitual, a la vista; lo avanzado, en menús.
-6. **Rápido**, incluso con PDFs de cientos de páginas.
+5. **Nunca perder trabajo (autoguardado).** Imprescindible: un apagón, un cierre por
+   error o un fallo del programa no pueden borrar horas de estudio. Ver sección 4.
+6. **Simple antes que completo.** Lo habitual, a la vista; lo avanzado, en menús.
+7. **Rápido**, incluso con PDFs de cientos de páginas.
 
 ## 3. Qué significa "editar" (decisión tomada)
 Hay dos niveles de edición:
@@ -40,7 +40,24 @@ Hay dos niveles de edición:
   frases del propio documento. Es técnicamente difícil (los PDF no están hechos para
   esto) y se hará más adelante, empezando por correcciones puntuales.
 
-## 4. Funciones por fases
+## 4. Autoguardado y recuperación (obligatorio desde la Fase 2)
+- **Diario de cambios:** cada cambio (subrayado, nota, texto, campo rellenado…) se
+  apunta al instante en un archivo de recuperación en la carpeta de datos del
+  programa (`%APPDATA%\Lector-PDF\recuperacion`). Escritura segura: se escribe en un
+  archivo temporal y se renombra, para que un apagón no lo deje a medias.
+- **Guardado automático en el propio PDF:** activado por defecto, cada pocos segundos
+  tras dejar de editar (y al cambiar de pestaña o cerrar). Se puede desactivar y
+  ajustar el intervalo en Ajustes.
+- **Copia de respaldo:** la primera vez que se modifica un PDF en cada sesión, se
+  guarda una copia del original en la carpeta de respaldos (se conservan las últimas).
+- **Recuperación:** al abrir el programa tras un cierre inesperado, ofrece recuperar
+  los cambios no guardados de cada documento.
+- **Indicador visible:** siempre se ve el estado ("Guardado", "Guardando…", "Cambios
+  sin guardar"). Al cerrar con cambios sin guardar, se avisa.
+- **Pruebas obligatorias:** simular cierres a la fuerza a mitad de edición y comprobar
+  que no se pierde nada ni se corrompe el PDF.
+
+## 5. Funciones por fases
 ### Fase 1 – Lector
 - Abrir PDF (menú, arrastrar y soltar, "Abrir con…" de Windows, PDF predeterminado).
 - **Pestañas** para tener varios PDFs abiertos.
@@ -53,13 +70,16 @@ Hay dos niveles de edición:
 
 ### Fase 2 – Estudiar, anotar y rellenar (prioridad principal)
 Básico:
-- Resaltar, subrayar y tachar texto seleccionándolo, en varios colores.
-- Notas adhesivas, cuadros de texto, flechas y formas, dibujo a mano alzada, borrador.
+- Resaltar, subrayar y tachar texto seleccionándolo.
+- **Todos los colores**: paleta rápida con colores habituales + selector de cualquier
+  color, para subrayados, texto, notas, dibujos y formas. Grosor y opacidad ajustables.
+- Notas adhesivas, cuadros de texto (fuente, tamaño y color elegibles), flechas y
+  formas, dibujo a mano alzada, borrador.
 - Rellenar formularios PDF (campos, casillas, desplegables) y escribir en PDFs sin campos.
 - Deshacer/rehacer ilimitado.
 - Atajos de teclado para cada herramienta (estudiar rápido sin ratón).
 
-Para estudiar mejor (propuestas, **[DECIDIR]** cuáles entran):
+Para estudiar mejor (todas aprobadas):
 - **Colores con significado**: el usuario define qué significa cada color
   (p. ej. amarillo = importante, rojo = plazos, verde = definiciones).
 - **Panel de anotaciones**: lista de todos los subrayados y notas del documento,
@@ -70,7 +90,7 @@ Para estudiar mejor (propuestas, **[DECIDIR]** cuáles entran):
 - **Biblioteca del temario**: carpeta con todos los temas, búsqueda en todos a la vez
   y progreso de estudio por tema (leído / subrayado / repasado).
 - **Vista de dos documentos** lado a lado (p. ej. tema y ley del BOE).
-- Herramientas pensadas para el BOE: saltar a un artículo por su número.
+- **Saltar a un artículo del BOE** por su número.
 
 ### Fase 3 – Firma manuscrita
 - Crear firma dibujando, escribiendo el nombre o importando una imagen (quitando el fondo).
@@ -98,7 +118,7 @@ Para estudiar mejor (propuestas, **[DECIDIR]** cuáles entran):
 - OCR (convertir PDFs escaneados en texto que se pueda buscar y subrayar).
 - Leer en voz alta. Versión para otros sistemas (Mac/Linux) si sale fácil.
 
-## 5. Tecnología
+## 6. Tecnología
 - **Windows** es el objetivo principal. Se elige tecnología que también funcione en
   Mac/Linux sin esfuerzo extra, pero solo se prueba y publica para Windows.
 - **Python + PySide6 (Qt)**: interfaz de escritorio.
@@ -109,7 +129,7 @@ Para estudiar mejor (propuestas, **[DECIDIR]** cuáles entran):
 - Licencia: **AGPL-3.0** (software libre, obligatoria por usar PyMuPDF; compatible con
   compartirlo gratis o hacerlo público).
 
-## 6. Forma de trabajar
+## 7. Forma de trabajar
 - El usuario no programa: dirige, prueba y decide. Claude programa todo.
 - Explicar los avances en lenguaje sencillo, sin jerga.
 - Al terminar cada tarea: qué se ha hecho, cómo probarlo y qué sigue.
@@ -121,7 +141,7 @@ Para estudiar mejor (propuestas, **[DECIDIR]** cuáles entran):
 - No añadir dependencias sin justificarlo (licencia, tamaño, mantenimiento).
 - Manejar bien PDFs con contraseña, dañados o enormes, sin que el programa se cierre.
 
-## 7. Estructura prevista
+## 8. Estructura prevista
 ```
 lector-pdf/
   CLAUDE.md        # este archivo
