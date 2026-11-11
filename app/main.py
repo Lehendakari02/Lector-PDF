@@ -9,9 +9,12 @@ from app import APP_NAME, __version__
 from app.ui.main_window import MainWindow
 from app.ui.theme import prepare_application
 
-# Hidden option used by the automatic builds: open the window, then quit. It
-# checks that the packaged program really starts and measures how long it takes.
+# Hidden option used by the automatic builds: open the window, then quit. With
+# a PDF it quits when the first page is on screen. It checks that the packaged
+# program really starts and draws, and measures how long it takes.
 AUTOCLOSE_FLAG = "--autoclose"
+AUTOCLOSE_TIMEOUT_MS = 60_000
+EXIT_PAGE_NOT_SHOWN = 3
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -29,11 +32,23 @@ def main(argv: list[str] | None = None) -> int:
     window = MainWindow()
     window.reporter.install(window)
     window.show()
+
+    # A file given on the command line ("Abrir con…", double click) is opened.
+    files = [arg for arg in args[1:] if not arg.startswith("-")]
     if autoclose:
-        QTimer.singleShot(0, qt_app.quit)
+        window.show_problem_dialogs = False
+    opened = bool(files) and window.open_document(files[0])
+
+    if autoclose and opened:
+        window.pdf_view.first_page_shown.connect(qt_app.quit)
+        QTimer.singleShot(AUTOCLOSE_TIMEOUT_MS, lambda: qt_app.exit(EXIT_PAGE_NOT_SHOWN))
+    elif autoclose:
+        code = EXIT_PAGE_NOT_SHOWN if files else 0
+        QTimer.singleShot(0, lambda: qt_app.exit(code))
     try:
         return qt_app.exec()
     finally:
+        window.pdf_view.shutdown()
         window.reporter.uninstall()
 
 

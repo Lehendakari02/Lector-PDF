@@ -31,3 +31,16 @@ formas". Es normal hasta que el programa esté firmado.
 - [ ] En el aviso, "Copiar informe de error" y pegar en el Bloc de notas: sale el informe.
 - [ ] El informe no contiene tu nombre de usuario de Windows (la carpeta personal sale como `~`).
 - [ ] Menú Ayuda → "Copiar informe de error" funciona también sin el aviso.
+
+## Tarea 0.6 – Rendimiento
+Con un PDF tuyo largo (un tema o una ley de cientos de páginas) y, si tienes, uno escaneado:
+- [ ] "Abrir" (modo Leer) y elegir el PDF: aparece enseguida.
+- [ ] Bajar con la rueda del ratón por todo el documento: sin tirones.
+- [ ] Arrastrar la barra de la derecha hasta la mitad de golpe: la página aparece
+      casi al instante (puede verse un momento una hoja en blanco con su número).
+- [ ] Ctrl + rueda acerca y aleja; "Ajustar al ancho" vuelve a encajar la página.
+- [ ] El texto se ve nítido, sobre todo si tu pantalla está al 125 % o 150 %
+      (compáralo con el mismo PDF en Edge o Adobe).
+- [ ] Abajo a la derecha pone cuánto tarda en dibujarse cada página: apunta "la más
+      lenta" con tu PDF más pesado.
+- [ ] Con un PDF escaneado, lo mismo: ¿va fluido?

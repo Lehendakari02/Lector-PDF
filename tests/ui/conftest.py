@@ -1,5 +1,7 @@
 """Shared setup for interface tests."""
 
+import time
+
 import pytest
 from PySide6.QtWidgets import QApplication
 
@@ -27,3 +29,17 @@ def window(qt_app, settings):
     qt_app.processEvents()
     yield main_window
     main_window.close()
+
+
+@pytest.fixture
+def wait_until(qt_app):
+    """Keep the interface running until ``condition`` is true (or fail)."""
+
+    def wait(condition, seconds: float = 30) -> None:
+        deadline = time.monotonic() + seconds
+        while not condition():
+            assert time.monotonic() < deadline, "timed out waiting"
+            qt_app.processEvents()
+            time.sleep(0.005)
+
+    return wait
