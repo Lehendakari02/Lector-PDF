@@ -89,14 +89,6 @@ jobs:
             throw "The portable version wrote to LOCALAPPDATA."
           }
 
-      # TEMPORARY (task 0.2 only): compare with a single-file .exe to choose the
-      # format of the portable version. Removed before merging.
-      - name: Measure single-file alternative
-        run: |
-          python packaging/build.py --onefile
-          python packaging/measure.py "Un solo .exe" dist\onefile\Lector-PDF.exe
-          if ($LASTEXITCODE -ne 0) { throw "The single-file program does not start." }
-
       - name: Upload program folder
         uses: actions/upload-artifact@v4
         with:

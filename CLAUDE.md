@@ -132,8 +132,8 @@ contesta "sí" sin leer).
 - Archivos recientes. Imprimir.
 - **Instalador** y **versión portátil** (funciona sin instalar, por ejemplo en el
   ordenador del trabajo). La versión portátil guarda ajustes, diario y versiones
-  junto al programa, nunca en `%APPDATA%`. Formato (un `.exe` o una carpeta en
-  `.zip`) según lo que tarde en arrancar.
+  junto al programa (carpeta `datos`), nunca en `%APPDATA%`. Formato: una carpeta
+  en `.zip`, porque abre en menos de 1 segundo y un único `.exe` tarda casi 3.
 - Páginas nítidas en pantallas con escala 125 %/150 %.
 - **Aviso de nuevas versiones** (consulta GitHub Releases; desactivable). Requiere
   que el repositorio sea público: se hará público al publicar la versión 0.1.
@@ -261,6 +261,9 @@ de empresa o colaboración en línea.
 - **pyHanko**: firma con certificado (PAdES, sellos de tiempo, DNIe por PKCS#11).
 - Instalador `.exe` y versión portátil generados automáticamente en GitHub (GitHub
   Actions) y publicados en "Releases".
+  Se crean con PyInstaller (empaquetado) e Inno Setup (instalador, sin pedir permisos
+  de administrador). Para publicar una versión: poner el número en `app/__init__.py`
+  y crear en GitHub una *Release* con la etiqueta `v` + ese número (p. ej. `v0.1.0`).
 - Licencia: **AGPL-3.0** (software libre, obligatoria por usar PyMuPDF; compatible con
   compartirlo gratis o hacerlo público).
 - **Tesseract** (Apache 2.0) con el idioma español, incluido en el instalador: OCR.
@@ -315,5 +318,6 @@ Lector-PDF/
     core/          # pruebas de la lógica PDF
     ui/            # pruebas de la interfaz
     ejemplos/      # PDFs de prueba
-  .github/workflows/  # creación automática del instalador y la versión portátil
+  packaging/       # cómo se crea el programa de Windows y el instalador
+  .github/workflows/  # pruebas y creación automática del instalador y la portátil
 ```

@@ -5,6 +5,10 @@ Usage (from the repository root):
 
 Result: ``dist/Lector-PDF/`` (a folder with ``Lector-PDF.exe`` inside), or the
 single file ``dist/onefile/Lector-PDF.exe`` with ``--onefile``.
+
+The project ships the folder. ``--onefile`` is kept only to repeat the
+comparison: measured in task 0.2, the single file took 2.7 s to open every
+time (it unpacks itself on each start) against under 1 s for the folder.
 """
 
 import argparse
