@@ -25,11 +25,14 @@ from app.core.document import PdfDocument, PdfOpenError, engine_version
 from app.core.error_log import running_from_source_or_test_build
 from app.core.paths import data_dir, is_portable
 from app.core.settings import Settings
+from app.core.signing import PasswordProtected, SigningError, sign_pdf
+from app.core.windows_store import SigningCancelled
 from app.ui.command_palette import CommandPalette
 from app.ui.error_reporting import ErrorReporter, ProvokedError
 from app.ui.features import FEATURES, MODES, Feature, Mode, features_of, translate
 from app.ui.pdf_view import PdfView
 from app.ui.search_panel import SearchPanel
+from app.ui.sign_dialog import CertificateDialog
 from app.ui.theme import THEME_SETTING, Theme, apply_theme
 
 # Big enough to press comfortably with a finger on a touch screen.
@@ -101,6 +104,7 @@ class MainWindow(QMainWindow):
         self.feature_handlers = {
             "open": self.choose_and_open,
             "search": self.show_search,
+            "sign_certificate": self.sign_with_certificate,
             "zoom_in": self.pdf_view.zoom_in,
             "zoom_out": self.pdf_view.zoom_out,
             "fit_width": self.pdf_view.fit_width,
@@ -392,6 +396,73 @@ class MainWindow(QMainWindow):
     def close_search(self) -> None:
         self.search_dock.hide()
         self.pdf_view.setFocus()
+
+    # ---- signing (proof of concept of task 0.8) ------------------------
+
+    def sign_with_certificate(self) -> None:
+        """Ask for a certificate and a new file name, and sign the open document."""
+        source = self.pdf_view.document_path
+        if source is None:
+            self.statusBar().showMessage(
+                self.tr("Abre el documento que quieres firmar."), STATUS_MESSAGE_MS
+            )
+            return
+        dialog = CertificateDialog(self)
+        if dialog.exec() != CertificateDialog.DialogCode.Accepted or dialog.signer is None:
+            return
+        suggested = source.with_name(f"{source.stem}-firmado.pdf")
+        target, _filter = QFileDialog.getSaveFileName(
+            self,
+            self.tr("Guardar el documento firmado como"),
+            str(suggested),
+            self.tr("Documentos PDF (*.pdf)"),
+        )
+        if target:
+            self.sign_document(source, Path(target), dialog.signer)
+
+    def sign_document(self, source: Path, target: Path, signer) -> bool:
+        """Sign ``source`` into ``target`` and tell how it went."""
+        if target.resolve() == source.resolve():
+            self._show_problem(
+                self.tr("Elige otro nombre"),
+                self.tr("De momento el documento firmado se guarda como una copia nueva."),
+            )
+            return False
+        try:
+            sign_pdf(source, target, signer)
+        except SigningCancelled:
+            self.statusBar().showMessage(self.tr("Firma cancelada."), STATUS_MESSAGE_MS)
+            return False
+        except PasswordProtected:
+            self._show_problem(
+                self.tr("Este PDF tiene contraseña"),
+                self.tr("Todavía no se pueden firmar documentos con contraseña."),
+            )
+            return False
+        except SigningError as error:
+            self.reporter.log.record(type(error), error, error.__traceback__, "firmar")
+            self._show_problem(
+                self.tr("No se ha podido firmar"),
+                self.tr(
+                    "El documento original no se ha tocado. Con Ayuda → «Copiar informe "
+                    "de error» puedes ver el detalle."
+                ),
+            )
+            return False
+        message = self.tr("Documento firmado y guardado como «{0}».").format(target.name)
+        self.statusBar().showMessage(message, STATUS_MESSAGE_MS)
+        if self.show_problem_dialogs:
+            QMessageBox.information(
+                self,
+                self.tr("Documento firmado"),
+                message
+                + "\n\n"
+                + self.tr(
+                    "Para comprobar la firma, ábrelo con Adobe Reader o súbelo a VALIDe "
+                    "(valide.redsara.es)."
+                ),
+            )
+        return True
 
     def _document_failed(self, _message: str) -> None:
         self._show_problem(

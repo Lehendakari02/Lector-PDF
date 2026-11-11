@@ -20,7 +20,7 @@ Al acabar cada fase se publica una versión descargable en *Releases*.
 | 0.5 | Registro de errores local y botón "Copiar informe de error" | Provoco un error de prueba, copio el informe y lo pego |✅ |
 | 0.6 | Prueba de concepto: rendimiento (PDF de 500 páginas, renderizado en segundo plano, pantallas al 125/150 %) | Hago scroll por todo el documento sin tirones y el texto se ve nítido | ✅ |
 | 0.7 | Prueba de concepto: buscador (sin tildes, palabras partidas con guion, la ñ no es n) | "articulo" encuentra "Artícu-lo" partido; "año" no encuentra "ano" | ✅ |
-| 0.8 | Prueba de concepto: firma con certificado del almacén de Windows (FNMT) con pyHanko | Firmo un PDF con mi certificado instalado y Adobe/VALIDe lo dan por válido; si no sale, tengo explicadas las alternativas | ⬜ |
+| 0.8 | Prueba de concepto: firma con certificado del almacén de Windows (FNMT) con pyHanko | Firmo un PDF con mi certificado instalado y Adobe/VALIDe lo dan por válido; si no sale, tengo explicadas las alternativas | 🔄 construido; falta tu prueba con el certificado real |
 | 0.9 | Prueba de concepto: OCR con Tesseract incluido en el `.exe` | Reconozco una página escaneada en español sin instalar nada aparte; sé cuánto crece el instalador | ⬜ |
 
 La lista de lo que hay que probar en Windows al acabar la fase está en
@@ -66,6 +66,29 @@ y no un único `.exe`: la carpeta abre en menos de 1 segundo y el `.exe` único 
 - Queda para la tarea 1.4: frases que saltan de una página a la siguiente, resaltar en
   negrita la palabra en la lista, y probar con columnas y tablas. La búsqueda
   aproximada para fallos de OCR (1/l, 0/O) es de la Fase 2B.
+
+**Resultado de la tarea 0.8** (firma con certificado, 11/11/2026):
+- El puente con Windows está hecho: el programa pide a Windows la lista de certificados
+  instalados y le pide que firme; la clave nunca sale de Windows y la contraseña o el
+  PIN los pide Windows en su propia ventana.
+- Comprobado en las máquinas Windows de GitHub con certificados de prueba instalados en
+  el almacén: clave RSA guardada a la manera moderna, RSA a la manera antigua (como
+  muchos certificados FNMT instalados hace años) y clave de curva elíptica. Las tres
+  firman y la firma se valida.
+- La firma es PAdES (el estándar europeo), invisible, e incluye las autoridades que
+  avalan el certificado cuando Windows las conoce. Se guarda siempre como copia nueva.
+- **Lo que solo puede comprobar el usuario:** que funciona con su certificado FNMT real
+  y que VALIDe y Adobe Reader dan la firma por válida. Está en la lista de pruebas.
+- Hallazgo: los PDF del BOE tienen un detalle que pyHanko no sabe leer. Solución: si un
+  documento no se deja preparar y no tiene firmas, se reescribe limpio antes de firmar.
+  Si ya tuviera firmas, no se toca y se avisa.
+- **Alternativas si el certificado instalado no funcionara** (plan B): 1) firmar con el
+  archivo `.p12`/`.pfx` exportado, que ya funciona y está en la misma ventana; 2) apoyarse
+  en AutoFirma (programa del Gobierno) para la firma, dejando el resto al Lector-PDF.
+- Queda para la Fase 4: firma visible, sello de tiempo, DNIe con lector, firmar varios
+  documentos, guardar sobre el mismo archivo y PDFs con contraseña.
+- Aviso para la Fase 2 (guardado): mientras un PDF está abierto, Windows no deja
+  sustituir el archivo. Para "guardar en el mismo archivo" habrá que soltarlo un momento.
 
 ## Fase 1 – Lector
 | # | Tarea | Terminado cuando… | Estado |

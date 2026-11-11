@@ -15,11 +15,37 @@ from app.ui.theme import prepare_application
 AUTOCLOSE_FLAG = "--autoclose"
 AUTOCLOSE_TIMEOUT_MS = 60_000
 EXIT_PAGE_NOT_SHOWN = 3
+# Hidden option of the automatic builds: --check-signing PDF P12_FILE PASSWORD
+CHECK_SIGNING_FLAG = "--check-signing"
+EXIT_SIGNING_FAILED = 4
+
+
+def check_signing(source: str, certificate_file: str, password: str) -> int:
+    """Sign a copy of ``source`` in a temporary folder; 0 if it worked.
+
+    Used by the automatic builds to check that everything signing needs really
+    is inside the packaged program.
+    """
+    import tempfile
+    from pathlib import Path
+
+    from app.core.signing import SigningError, load_p12_signer, sign_pdf
+
+    with tempfile.TemporaryDirectory() as folder:
+        try:
+            signer = load_p12_signer(certificate_file, password)
+            signed = sign_pdf(source, Path(folder) / "firmado.pdf", signer)
+            return 0 if signed.stat().st_size > Path(source).stat().st_size else EXIT_SIGNING_FAILED
+        except SigningError:
+            return EXIT_SIGNING_FAILED
 
 
 def main(argv: list[str] | None = None) -> int:
     """Start the program and return its exit code."""
     args = list(sys.argv if argv is None else argv)
+    if CHECK_SIGNING_FLAG in args:
+        values = args[args.index(CHECK_SIGNING_FLAG) + 1 :]
+        return check_signing(*values[:3]) if len(values) >= 3 else EXIT_SIGNING_FAILED
     autoclose = AUTOCLOSE_FLAG in args
     if autoclose:
         args.remove(AUTOCLOSE_FLAG)

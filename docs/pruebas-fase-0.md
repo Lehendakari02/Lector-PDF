@@ -58,3 +58,24 @@ Con un PDF tuyo del BOE o de un temario (con texto, no escaneado):
 - [ ] En un PDF largo los resultados van apareciendo sin que el programa se quede parado.
 - [ ] Esc cierra la búsqueda y quita las marcas.
 - [ ] ¿Echas algo en falta en el panel? ¿Lo prefieres a la derecha o en otro sitio?
+
+## Tarea 0.8 – Firma con certificado (la prueba más importante de la fase)
+Hace falta tu certificado FNMT instalado en Windows (el que usas en el navegador).
+- [ ] Abre un PDF cualquiera que no sea importante. Modo "Rellenar y firmar" →
+      "Firmar con certificado".
+- [ ] ¿Aparece tu certificado en la lista, con tu nombre y la fecha de caducidad?
+- [ ] "Firmar con este" → elige dónde guardar la copia. Si Windows pide contraseña o
+      permiso para usar la clave, es normal: esa ventana es de Windows, no del programa.
+- [ ] Sale "Documento firmado". Si sale un error: Ayuda → "Copiar informe de error" y
+      pégamelo.
+- [ ] Abre la copia firmada en **Adobe Reader**: arriba debe decir que está firmado, y
+      en el panel de firmas, tu nombre. Apunta qué dice exactamente (válida, validez
+      desconocida…).
+- [ ] Sube la copia a **VALIDe** (valide.redsara.es → "Validar firma") y apunta el
+      resultado.
+- [ ] Prueba también con un PDF del BOE y con uno que ya esté firmado por otra persona
+      (la firma anterior debe seguir siendo válida).
+- [ ] Plan B, si tienes el certificado exportado en un archivo `.p12` o `.pfx`: mismo
+      botón → "Usar un archivo .p12 o .pfx…" → contraseña → firmar y validar igual.
+
+No subas a VALIDe documentos con datos que no quieras compartir: usa uno de prueba.
