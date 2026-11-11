@@ -1,0 +1,5 @@
+Lector-PDF, versión portátil.
+
+Mientras este archivo esté junto a Lector-PDF.exe, el programa guarda sus
+ajustes y copias de seguridad en la carpeta "datos", aquí mismo, y no deja
+nada en el resto del ordenador. No lo borres.

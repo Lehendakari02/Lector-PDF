@@ -132,8 +132,8 @@ contesta "sí" sin leer).
 - Archivos recientes. Imprimir.
 - **Instalador** y **versión portátil** (funciona sin instalar, por ejemplo en el
   ordenador del trabajo). La versión portátil guarda ajustes, diario y versiones
-  junto al programa, nunca en `%APPDATA%`. Formato (un `.exe` o una carpeta en
-  `.zip`) según lo que tarde en arrancar.
+  junto al programa (carpeta `datos`), nunca en `%APPDATA%`. Formato: una carpeta
+  en `.zip`, porque abre en menos de 1 segundo y un único `.exe` tarda casi 3.
 - Páginas nítidas en pantallas con escala 125 %/150 %.
 - **Aviso de nuevas versiones** (consulta GitHub Releases; desactivable). Requiere
   que el repositorio sea público: se hará público al publicar la versión 0.1.
@@ -255,12 +255,15 @@ de empresa o colaboración en línea.
   Mac/Linux sin esfuerzo extra, pero solo se prueba y publica para Windows.
 - **Python + PySide6 (Qt)**: interfaz de escritorio (con soporte de lápiz y táctil).
 - **PyMuPDF**: mostrar, buscar, anotar, rellenar, organizar, tapar datos, exportar.
-  Se usa la serie 1.x: la 2.x obliga a instalar componentes de inteligencia artificial
-  (análisis de páginas con modelos) que no se usan, chocan con el principio "Sin IA"
-  y engordan mucho el programa.
+  Se usa la versión 2. Trae consigo componentes de inteligencia artificial (análisis
+  de páginas con modelos) que el programa no usa: no se cargan ni se incluyen en el
+  `.exe`. Usarlos algún día sería una decisión aparte (principio "Sin IA").
 - **pyHanko**: firma con certificado (PAdES, sellos de tiempo, DNIe por PKCS#11).
 - Instalador `.exe` y versión portátil generados automáticamente en GitHub (GitHub
   Actions) y publicados en "Releases".
+  Se crean con PyInstaller (empaquetado) e Inno Setup (instalador, sin pedir permisos
+  de administrador). Para publicar una versión: poner el número en `app/__init__.py`
+  y crear en GitHub una *Release* con la etiqueta `v` + ese número (p. ej. `v0.1.0`).
 - Licencia: **AGPL-3.0** (software libre, obligatoria por usar PyMuPDF; compatible con
   compartirlo gratis o hacerlo público).
 - **Tesseract** (Apache 2.0) con el idioma español, incluido en el instalador: OCR.
@@ -315,5 +318,6 @@ Lector-PDF/
     core/          # pruebas de la lógica PDF
     ui/            # pruebas de la interfaz
     ejemplos/      # PDFs de prueba
-  .github/workflows/  # creación automática del instalador y la versión portátil
+  packaging/       # cómo se crea el programa de Windows y el instalador
+  .github/workflows/  # pruebas y creación automática del instalador y la portátil
 ```

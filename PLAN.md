@@ -14,7 +14,7 @@ Al acabar cada fase se publica una versión descargable en *Releases*.
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
 | 0.1 | Estructura del proyecto y dependencias | El código se organiza según `CLAUDE.md` |✅ |
-| 0.2 | Creación automática del instalador y la versión portátil en GitHub | En cada pull request aparece un `.exe` de prueba descargable; al publicar una versión, el instalador y la portátil van a *Releases*; sé cuánto ocupan y cuánto tardan en abrir | ⬜ |
+| 0.2 | Creación automática del instalador y la versión portátil en GitHub | En cada pull request aparece un `.exe` de prueba descargable; al publicar una versión, el instalador y la portátil van a *Releases*; sé cuánto ocupan y cuánto tardan en abrir |✅ |
 | 0.3 | PDFs de prueba en `tests/ejemplos/` (BOE, formulario, más de 500 páginas, escaneado, con OCR malo, con contraseña, firmado con certificado de prueba) | Existen y las pruebas automáticas los usan | ⬜ |
 | 0.4 | Esqueleto de la interfaz: pestañas de modos (Leer, Estudiar, Rellenar y firmar, Organizar), Ctrl+1…4, buscador de funciones (Ctrl+K), modo claro/oscuro | Cambio de modo y cambian las herramientas visibles | ⬜ |
 | 0.5 | Registro de errores local y botón "Copiar informe de error" | Provoco un error de prueba, copio el informe y lo pego | ⬜ |
@@ -22,6 +22,11 @@ Al acabar cada fase se publica una versión descargable en *Releases*.
 | 0.7 | Prueba de concepto: buscador (sin tildes, palabras partidas con guion, la ñ no es n) | "articulo" encuentra "Artícu-lo" partido; "año" no encuentra "ano" | ⬜ |
 | 0.8 | Prueba de concepto: firma con certificado del almacén de Windows (FNMT) con pyHanko | Firmo un PDF con mi certificado instalado y Adobe/VALIDe lo dan por válido; si no sale, tengo explicadas las alternativas | ⬜ |
 | 0.9 | Prueba de concepto: OCR con Tesseract incluido en el `.exe` | Reconozco una página escaneada en español sin instalar nada aparte; sé cuánto crece el instalador | ⬜ |
+
+**Medidas de la tarea 0.2** (programa casi vacío, 11/11/2026; crecerá con las funciones):
+instalador 42 MB; versión portátil 59 MB en `.zip`. La portátil es una carpeta en `.zip`
+y no un único `.exe`: la carpeta abre en menos de 1 segundo y el `.exe` único tarda
+2,7 segundos cada vez, porque se descomprime en cada arranque.
 
 ## Fase 1 – Lector
 | # | Tarea | Terminado cuando… | Estado |
