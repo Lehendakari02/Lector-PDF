@@ -1,14 +1,17 @@
-# Primer prompt (para arrancar la construcción)
+# Primer prompt (para pegar al empezar una sesión de trabajo nueva)
 
-Lee `CLAUDE.md` entero. Vamos a construir la aplicación descrita ahí.
+Vamos a construir Lector-PDF. Lee `CLAUDE.md` (instrucciones y decisiones tomadas) y
+`PLAN.md` (plan por fases y tareas) enteros antes de hacer nada.
 
-Antes de escribir código:
-1. Pregúntame lo que haga falta para cerrar los puntos marcados como [DECIDIR].
-2. Con mis respuestas, crea `PLAN.md`: divide cada fase en tareas pequeñas, cada una
-   con su criterio de "terminado" explicado de forma que yo pueda comprobarlo.
-3. Propón la estructura inicial y las dependencias exactas, con su licencia.
+Recuerda:
+- Yo no sé programar: tú programas todo y me explicas los avances en lenguaje sencillo.
+- Consúltame cualquier decisión de diseño o función nueva antes de hacerla.
+- Trabaja tarea a tarea, en el orden de `PLAN.md`, y márcalas como hechas al terminar.
+- Guarda cada avance en GitHub con un mensaje claro.
 
-Después, empieza por la Fase 1, tarea 1: una ventana que abra un PDF y muestre sus
-páginas con scroll, y la creación automática del .exe en GitHub para que pueda
-probarlo en mi Windows. Cuando funcione, dime cómo descargarlo y probarlo, y espera mi
-confirmación antes de seguir.
+Si ves algo en las instrucciones o el plan que no tenga sentido o que se pueda mejorar,
+dímelo antes de empezar.
+
+Después empieza por la **Fase 0**: estructura del proyecto, creación automática del
+`.exe` en GitHub y PDFs de prueba. Cuando esté, dime cómo descargar el `.exe` y
+probarlo en mi Windows, y espera mi confirmación antes de pasar a la Fase 1.

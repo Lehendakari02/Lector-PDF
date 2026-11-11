@@ -80,8 +80,9 @@ Básico:
 - Atajos de teclado para cada herramienta (estudiar rápido sin ratón).
 
 Para estudiar mejor (todas aprobadas):
-- **Colores con significado**: el usuario define qué significa cada color
-  (p. ej. amarillo = importante, rojo = plazos, verde = definiciones).
+- **Código de colores propio (opcional)**: no viene nada predefinido. Cada persona
+  puede, si quiere, ponerle nombre a sus colores (p. ej. "rojo = lo más importante");
+  si no lo hace, los colores son simplemente colores.
 - **Panel de anotaciones**: lista de todos los subrayados y notas del documento,
   filtrable por color, para saltar a cada uno.
 - **Exportar resumen**: sacar todo lo subrayado y anotado a un documento de resumen.
@@ -90,7 +91,8 @@ Para estudiar mejor (todas aprobadas):
 - **Biblioteca del temario**: carpeta con todos los temas, búsqueda en todos a la vez
   y progreso de estudio por tema (leído / subrayado / repasado).
 - **Vista de dos documentos** lado a lado (p. ej. tema y ley del BOE).
-- **Saltar a un artículo del BOE** por su número.
+- **Saltar a un artículo, apartado o sección** escribiendo su número, en cualquier
+  documento (leyes del BOE, temarios, contratos…).
 
 ### Fase 3 – Firma manuscrita
 - Crear firma dibujando, escribiendo el nombre o importando una imagen (quitando el fondo).

@@ -1,5 +1,7 @@
 # Plan de Lector-PDF
 
+> Borrador para revisar. Aún no se ha empezado a programar.
+
 Estado: ⬜ pendiente · 🔄 en curso · ✅ hecho
 
 Cada tarea dice **cómo comprobar que está terminada** (lo prueba el usuario en su Windows).
@@ -49,10 +51,10 @@ Al acabar cada fase se publica una versión descargable en *Releases*.
 ## Fase 2B – Herramientas de estudio
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
-| 2.13 | Colores con significado | Defino "rojo = plazos" y se ve en la leyenda | ⬜ |
+| 2.13 | Código de colores propio (opcional, nada predefinido) | Si quiero, pongo nombre a mis colores; si no, no aparece nada | ⬜ |
 | 2.14 | Panel de anotaciones filtrable | Veo todos mis subrayados rojos y salto a cada uno | ⬜ |
 | 2.15 | Marcadores propios | Marco artículos clave y vuelvo a ellos con un clic | ⬜ |
-| 2.16 | Saltar a un artículo del BOE | Escribo "art. 14" y me lleva allí | ⬜ |
+| 2.16 | Saltar a artículo, apartado o sección por su número | Escribo "art. 14" o "3.2" en cualquier documento y me lleva allí | ⬜ |
 | 2.17 | Exportar resumen | Saco un documento con todo lo subrayado, ordenado por página | ⬜ |
 | 2.18 | Modo repaso | Lo subrayado se tapa y lo descubro al hacer clic | ⬜ |
 | 2.19 | Vista de dos documentos lado a lado | Veo el tema y la ley a la vez | ⬜ |
