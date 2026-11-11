@@ -12,12 +12,13 @@ import bisect
 import math
 from collections import OrderedDict
 
-from PySide6.QtCore import QEvent, QRect, Qt, Signal
+from PySide6.QtCore import QEvent, QRect, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPalette
 from PySide6.QtWidgets import QAbstractScrollArea, QWidget
 
 from app.core.document import PageSize, PdfDocument
 from app.core.render_service import RenderedPage, RenderRequest, RenderService
+from app.core.search import SearchHit
 
 PAGE_GAP = 12  # space between pages, in Qt units
 SIDE_MARGIN = 16
@@ -27,6 +28,9 @@ ZOOM_STEP = 1.2
 PAGES_AHEAD = 3
 PAGES_BEHIND = 1
 CACHE_BYTES = 400 * 1024 * 1024
+# Search results: see-through, so the text stays readable in light and dark pages.
+MARK_COLOR = QColor(255, 213, 0, 110)
+CURRENT_MARK_COLOR = QColor(255, 120, 0, 150)
 
 
 def _engine_pixels(points: float, zoom: float) -> int:
@@ -53,6 +57,10 @@ class PdfView(QAbstractScrollArea):
     page_drawn = Signal(int, float)
     first_page_shown = Signal()
     document_failed = Signal(str)
+
+    # Search results: (search number, list of SearchHit) and (number, too many).
+    search_hits = Signal(int, object)
+    search_finished = Signal(int, bool)
 
     # Carry results from the service's background thread to the interface thread.
     _rendered = Signal(object)
@@ -81,6 +89,8 @@ class PdfView(QAbstractScrollArea):
         self._current_page = -1
         self._shown_first = False
         self._wanted: list[RenderRequest] = []
+        self._marks: dict[int, list[SearchHit]] = {}  # search results by page
+        self._current_mark: SearchHit | None = None
 
         self._rendered.connect(self._store_page)
         self._open_failed.connect(self.document_failed)
@@ -89,6 +99,8 @@ class PdfView(QAbstractScrollArea):
             on_page=self._rendered.emit,
             on_open_failed=self._open_failed.emit,
             on_crashed=self._crashed.emit,
+            on_hits=self.search_hits.emit,
+            on_search_done=self.search_finished.emit,
         )
         self.verticalScrollBar().valueChanged.connect(self._scrolled)
         self.horizontalScrollBar().valueChanged.connect(self._scrolled)
@@ -116,6 +128,8 @@ class PdfView(QAbstractScrollArea):
         self._cache_bytes = 0
         self._current_page = -1
         self._shown_first = False
+        self._marks = {}
+        self._current_mark = None
         self._layout()
 
     def shutdown(self) -> None:
@@ -131,6 +145,37 @@ class PdfView(QAbstractScrollArea):
     def current_page(self) -> int:
         """Page at the top of the window, counting from 0. -1 without document."""
         return self._current_page
+
+    # ---- search results ---------------------------------------------------
+
+    def set_search_marks(self, hits: list[SearchHit], current: SearchHit | None = None) -> None:
+        """Mark these results on the pages; ``current`` stands out from the rest."""
+        self._marks = {}
+        for hit in hits:
+            self._marks.setdefault(hit.page, []).append(hit)
+        self._current_mark = current
+        self.viewport().update()
+
+    def add_search_marks(self, hits: list[SearchHit]) -> None:
+        for hit in hits:
+            self._marks.setdefault(hit.page, []).append(hit)
+        self.viewport().update()
+
+    def show_search_hit(self, hit: SearchHit) -> None:
+        """Make ``hit`` the current result and bring it into view."""
+        self._current_mark = hit
+        if 0 <= hit.page < self.page_count and hit.rects:
+            zoom = self._render_zoom()
+            top = self._tops[hit.page] + hit.rects[0][1] * zoom
+            bottom = self._tops[hit.page] + hit.rects[-1][3] * zoom
+            view_top = self._scroll_y()
+            view_height = self._to_pixels(self.viewport().height())
+            if top < view_top or bottom > view_top + view_height:
+                self.verticalScrollBar().setValue(self._to_units(top - view_height / 3))
+        self.viewport().update()
+
+    def search_marks(self) -> dict[int, list[SearchHit]]:
+        return self._marks
 
     # ---- zoom -----------------------------------------------------------
 
@@ -343,6 +388,11 @@ class PdfView(QAbstractScrollArea):
                 # Drawn for another zoom: stretch it until the sharp one arrives.
                 painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
                 painter.drawImage(target, cached[1])
+            for hit in self._marks.get(page, ()):
+                color = CURRENT_MARK_COLOR if hit is self._current_mark else MARK_COLOR
+                for x0, y0, x1, y1 in hit.rects:
+                    mark = QRectF(x0 * zoom, y0 * zoom, (x1 - x0) * zoom, (y1 - y0) * zoom)
+                    painter.fillRect(mark.translated(target.left(), target.top()), color)
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)

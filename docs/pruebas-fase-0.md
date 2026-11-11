@@ -44,3 +44,17 @@ Con un PDF tuyo largo (un tema o una ley de cientos de páginas) y, si tienes, u
 - [ ] Abajo a la derecha pone cuánto tarda en dibujarse cada página: apunta "la más
       lenta" con tu PDF más pesado.
 - [ ] Con un PDF escaneado, lo mismo: ¿va fluido?
+
+## Tarea 0.7 – Buscador
+Con un PDF tuyo del BOE o de un temario (con texto, no escaneado):
+- [ ] Ctrl+F (o "Buscar" en el modo Leer) abre el panel de búsqueda a la derecha.
+- [ ] Buscar una palabra con tilde sin ponerla ("articulo", "administracion"): la encuentra.
+- [ ] Buscar "año": no salen resultados de "ano". Con "Palabra completa" tampoco sale "años".
+- [ ] Buscar una palabra que en el PDF esté partida con guion al final de una línea: la
+      encuentra y marca los dos trozos.
+- [ ] Buscar una frase de varias palabras que en el PDF salte de línea: la encuentra.
+- [ ] Intro pasa al resultado siguiente y Mayús+Intro al anterior; al pulsar un resultado
+      de la lista, el documento va a ese sitio.
+- [ ] En un PDF largo los resultados van apareciendo sin que el programa se quede parado.
+- [ ] Esc cierra la búsqueda y quita las marcas.
+- [ ] ¿Echas algo en falta en el panel? ¿Lo prefieres a la derecha o en otro sitio?

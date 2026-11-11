@@ -190,3 +190,99 @@ def test_drawing_does_not_hold_up_the_main_thread(collector, sample):
     # Measured: about 10 ms here, 80 ms and more when drawing in a thread.
     # The limit is loose because test machines are shared and noisy.
     assert longest_gap < 0.2, f"main thread stalled for {longest_gap * 1000:.0f} ms"
+
+
+# ---- searching in the helper ------------------------------------------------
+
+
+class SearchCollector(Collector):
+    def __init__(self):
+        super().__init__()
+        self.hits = []
+        self.finished: list[tuple[int, bool]] = []
+        self.service._on_hits = lambda search_id, hits: self._add(self.hits, (search_id, hits))
+        self.service._on_search_done = lambda search_id, too_many: self._add(
+            self.finished, (search_id, too_many)
+        )
+
+    def all_hits(self, search_id):
+        return [hit for number, hits in self.hits if number == search_id for hit in hits]
+
+
+@pytest.fixture
+def searcher():
+    made = SearchCollector()
+    yield made
+    made.service.shutdown()
+
+
+def test_helper_searches_the_whole_document(searcher, sample):
+    searcher.service.open(sample("boe.pdf"))
+    search_id = searcher.service.search("derecho a la educacion")
+    searcher.wait(lambda: searcher.finished)
+    assert searcher.finished == [(search_id, False)]
+    found = searcher.all_hits(search_id)
+    assert [(hit.page, hit.match) for hit in found] == [(7, "derecho a la educación")]
+
+
+def test_helper_search_respects_the_options(searcher, sample):
+    from app.core.search import SearchOptions
+
+    searcher.service.open(sample("texto-partido.pdf"))
+    plain = searcher.service.search("año")
+    searcher.wait(lambda: len(searcher.finished) == 1)
+    whole = searcher.service.search("año", SearchOptions(whole_word=True))
+    searcher.wait(lambda: len(searcher.finished) == 2)
+    assert len(searcher.all_hits(plain)) == 4  # includes "españoles"
+    assert len(searcher.all_hits(whole)) == 3
+
+
+def test_a_new_search_replaces_the_one_running(searcher, sample):
+    searcher.service.open(sample("largo.pdf"))
+    old = searcher.service.search("articulo")
+    new = searcher.service.search("zzzz")
+    searcher.wait(lambda: searcher.finished)
+    assert searcher.finished == [(new, False)]
+    assert searcher.all_hits(old) == []
+
+
+def test_search_stops_when_there_are_too_many_results(searcher, sample, monkeypatch):
+    searcher.service.open(sample("largo.pdf"))
+    search_id = searcher.service.search("a")
+    searcher.wait(lambda: searcher.finished)
+    assert searcher.finished == [(search_id, True)]
+    assert len(searcher.all_hits(search_id)) == render_service.MAX_SEARCH_HITS
+
+
+def test_pages_are_still_drawn_while_searching(searcher, sample):
+    searcher.service.open(sample("largo.pdf"))
+    searcher.service.search("articulo")
+    searcher.service.want([RenderRequest(400, 1.0)])
+    searcher.wait(lambda: searcher.pages)
+    assert not searcher.finished, "the page must not wait for the search to end"
+    searcher.wait(lambda: searcher.finished)
+
+
+def test_cancelled_search_delivers_nothing_more(searcher, sample):
+    searcher.service.open(sample("largo.pdf"))
+    searcher.service.search("articulo")
+    searcher.service.cancel_search()
+    searcher.service.want([RenderRequest(0, 1.0)])
+    searcher.wait(lambda: searcher.pages)
+    time.sleep(0.2)
+    assert searcher.hits == [] and searcher.finished == []
+
+
+def test_search_without_document_does_nothing(searcher):
+    searcher.service.search("algo")
+    assert not searcher.service.is_running()
+
+
+def test_a_search_cut_short_by_a_crash_still_ends(searcher, sample):
+    searcher.service.open(sample("largo.pdf"))
+    searcher.service.want([RenderRequest(0, 1.0)])
+    searcher.wait(lambda: searcher.pages)
+    search_id = searcher.service.search("a b c d e f g que no existe")
+    searcher.service._process.kill()
+    searcher.wait(lambda: searcher.finished)
+    assert searcher.finished[-1][0] == search_id

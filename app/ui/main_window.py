@@ -5,6 +5,7 @@ from pathlib import Path
 from PySide6.QtCore import QSize, Qt, qVersion
 from PySide6.QtGui import QAction, QActionGroup, QGuiApplication, QKeySequence
 from PySide6.QtWidgets import (
+    QDockWidget,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -28,6 +29,7 @@ from app.ui.command_palette import CommandPalette
 from app.ui.error_reporting import ErrorReporter, ProvokedError
 from app.ui.features import FEATURES, MODES, Feature, Mode, features_of, translate
 from app.ui.pdf_view import PdfView
+from app.ui.search_panel import SearchPanel
 from app.ui.theme import THEME_SETTING, Theme, apply_theme
 
 # Big enough to press comfortably with a finger on a touch screen.
@@ -65,6 +67,21 @@ class MainWindow(QMainWindow):
         self.pages.addWidget(self.pdf_view)
         self.setCentralWidget(self.pages)
 
+        self.search_panel = SearchPanel(self.pdf_view)
+        self.search_dock = QDockWidget(self.tr("Buscar"), self)
+        self.search_dock.setObjectName("searchDock")
+        self.search_dock.setWidget(self.search_panel)
+        self.search_dock.setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
+        self.search_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea)
+        self.search_dock.setMinimumWidth(320)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.search_dock)
+        self.search_dock.hide()
+        self.search_panel.closed.connect(self.close_search)
+        self.search_action = QAction(self.tr("Buscar en el documento"), self)
+        self.search_action.setShortcut(QKeySequence(QKeySequence.StandardKey.Find))
+        self.search_action.triggered.connect(self.show_search)
+        self.addAction(self.search_action)
+
         self.statusBar().setSizeGripEnabled(True)
         self.position_label = QLabel()
         self.position_label.setObjectName("positionLabel")
@@ -83,6 +100,7 @@ class MainWindow(QMainWindow):
         # Functions that already work. Every other one says it is not built yet.
         self.feature_handlers = {
             "open": self.choose_and_open,
+            "search": self.show_search,
             "zoom_in": self.pdf_view.zoom_in,
             "zoom_out": self.pdf_view.zoom_out,
             "fit_width": self.pdf_view.fit_width,
@@ -357,9 +375,23 @@ class MainWindow(QMainWindow):
             return False
         self.pages.setCurrentWidget(self.pdf_view)
         self.pdf_view.setFocus()
+        self.search_panel.document_changed()
         self.setWindowTitle(f"{Path(path).name} – {APP_NAME}")
         self._update_position()
         return True
+
+    def show_search(self) -> None:
+        if self.pdf_view.page_count == 0:
+            self.statusBar().showMessage(
+                self.tr("Abre un documento para poder buscar en él."), STATUS_MESSAGE_MS
+            )
+            return
+        self.search_dock.show()
+        self.search_panel.start()
+
+    def close_search(self) -> None:
+        self.search_dock.hide()
+        self.pdf_view.setFocus()
 
     def _document_failed(self, _message: str) -> None:
         self._show_problem(
