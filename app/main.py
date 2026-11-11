@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QApplication
 
 from app import APP_NAME, __version__
 from app.ui.main_window import MainWindow
+from app.ui.theme import prepare_application
 
 # Hidden option used by the automatic builds: open the window, then quit. It
 # checks that the packaged program really starts and measures how long it takes.
@@ -23,6 +24,7 @@ def main(argv: list[str] | None = None) -> int:
     qt_app = QApplication.instance() or QApplication(args)
     qt_app.setApplicationName(APP_NAME)
     qt_app.setApplicationVersion(__version__)
+    prepare_application(qt_app)
 
     window = MainWindow()
     window.show()
