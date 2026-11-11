@@ -29,6 +29,12 @@ dev = [
     "pytest==9.2.0",
     "ruff==0.17.4",
 ]
+# Only needed to create the Windows program (GitHub does this automatically).
+build = [
+    # Turns the Python code into a Windows program. GPL with an exception that
+    # allows distributing the result under any licence. Not shipped to users.
+    "pyinstaller==6.22.3",
+]
 
 [project.gui-scripts]
 lector-pdf = "app.main:main"

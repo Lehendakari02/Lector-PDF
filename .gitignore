@@ -12,3 +12,4 @@ Thumbs.db
 .DS_Store
 *.egg-info/
 .ruff_cache/
+app/_build_info.py

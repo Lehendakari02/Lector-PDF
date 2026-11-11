@@ -1,0 +1,141 @@
+name: Crear programa
+
+# Builds the Windows program:
+# - on every pull request: a test build to download and try;
+# - when a version is published in "Releases": the installer and the portable
+#   version are attached to that release.
+on:
+  pull_request:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ejecutable-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Crear programa para Windows
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install dependencies
+        run: python -m pip install -e ".[build]"
+
+      - name: Work out version and label
+        id: info
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          $version = python -c "import app; print(app.__version__)"
+          if ($env:EVENT_NAME -eq "release") {
+            if ($env:RELEASE_TAG -ne "v$version") {
+              throw "The release is called '$env:RELEASE_TAG' but the program says version '$version' (expected 'v$version')."
+            }
+            $label = ""
+            $suffix = $version
+          } else {
+            $short = $env:PR_SHA.Substring(0, 7)
+            $label = "Prueba del pull request $env:PR_NUMBER ($short)"
+            $suffix = "prueba-pr$env:PR_NUMBER"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "label=$label" >> $env:GITHUB_OUTPUT
+          "suffix=$suffix" >> $env:GITHUB_OUTPUT
+
+      - name: Build the program
+        env:
+          BUILD_LABEL: ${{ steps.info.outputs.label }}
+        run: python packaging/build.py --label "$env:BUILD_LABEL"
+
+      - name: Build the installer
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+          }
+          & $iscc "/DAppVersion=${{ steps.info.outputs.version }}" packaging\instalador.iss
+          if ($LASTEXITCODE -ne 0) { throw "The installer could not be built." }
+
+      - name: Make the portable version
+        run: Copy-Item packaging\portable.txt dist\Lector-PDF\
+
+      - name: Check it starts and measure it
+        run: |
+          python packaging/measure.py "Versión portátil (carpeta)" dist\Lector-PDF\Lector-PDF.exe --size-of dist\Lector-PDF
+          if ($LASTEXITCODE -ne 0) { throw "The program does not start." }
+          $installer = (Get-Item dist\Lector-PDF-instalador.exe).Length / 1MB
+          "" >> $env:GITHUB_STEP_SUMMARY
+          ("Instalador: {0:N0} MB" -f $installer) >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Check the portable version left nothing outside its folder
+        run: |
+          if (Test-Path "$env:LOCALAPPDATA\Lector-PDF") {
+            throw "The portable version wrote to LOCALAPPDATA."
+          }
+
+      # TEMPORARY (task 0.2 only): compare with a single-file .exe to choose the
+      # format of the portable version. Removed before merging.
+      - name: Measure single-file alternative
+        run: |
+          python packaging/build.py --onefile
+          python packaging/measure.py "Un solo .exe" dist\onefile\Lector-PDF.exe
+          if ($LASTEXITCODE -ne 0) { throw "The single-file program does not start." }
+
+      - name: Upload program folder
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lector-PDF-${{ steps.info.outputs.suffix }}
+          path: dist/Lector-PDF
+          retention-days: 5
+          if-no-files-found: error
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lector-PDF-instalador-${{ steps.info.outputs.suffix }}
+          path: dist/Lector-PDF-instalador.exe
+          retention-days: 5
+          compression-level: 0
+          if-no-files-found: error
+
+  publicar:
+    name: Publicar en Releases
+    if: github.event_name == 'release'
+    needs: windows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # attach files to the release
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: descargas
+      - name: Attach installer and portable version to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          mv "descargas/Lector-PDF-$version" Lector-PDF
+          zip -qr "Lector-PDF-$version-portatil.zip" Lector-PDF
+          mv "descargas/Lector-PDF-instalador-$version/Lector-PDF-instalador.exe" \
+            "Lector-PDF-$version-instalador.exe"
+          gh release upload "$RELEASE_TAG" \
+            "Lector-PDF-$version-portatil.zip" "Lector-PDF-$version-instalador.exe" --clobber
