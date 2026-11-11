@@ -1,6 +1,6 @@
 # Plan de Lector-PDF
 
-> Borrador para revisar. Aún no se ha empezado a programar.
+> Plan aprobado. Las instrucciones completas están en `CLAUDE.md`.
 
 Estado: ⬜ pendiente · 🔄 en curso · ✅ hecho
 
@@ -13,26 +13,29 @@ Al acabar cada fase se publica una versión descargable en *Releases*.
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
 | 0.1 | Estructura del proyecto y dependencias | El código se organiza según `CLAUDE.md` | ⬜ |
-| 0.2 | Creación automática del `.exe` en GitHub | Al subir cambios aparece un `.exe` descargable que abre una ventana vacía en Windows | ⬜ |
+| 0.2 | Creación automática del instalador y la versión portátil en GitHub | Al subir cambios aparecen un instalador y un `.exe` portátil que abren una ventana en Windows | ⬜ |
 | 0.3 | PDFs de prueba en `tests/ejemplos/` (BOE, formulario, largo, escaneado, con contraseña) | Existen y las pruebas automáticas los usan | ⬜ |
+| 0.4 | Esqueleto de la interfaz: pestañas de modos (Leer, Estudiar, Rellenar y firmar, Organizar) y buscador de funciones (Ctrl+K) | Cambio de modo y cambian las herramientas visibles | ⬜ |
 
 ## Fase 1 – Lector
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
 | 1.1 | Abrir un PDF y verlo con scroll continuo | Abro un tema del BOE y paso páginas con la rueda sin tirones | ⬜ |
-| 1.2 | Zoom, ajustar a ancho/página, rotar | Ctrl+rueda hace zoom; los botones ajustan la vista | ⬜ |
+| 1.2 | Zoom, ajustar a ancho/página, rotar, pantalla completa | Ctrl+rueda hace zoom; los botones ajustan la vista | ⬜ |
 | 1.3 | Panel lateral: miniaturas e índice | Clic en una miniatura o en un apartado del índice me lleva allí | ⬜ |
-| 1.4 | Buscar texto | Ctrl+F encuentra una palabra y resalta todos los resultados | ⬜ |
-| 1.5 | Seleccionar y copiar texto | Copio un artículo y lo pego en otro programa | ⬜ |
-| 1.6 | Pestañas (varios PDFs a la vez) | Tengo 3 temas abiertos y cambio entre ellos | ⬜ |
-| 1.7 | Modo oscuro, modo lectura (sepia), pantalla completa | Cambio de modo y se ve bien | ⬜ |
-| 1.8 | Recordar última página y archivos recientes | Cierro y reabro: vuelve a la página donde estaba | ⬜ |
-| 1.9 | Abrir con doble clic / "Abrir con" / arrastrar | Doble clic en un PDF de Windows lo abre en Lector-PDF | ⬜ |
-| 1.10 | PDFs con contraseña o dañados | Pide la contraseña; un PDF roto da un aviso y no cierra el programa | ⬜ |
-| 1.11 | Imprimir | Imprimo unas páginas concretas | ⬜ |
-| 1.12 | Instalador y versión 0.1 | Me descargo el instalador, lo instalo y funciona todo lo anterior | ⬜ |
+| 1.4 | Buscador sin tildes ni mayúsculas, con palabras partidas por guion | Busco "articulo" y encuentra "Artículo", también si está partido entre líneas | ⬜ |
+| 1.5 | Lista de resultados con contexto, resaltado y siguiente/anterior | Veo todos los resultados con su frase y salto entre ellos con Intro | ⬜ |
+| 1.6 | Seleccionar y copiar texto | Copio un artículo y lo pego en otro programa | ⬜ |
+| 1.7 | Pestañas (varios PDFs a la vez) | Tengo 3 temas abiertos y cambio entre ellos | ⬜ |
+| 1.8 | Reabrir la sesión anterior, recordar página, archivos recientes | Cierro y reabro: vuelven mis pestañas, cada una en su página | ⬜ |
+| 1.9 | Modo oscuro, modo lectura (sepia), tamaño de interfaz | Cambio de modo y se ve bien | ⬜ |
+| 1.10 | Abrir con doble clic / "Abrir con" / arrastrar / programa predeterminado | Doble clic en un PDF lo abre en Lector-PDF | ⬜ |
+| 1.11 | PDFs con contraseña o dañados | Pide la contraseña; un PDF roto da un aviso y no cierra el programa | ⬜ |
+| 1.12 | Imprimir | Imprimo unas páginas concretas | ⬜ |
+| 1.13 | Aviso de nuevas versiones (desactivable) | Si hay versión nueva en GitHub, me avisa | ⬜ |
+| 1.14 | Versión 0.1 (instalador y portátil) | Lo instalo, o lo abro sin instalar, y funciona todo lo anterior | ⬜ |
 
-## Fase 2A – Anotar, rellenar y autoguardado
+## Fase 2A – Anotar y autoguardado
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
 | 2.1 | Guardar / Guardar como | Ctrl+S guarda en el mismo archivo; "Guardar como" crea otro | ⬜ |
@@ -43,50 +46,64 @@ Al acabar cada fase se publica una versión descargable en *Releases*.
 | 2.6 | Indicador "Guardado / Guardando…" y aviso al cerrar | Siempre sé si mis cambios están a salvo | ⬜ |
 | 2.7 | Notas adhesivas y cuadros de texto | Escribo notas y texto con la fuente, tamaño y color que quiero | ⬜ |
 | 2.8 | Dibujo a mano alzada, flechas, formas, borrador | Dibujo y borro sobre la página | ⬜ |
-| 2.9 | Rellenar formularios PDF | Relleno un formulario oficial y se ve bien en otros lectores | ⬜ |
-| 2.10 | Escribir en PDFs sin campos | Escribo mis datos encima de un documento escaneado | ⬜ |
-| 2.11 | Atajos de teclado para cada herramienta | Cambio de herramienta sin usar el ratón | ⬜ |
-| 2.12 | Versión 0.2 | Estudio un tema completo con el programa durante una sesión real | ⬜ |
+| 2.9 | Seleccionar, mover, redimensionar, copiar y borrar anotaciones | Corrijo una anotación mal puesta sin rehacerla | ⬜ |
+| 2.10 | Herramientas favoritas | Guardo "rotulador amarillo fino" y lo uso con un clic | ⬜ |
+| 2.11 | Lápiz y pantalla táctil | Subrayo con lápiz en una tableta sin que la mano pinte | ⬜ |
+| 2.12 | Mostrar/ocultar anotaciones (también al imprimir/exportar) | Con un botón veo el documento limpio | ⬜ |
+| 2.13 | Atajos de teclado para cada herramienta | Cambio de herramienta sin usar el ratón | ⬜ |
+| 2.14 | Versión 0.2 | Estudio un tema completo con el programa durante una sesión real | ⬜ |
 
 ## Fase 2B – Herramientas de estudio
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
-| 2.13 | Código de colores propio (opcional, nada predefinido) | Si quiero, pongo nombre a mis colores; si no, no aparece nada | ⬜ |
-| 2.14 | Panel de anotaciones filtrable | Veo todos mis subrayados rojos y salto a cada uno | ⬜ |
-| 2.15 | Marcadores propios | Marco artículos clave y vuelvo a ellos con un clic | ⬜ |
-| 2.16 | Saltar a artículo, apartado o sección por su número | Escribo "art. 14" o "3.2" en cualquier documento y me lleva allí | ⬜ |
-| 2.17 | Exportar resumen | Saco un documento con todo lo subrayado, ordenado por página | ⬜ |
-| 2.18 | Modo repaso | Lo subrayado se tapa y lo descubro al hacer clic | ⬜ |
-| 2.19 | Vista de dos documentos lado a lado | Veo el tema y la ley a la vez | ⬜ |
-| 2.20 | Biblioteca del temario | Elijo mi carpeta de temas, busco en todos y veo mi progreso | ⬜ |
-| 2.21 | Versión 0.3 | — | ⬜ |
+| 2.15 | Márgenes ampliables | Añado margen a una página y escribo en él; se ve en otros lectores | ⬜ |
+| 2.16 | Insertar hojas en blanco, de rayas o cuadriculadas | Meto una hoja cuadriculada para un esquema | ⬜ |
+| 2.17 | Panel de anotaciones filtrable por color | Veo todos mis subrayados de un color y salto a cada uno | ⬜ |
+| 2.18 | Código de colores propio (opcional, nada predefinido) | Si quiero, pongo nombre a mis colores; si no, no aparece nada | ⬜ |
+| 2.19 | Marcadores propios | Marco artículos clave y vuelvo a ellos con un clic | ⬜ |
+| 2.20 | Saltar a artículo, apartado o sección por su número | Escribo "art. 14" o "3.2" en cualquier documento y me lleva allí | ⬜ |
+| 2.21 | Exportar resumen | Saco un documento con todo lo subrayado, ordenado por página | ⬜ |
+| 2.22 | Modo repaso | Lo subrayado se tapa y lo descubro al hacer clic | ⬜ |
+| 2.23 | Vista de dos documentos lado a lado | Veo el tema y la ley a la vez | ⬜ |
+| 2.24 | Enlaces entre documentos *(pendiente de confirmar)* | Desde una nota del tema, un clic abre la ley en el artículo exacto | ⬜ |
+| 2.25 | Biblioteca del temario | Elijo mi carpeta de temas, busco en todos y veo mi progreso | ⬜ |
+| 2.26 | Comparar dos versiones de un documento | Veo qué ha cambiado entre dos versiones de una ley | ⬜ |
+| 2.27 | Versión 0.3 | — | ⬜ |
 
-## Fase 3 – Firma manuscrita
+## Fase 3 – Rellenar y firma manuscrita
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
-| 3.1 | Crear firma (dibujar, escribir nombre, importar imagen quitando el fondo) | Tengo mi firma guardada | ⬜ |
-| 3.2 | Colocar, mover y redimensionar firmas | Firmo un contrato donde toca | ⬜ |
-| 3.3 | Fecha automática e iniciales en todas las páginas | Con un clic pongo iniciales en todas las hojas | ⬜ |
-| 3.4 | Versión 0.4 | — | ⬜ |
+| 3.1 | Rellenar formularios PDF | Relleno un formulario oficial y se ve bien en otros lectores | ⬜ |
+| 3.2 | Escribir en PDFs sin campos | Escribo mis datos encima de un documento escaneado | ⬜ |
+| 3.3 | Mis datos (nombre, DNI, dirección…) | Pongo mi DNI en un formulario con un clic | ⬜ |
+| 3.4 | Sellos y marcas rápidas (✓, ✗, fecha, sellos propios) | Marco casillas de un documento sin campos | ⬜ |
+| 3.5 | Crear y guardar firma e iniciales (dibujar, escribir, importar imagen sin fondo) | Tengo mi firma guardada | ⬜ |
+| 3.6 | Firmar con un clic: colocar, mover, redimensionar, fecha automática | Firmo un contrato en segundos | ⬜ |
+| 3.7 | Iniciales en todas las páginas | Con un clic pongo iniciales en todas las hojas | ⬜ |
+| 3.8 | Versión 0.4 | — | ⬜ |
 
 ## Fase 4 – Firma con certificado digital
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
 | 4.1 | Firmar con certificado instalado en Windows (FNMT) | El PDF firmado sale válido en VALIDe y en Adobe | ⬜ |
 | 4.2 | Firmar con archivo .p12/.pfx | Ídem | ⬜ |
-| 4.3 | Firma visible o invisible; sello de tiempo opcional | Elijo cómo se ve la firma | ⬜ |
-| 4.4 | Firmar con DNIe y lector de tarjetas | Firmo con el DNIe (cuando tenga lector) | ⬜ |
-| 4.5 | Ver y verificar firmas existentes | Abro un PDF firmado y me dice quién lo firmó y si es válido | ⬜ |
-| 4.6 | Versión 0.5 | — | ⬜ |
+| 4.3 | Firma visible o invisible; sello de tiempo opcional; recordar preferencias | Firmar es elegir dónde y poner el PIN | ⬜ |
+| 4.4 | Firmar varios documentos de una vez | Firmo 10 documentos poniendo el PIN una vez | ⬜ |
+| 4.5 | Firmar con DNIe y lector de tarjetas | Firmo con el DNIe (cuando tenga lector) | ⬜ |
+| 4.6 | Ver y verificar firmas existentes | Abro un PDF firmado y me dice quién lo firmó y si es válido | ⬜ |
+| 4.7 | Versión 0.5 | — | ⬜ |
 
-## Fase 5 – Organizar páginas
+## Fase 5 – Organizar y convertir
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
 | 5.1 | Reordenar, rotar, eliminar arrastrando miniaturas | Reorganizo un documento | ⬜ |
 | 5.2 | Unir y dividir PDFs, extraer páginas | Uno 3 PDFs en uno | ⬜ |
-| 5.3 | Insertar páginas de otro PDF o imágenes | Añado una foto del DNI como página | ⬜ |
-| 5.4 | Comprimir, poner/quitar contraseña | El PDF ocupa menos / pide contraseña | ⬜ |
-| 5.5 | Versión 1.0 | — | ⬜ |
+| 5.3 | Insertar páginas de otro PDF o imágenes | Añado una imagen como página | ⬜ |
+| 5.4 | De foto a PDF (recortar, enderezar, mejorar) | Hago una foto a un papel y queda como escaneado | ⬜ |
+| 5.5 | Exportar páginas como imagen o el documento como texto | Saco una página en PNG | ⬜ |
+| 5.6 | Tapar datos de verdad | Tapo mi DNI y no se puede recuperar copiando el texto | ⬜ |
+| 5.7 | Comprimir, poner/quitar contraseña | El PDF ocupa menos / pide contraseña | ⬜ |
+| 5.8 | Versión 1.0 | — | ⬜ |
 
 ## Fase 6 – Editar el texto original
 | # | Tarea | Terminado cuando… | Estado |
@@ -94,4 +111,4 @@ Al acabar cada fase se publica una versión descargable en *Releases*.
 | 6.1 | Corregir texto puntual | Cambio una palabra del documento y se ve natural | ⬜ |
 
 ## Ideas para más adelante
-OCR · leer en voz alta · Mac/Linux.
+OCR · versión para tableta o móvil · Mac/Linux.
