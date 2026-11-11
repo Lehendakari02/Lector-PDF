@@ -15,6 +15,7 @@ A new list replaces the old one, so pages scrolled past are never drawn.
 
 import contextlib
 import multiprocessing
+import multiprocessing.connection
 import threading
 import time
 from collections.abc import Callable
@@ -235,7 +236,10 @@ class RenderService:
         child_end.close()
         self._process, self._connection = process, parent_end
         self._reader = threading.Thread(
-            target=self._read_results, args=(parent_end,), name="render-results", daemon=True
+            target=self._read_results,
+            args=(parent_end, process.sentinel),
+            name="render-results",
+            daemon=True,
         )
         self._reader.start()
         return True
@@ -246,9 +250,15 @@ class RenderService:
         with contextlib.suppress(OSError, ValueError):
             self._connection.send(message)
 
-    def _read_results(self, connection: Connection) -> None:
+    def _read_results(self, connection: Connection, process_ended: int) -> None:
         while True:
             try:
+                # Wait for a result or for the helper to die. Watching only the
+                # connection is not enough: on Windows, if the helper dies while
+                # it is still starting, the connection never reports it.
+                ready = multiprocessing.connection.wait([connection, process_ended])
+                if connection not in ready and not connection.poll():
+                    break
                 message = connection.recv()
                 kind = message[0]
                 samples = connection.recv_bytes() if kind == "page" else b""
@@ -266,6 +276,8 @@ class RenderService:
         with self._lock:
             crashed = not self._closing and connection is self._connection
             if crashed:
+                with contextlib.suppress(OSError):
+                    connection.close()
                 self._process = self._connection = None
                 self.restarts += 1
                 self._crashes += 1
