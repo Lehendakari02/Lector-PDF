@@ -1,0 +1,35 @@
+name: Pruebas
+
+# Runs the automatic tests on Windows for every pull request and for main.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pruebas-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Pruebas en Windows
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install dependencies
+        run: python -m pip install -e ".[dev]"
+      - name: Check code style
+        run: |
+          python -m ruff check .
+          python -m ruff format --check .
+      - name: Run tests
+        run: python -m pytest

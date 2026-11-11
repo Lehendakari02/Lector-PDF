@@ -20,6 +20,16 @@ Tus documentos nunca salen de tu ordenador. Los PDFs que guarda son estándar y 
 
 Cuando haya una versión lista, el instalador `.exe` estará en la sección **Releases** de este repositorio.
 
+## Para desarrollo
+
+Hace falta Python 3.13.
+
+```
+python -m pip install -e ".[dev]"
+python -m app        # abre el programa
+python -m pytest     # pruebas automáticas
+```
+
 ## Licencia
 
 Software libre bajo licencia [AGPL-3.0](LICENSE).

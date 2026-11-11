@@ -255,6 +255,9 @@ de empresa o colaboración en línea.
   Mac/Linux sin esfuerzo extra, pero solo se prueba y publica para Windows.
 - **Python + PySide6 (Qt)**: interfaz de escritorio (con soporte de lápiz y táctil).
 - **PyMuPDF**: mostrar, buscar, anotar, rellenar, organizar, tapar datos, exportar.
+  Se usa la serie 1.x: la 2.x obliga a instalar componentes de inteligencia artificial
+  (análisis de páginas con modelos) que no se usan, chocan con el principio "Sin IA"
+  y engordan mucho el programa.
 - **pyHanko**: firma con certificado (PAdES, sellos de tiempo, DNIe por PKCS#11).
 - Instalador `.exe` y versión portátil generados automáticamente en GitHub (GitHub
   Actions) y publicados en "Releases".
@@ -304,10 +307,13 @@ Lector-PDF/
   CLAUDE.md        # este archivo
   PLAN.md          # plan y estado de cada fase
   PRIMER_PROMPT.md # prompt para empezar a construir
+  pyproject.toml   # dependencias (versiones fijadas) y configuración
   app/
     ui/            # ventanas, modos y paneles
     core/          # lógica PDF (abrir, buscar, anotar, firmar…)
   tests/
-    ejemplos/
+    core/          # pruebas de la lógica PDF
+    ui/            # pruebas de la interfaz
+    ejemplos/      # PDFs de prueba
   .github/workflows/  # creación automática del instalador y la versión portátil
 ```
