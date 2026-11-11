@@ -79,3 +79,17 @@ Hace falta tu certificado FNMT instalado en Windows (el que usas en el navegador
       botón → "Usar un archivo .p12 o .pfx…" → contraseña → firmar y validar igual.
 
 No subas a VALIDe documentos con datos que no quieras compartir: usa uno de prueba.
+
+## Tarea 0.9 – Reconocer texto (OCR)
+Con un PDF escaneado tuyo (un tema fotocopiado y escaneado, por ejemplo):
+- [ ] Ábrelo y ve a una página con bastante texto. Modo "Estudiar" → "Reconocer texto"
+      (o Ctrl+K y escribir "reconocer").
+- [ ] Mientras trabaja (uno o dos segundos) el programa no se queda parado.
+- [ ] Sale una ventana con el texto de la página. ¿Se parece al original? Fíjate en
+      tildes, eñes y números de artículo.
+- [ ] "Copiar texto" y pegar en el Bloc de notas funciona.
+- [ ] Pruébalo con un escaneado malo (torcido, con sombras, subrayado a boli) y apunta
+      qué tal: sirve para decidir cuánto hay que mejorar la imagen antes de reconocer.
+
+De momento el texto solo se enseña; guardarlo dentro del PDF para poder buscar y
+subrayar llega con la fase de documentos escaneados.

@@ -42,6 +42,9 @@ lector-pdf = "app.main:main"
 [tool.setuptools]
 packages = ["app", "app.core", "app.ui"]
 
+[tool.setuptools.package-data]
+app = ["recursos/tessdata/*"]
+
 [tool.setuptools.dynamic]
 version = { attr = "app.__version__" }
 

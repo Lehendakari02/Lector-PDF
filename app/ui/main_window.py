@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from PySide6.QtCore import QSize, Qt, qVersion
+from PySide6.QtCore import QSize, Qt, QTimer, qVersion
 from PySide6.QtGui import QAction, QActionGroup, QGuiApplication, QKeySequence
 from PySide6.QtWidgets import (
     QDockWidget,
@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 from app import APP_NAME, BUILD_LABEL, __version__
 from app.core.document import PdfDocument, PdfOpenError, engine_version
 from app.core.error_log import running_from_source_or_test_build
+from app.core.ocr import OcrError, OcrJob, OcrPage
 from app.core.paths import data_dir, is_portable
 from app.core.settings import Settings
 from app.core.signing import PasswordProtected, SigningError, sign_pdf
@@ -30,6 +31,7 @@ from app.core.windows_store import SigningCancelled
 from app.ui.command_palette import CommandPalette
 from app.ui.error_reporting import ErrorReporter, ProvokedError
 from app.ui.features import FEATURES, MODES, Feature, Mode, features_of, translate
+from app.ui.ocr_dialog import OcrResultDialog
 from app.ui.pdf_view import PdfView
 from app.ui.search_panel import SearchPanel
 from app.ui.sign_dialog import CertificateDialog
@@ -95,6 +97,12 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self.position_label)
         self._slowest_page = 0.0
 
+        self._ocr_job: OcrJob | None = None
+        self.last_ocr: OcrPage | None = None
+        self._ocr_timer = QTimer(self)
+        self._ocr_timer.setInterval(100)
+        self._ocr_timer.timeout.connect(self._check_ocr)
+
         self.pdf_view.page_changed.connect(self._update_position)
         self.pdf_view.zoom_changed.connect(lambda _zoom: self._update_position())
         self.pdf_view.page_drawn.connect(self._update_speed)
@@ -105,6 +113,7 @@ class MainWindow(QMainWindow):
             "open": self.choose_and_open,
             "search": self.show_search,
             "sign_certificate": self.sign_with_certificate,
+            "ocr": self.recognize_current_page,
             "zoom_in": self.pdf_view.zoom_in,
             "zoom_out": self.pdf_view.zoom_out,
             "fit_width": self.pdf_view.fit_width,
@@ -397,6 +406,52 @@ class MainWindow(QMainWindow):
         self.search_dock.hide()
         self.pdf_view.setFocus()
 
+    # ---- text recognition (proof of concept of task 0.9) ---------------
+
+    def recognize_current_page(self) -> None:
+        """Read the text of the page on screen, in a separate process."""
+        source = self.pdf_view.document_path
+        if source is None:
+            self.statusBar().showMessage(
+                self.tr("Abre un documento escaneado para reconocer su texto."), STATUS_MESSAGE_MS
+            )
+            return
+        if self._ocr_job is not None:
+            return  # one at a time
+        page = max(self.pdf_view.current_page, 0)
+        self._ocr_job = OcrJob(source, page)
+        self.statusBar().showMessage(
+            self.tr("Reconociendo el texto de la página {0}…").format(page + 1)
+        )
+        self._ocr_timer.start()
+
+    def _check_ocr(self) -> None:
+        if self._ocr_job is None:
+            self._ocr_timer.stop()
+            return
+        try:
+            result = self._ocr_job.poll()
+        except OcrError as error:
+            self._ocr_job = None
+            self._ocr_timer.stop()
+            self.reporter.log.record(type(error), error, error.__traceback__, "reconocer texto")
+            self._show_problem(
+                self.tr("No se ha podido reconocer el texto"),
+                self.tr("Con Ayuda → «Copiar informe de error» puedes ver el detalle."),
+            )
+            return
+        if result is None:
+            return
+        self._ocr_job = None
+        self._ocr_timer.stop()
+        self.last_ocr = result
+        self.statusBar().showMessage(
+            self.tr("Texto reconocido: {0} palabras.").format(len(result.words)),
+            STATUS_MESSAGE_MS,
+        )
+        if self.show_problem_dialogs:
+            OcrResultDialog(result, self).exec()
+
     # ---- signing (proof of concept of task 0.8) ------------------------
 
     def sign_with_certificate(self) -> None:
@@ -496,5 +551,8 @@ class MainWindow(QMainWindow):
         )
 
     def closeEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        if self._ocr_job is not None:
+            self._ocr_job.cancel()
+            self._ocr_job = None
         self.pdf_view.shutdown()
         super().closeEvent(event)

@@ -267,6 +267,8 @@ de empresa o colaboración en línea.
 - Licencia: **AGPL-3.0** (software libre, obligatoria por usar PyMuPDF; compatible con
   compartirlo gratis o hacerlo público).
 - **Tesseract** (Apache 2.0) con el idioma español, incluido en el instalador: OCR.
+  Se usa el Tesseract que ya trae PyMuPDF dentro; solo se añade el archivo del idioma
+  (`app/recursos/tessdata/spa.traineddata`, 2 MB).
 - La lógica PDF (`core/`) no depende de la interfaz (`ui/`), para poder probarla sola
   y, en el futuro, reutilizarla en otra versión.
 - Renderizado de páginas en segundo plano (sin bloquear la interfaz) y por partes,
