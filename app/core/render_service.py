@@ -1,4 +1,4 @@
-"""Draws PDF pages in a separate process, so the window never freezes.
+"""Draws PDF pages (and searches them) in a separate process, so the window never freezes.
 
 Why a separate process and not a thread: the PDF engine does not let other
 Python code run while it draws a page (it holds Python's global lock). Measured
@@ -23,11 +23,24 @@ from dataclasses import dataclass
 from multiprocessing.connection import Connection
 from pathlib import Path
 
+from app.core.search import (
+    DEFAULT_OPTIONS,
+    PageText,
+    SearchHit,
+    SearchOptions,
+    find_in_page,
+    read_page_text,
+)
+
 # Never draw absurdly large images, whatever is asked (protects memory).
 MAX_PIXELS_PER_PAGE = 60_000_000
 # If the helper dies this many times with the same document, the document is
 # the cause: stop restarting it and report the document as unreadable.
 MAX_CRASHES_PER_DOCUMENT = 3
+# A search stops after this many results ("a" in a long book has 100 000).
+MAX_SEARCH_HITS = 5000
+# Pages whose letters are kept ready, so the next search is much faster.
+MAX_PAGE_TEXTS = 3000
 
 
 @dataclass(frozen=True)
@@ -72,6 +85,39 @@ def render_page(doc, page_index: int, zoom: float) -> RenderedPage:
     )
 
 
+@dataclass
+class _SearchJob:
+    search_id: int
+    query: str
+    options: SearchOptions
+    next_page: int = 0
+    found: int = 0
+
+
+def _search_next_page(connection, token, doc, job: _SearchJob, page_texts) -> bool:
+    """Search one page and send what was found. False when the search is over."""
+    if job.next_page >= doc.page_count or job.found >= MAX_SEARCH_HITS:
+        too_many = job.found >= MAX_SEARCH_HITS
+        connection.send(("search_done", token, job.search_id, too_many))
+        return False
+    number = job.next_page
+    job.next_page += 1
+    try:
+        text = page_texts.get(number)
+        if text is None:
+            if len(page_texts) >= MAX_PAGE_TEXTS:
+                page_texts.clear()
+            text = page_texts[number] = read_page_text(doc[number])
+        hits = find_in_page(text, job.query, job.options, number)
+    except Exception:
+        hits = []  # a page that cannot be read has no results; the search goes on
+    if hits:
+        hits = hits[: MAX_SEARCH_HITS - job.found]
+        job.found += len(hits)
+        connection.send(("hits", token, job.search_id, hits))
+    return True
+
+
 def _worker_main(connection: Connection) -> None:
     """The helper process: open documents and draw the pages asked for."""
     import pymupdf
@@ -79,10 +125,12 @@ def _worker_main(connection: Connection) -> None:
     doc = None
     wanted: list[tuple[int, float]] = []
     token = 0
+    search: _SearchJob | None = None
+    page_texts: dict[int, PageText] = {}  # letters of pages already read
     while True:
-        # Read every waiting message before drawing anything, so a newer list
-        # of wanted pages always wins over an older one.
-        if not wanted or connection.poll():
+        # Read every waiting message before doing anything, so a newer list of
+        # wanted pages (or a newer search) always wins over an older one.
+        if not (wanted or search) or connection.poll():
             try:
                 message = connection.recv()
             except (EOFError, OSError):
@@ -92,7 +140,8 @@ def _worker_main(connection: Connection) -> None:
                 return
             if kind == "open":
                 _, token, path, password = message
-                wanted = []
+                wanted, search = [], None
+                page_texts.clear()
                 if doc is not None:
                     doc.close()
                     doc = None
@@ -107,11 +156,26 @@ def _worker_main(connection: Connection) -> None:
             elif kind == "want":
                 _, want_token, items = message
                 wanted = list(items) if want_token == token and doc is not None else []
+            elif kind == "search":
+                _, search_token, search_id, query, whole_word, exact = message
+                search = None
+                if search_token == token and doc is not None:
+                    search = _SearchJob(search_id, query, SearchOptions(whole_word, exact))
+            elif kind == "cancel_search":
+                search = None
             elif kind == "close":
-                wanted = []
+                wanted, search = [], None
+                page_texts.clear()
                 if doc is not None:
                     doc.close()
                     doc = None
+            continue
+
+        if not wanted:
+            # Nothing to draw: search one more page. Drawing always goes first,
+            # so searching a long document never slows the scrolling down.
+            if not _search_next_page(connection, token, doc, search, page_texts):
+                search = None
             continue
 
         page_index, zoom = wanted.pop(0)
@@ -147,7 +211,13 @@ class RenderService:
         on_page_failed: Callable[[int, float, str], None] | None = None,
         on_open_failed: Callable[[str], None] | None = None,
         on_crashed: Callable[[], None] | None = None,
+        on_hits: Callable[[int, list[SearchHit]], None] | None = None,
+        on_search_done: Callable[[int, bool], None] | None = None,
     ) -> None:
+        self._on_hits = on_hits or (lambda search_id, hits: None)
+        self._on_search_done = on_search_done or (lambda search_id, too_many: None)
+        self._search_id = 0
+        self._searching = False
         self._on_page = on_page
         self._on_page_failed = on_page_failed or (lambda page, zoom, message: None)
         self._on_open_failed = on_open_failed or (lambda message: None)
@@ -184,9 +254,44 @@ class RenderService:
                 self._send(("open", self._token, str(self._path), self._password))
             self._send(("want", self._token, [(r.page, r.zoom) for r in requests]))
 
+    def search(self, query: str, options: SearchOptions = DEFAULT_OPTIONS) -> int:
+        """Start looking for ``query`` in the whole document.
+
+        Replaces any search still running. Results arrive page by page through
+        ``on_hits`` and the end through ``on_search_done``, both with the
+        number this method returns.
+        """
+        with self._lock:
+            self._search_id += 1
+            if self._path is None:
+                return self._search_id
+            if self._ensure_started():
+                self._send(("open", self._token, str(self._path), self._password))
+            self._searching = True
+            self._send(
+                (
+                    "search",
+                    self._token,
+                    self._search_id,
+                    query,
+                    options.whole_word,
+                    options.exact,
+                )
+            )
+            return self._search_id
+
+    def cancel_search(self) -> None:
+        with self._lock:
+            self._search_id += 1
+            self._searching = False
+            if self.is_running():
+                self._send(("cancel_search",))
+
     def close_document(self) -> None:
         with self._lock:
             self._path = None
+            self._search_id += 1
+            self._searching = False
             self._token += 1
             if self.is_running():
                 self._send(("close",))
@@ -273,6 +378,12 @@ class RenderService:
                 self._on_page_failed(message[2], message[3], message[4])
             elif kind == "open_failed":
                 self._on_open_failed(message[2])
+            elif kind == "hits" and message[2] == self._search_id:
+                self._on_hits(message[2], message[3])
+            elif kind == "search_done" and message[2] == self._search_id:
+                self._searching = False
+                self._on_search_done(message[2], message[3])
+        lost_search = None
         with self._lock:
             crashed = not self._closing and connection is self._connection
             if crashed:
@@ -282,6 +393,10 @@ class RenderService:
                 self.restarts += 1
                 self._crashes += 1
                 gave_up = self._crashes >= MAX_CRASHES_PER_DOCUMENT
+                lost_search = self._search_id if self._searching else None
+                self._searching = False
+        if crashed and lost_search is not None:
+            self._on_search_done(lost_search, False)  # ends early, with what was found
         if crashed and gave_up:
             self._on_open_failed("the helper process keeps crashing with this document")
         elif crashed:

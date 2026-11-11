@@ -19,7 +19,7 @@ Al acabar cada fase se publica una versión descargable en *Releases*.
 | 0.4 | Esqueleto de la interfaz: pestañas de modos (Leer, Estudiar, Rellenar y firmar, Organizar), Ctrl+1…4, buscador de funciones (Ctrl+K), modo claro/oscuro | Cambio de modo y cambian las herramientas visibles |✅ |
 | 0.5 | Registro de errores local y botón "Copiar informe de error" | Provoco un error de prueba, copio el informe y lo pego |✅ |
 | 0.6 | Prueba de concepto: rendimiento (PDF de 500 páginas, renderizado en segundo plano, pantallas al 125/150 %) | Hago scroll por todo el documento sin tirones y el texto se ve nítido | ✅ |
-| 0.7 | Prueba de concepto: buscador (sin tildes, palabras partidas con guion, la ñ no es n) | "articulo" encuentra "Artícu-lo" partido; "año" no encuentra "ano" | ⬜ |
+| 0.7 | Prueba de concepto: buscador (sin tildes, palabras partidas con guion, la ñ no es n) | "articulo" encuentra "Artícu-lo" partido; "año" no encuentra "ano" | ✅ |
 | 0.8 | Prueba de concepto: firma con certificado del almacén de Windows (FNMT) con pyHanko | Firmo un PDF con mi certificado instalado y Adobe/VALIDe lo dan por válido; si no sale, tengo explicadas las alternativas | ⬜ |
 | 0.9 | Prueba de concepto: OCR con Tesseract incluido en el `.exe` | Reconozco una página escaneada en español sin instalar nada aparte; sé cuánto crece el instalador | ⬜ |
 
@@ -47,6 +47,25 @@ y no un único `.exe`: la carpeta abre en menos de 1 segundo y el `.exe` único 
 - Queda para la Fase 1: dibujar por trozos con zoom muy alto (ahora una página nunca
   pasa de 60 millones de puntos y a partir de ahí se estira), y que el ayudante se
   entere de los cambios cuando haya anotaciones (Fase 2).
+
+**Resultado de la tarea 0.7** (buscador, 11/11/2026):
+- Funciona lo prometido: "articulo" encuentra "Artículo" y también "Artícu-lo" partido
+  entre dos líneas; "camion" encuentra "CAMIÓN"; "año" no encuentra "ano" ni al revés.
+  Las frases que siguen en la línea siguiente se encuentran, también en el BOE real.
+- Cómo: el texto de cada página se convierte en una tira simplificada (sin tildes ni
+  mayúsculas, con los saltos de línea como espacios y las palabras partidas unidas) y
+  se recuerda de qué letra de la página sale cada carácter, para poder marcarlo.
+- Un guion al final de línea solo une si sigue una minúscula. Si la palabra lleva guion
+  de verdad ("físico-químico" partido justo ahí), se encuentra escrita con y sin guion.
+- Rapidez: las 520 páginas del PDF largo, en 1 segundo la primera vez y al instante
+  las siguientes. Se busca en el proceso ayudante y dibujar páginas tiene prioridad,
+  así que buscar no frena el scroll. Los resultados van saliendo según se encuentran.
+- Ya hay panel de búsqueda (Ctrl+F): lista con la frase alrededor, marcas en la página,
+  Intro y Mayús+Intro, "Palabra completa" y "Coincidencia exacta". Como mucho 5.000
+  resultados por búsqueda.
+- Queda para la tarea 1.4: frases que saltan de una página a la siguiente, resaltar en
+  negrita la palabra en la lista, y probar con columnas y tablas. La búsqueda
+  aproximada para fallos de OCR (1/l, 0/O) es de la Fase 2B.
 
 ## Fase 1 – Lector
 | # | Tarea | Terminado cuando… | Estado |
