@@ -19,6 +19,7 @@ from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPalette
 from PySide6.QtWidgets import QAbstractScrollArea, QFrame, QWidget
 
 from app.core.document import PageSize, PdfDocument
+from app.core.outline import OutlineEntry
 from app.core.render_service import RenderedPage, RenderRequest, RenderService
 from app.core.search import SearchHit
 from app.ui import theme
@@ -83,7 +84,12 @@ class PdfView(QAbstractScrollArea):
 
     # Carry results from the service's background thread to the interface thread.
     _rendered = Signal(object)
+    # The outline of the document has arrived (or has been emptied).
+    outline_changed = Signal()
+    # A small picture asked with want_thumbnails is ready: RenderedPage.
+    thumbnail_drawn = Signal(object)
     _open_failed = Signal(str)
+    _outline_ready = Signal(object)
     _crashed = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -112,8 +118,10 @@ class PdfView(QAbstractScrollArea):
         self._wanted: list[RenderRequest] = []
         self._marks: dict[int, list[SearchHit]] = {}  # search results by page
         self._current_mark: SearchHit | None = None
+        self._outline: list[OutlineEntry] = []
 
         self._rendered.connect(self._store_page)
+        self._outline_ready.connect(self._store_outline)
         self._open_failed.connect(self.document_failed)
         self._crashed.connect(self._request_pages)
         self.service = RenderService(
@@ -122,6 +130,8 @@ class PdfView(QAbstractScrollArea):
             on_crashed=self._crashed.emit,
             on_hits=self.search_hits.emit,
             on_search_done=self.search_finished.emit,
+            on_outline=self._outline_ready.emit,
+            on_thumbnail=self.thumbnail_drawn.emit,
         )
         self.verticalScrollBar().valueChanged.connect(self._scrolled)
         self.horizontalScrollBar().valueChanged.connect(self._scrolled)
@@ -153,7 +163,37 @@ class PdfView(QAbstractScrollArea):
         self._shown_first = False
         self._marks = {}
         self._current_mark = None
+        if self._outline:
+            self._outline = []
+            self.outline_changed.emit()
         self._layout()
+
+    @property
+    def outline(self) -> list[OutlineEntry]:
+        """Sections of the document. Arrives a moment after opening it."""
+        return self._outline
+
+    def _store_outline(self, entries: list[OutlineEntry]) -> None:
+        if self._document is None:
+            return
+        self._outline = entries
+        self.outline_changed.emit()
+
+    def want_thumbnails(self, pages: list[int], width: int, height: int) -> None:
+        """Ask for small pictures of ``pages`` that fit in ``width`` x ``height`` pixels.
+
+        Replaces the previous list. They arrive one by one in ``thumbnail_drawn``.
+        """
+        if self._document is None:
+            return
+        sizes = self._shown_sizes()
+        requests = []
+        for page in pages:
+            if 0 <= page < len(sizes):
+                size = sizes[page]
+                zoom = min(width / size.width, height / size.height)
+                requests.append(RenderRequest(page, zoom, self._rotation))
+        self.service.want_thumbnails(requests)
 
     def shutdown(self) -> None:
         """Close the document and stop the helper process."""
@@ -256,6 +296,10 @@ class PdfView(QAbstractScrollArea):
             return [PageSize(size.height, size.width) for size in self._sizes]
         return self._sizes
 
+    def shown_page_size(self, page: int) -> PageSize:
+        """Size of a page in points, as it is seen (viewing rotation applied)."""
+        return self._shown_sizes()[page]
+
     def _shown_rect(self, page: int, rect: tuple[float, float, float, float]):
         """Where a rectangle of the page is on the turned page (in points)."""
         x0, y0, x1, y1 = rect
@@ -305,19 +349,28 @@ class PdfView(QAbstractScrollArea):
         zoom = max(MIN_ZOOM, min(MAX_ZOOM, zoom))
         if abs(zoom - self._zoom) < 1e-6 and self._tops:
             return
-        # Stay on the same spot of the same page while the size changes.
+        place = self._place()
+        self._zoom = zoom
+        self._layout()
+        self._return_to(place)
+        self.zoom_changed.emit(self.zoom)
+        self._scrolled()
+
+    def _place(self) -> tuple[int, float]:
+        """The page being read and how far down it the top of the window is."""
         page = max(self._current_page, 0)
         inside = 0.0
         if self._tops and self._heights[page]:
             inside = (self._scroll_y() - self._tops[page]) / self._heights[page]
-        self._zoom = zoom
-        self._layout()
-        if self._tops:
+        return page, inside
+
+    def _return_to(self, place: tuple[int, float]) -> None:
+        """Stay on the same spot of the same page after the sizes have changed."""
+        page, inside = place
+        if page < len(self._tops):
             self.verticalScrollBar().setValue(
                 self._to_units(self._tops[page] + inside * self._heights[page])
             )
-        self.zoom_changed.emit(self.zoom)
-        self._scrolled()
 
     # ---- geometry -------------------------------------------------------
 
@@ -502,7 +555,13 @@ class PdfView(QAbstractScrollArea):
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
+        # With "fit to width" the pages change size with the window (for example
+        # when a side panel opens): keep reading where we were.
+        place = self._place()
+        zoom = self._zoom
         self._layout()
+        if abs(zoom - self._zoom) > 1e-6:
+            self._return_to(place)
         self._scrolled()
 
     def changeEvent(self, event) -> None:  # noqa: N802

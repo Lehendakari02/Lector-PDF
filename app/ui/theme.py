@@ -299,6 +299,22 @@ QLabel#welcomeDetails {{ color: {c.muted}; font-size: 8pt; }}
 
 /* ---- search panel ---- */
 QWidget#searchPanel {{ background: {c.surface}; border-left: 1px solid {c.border}; }}
+QWidget#sidePanel {{ background: {c.surface}; border-right: 1px solid {c.border}; }}
+QWidget#sidePanel QListWidget, QWidget#sidePanel QTreeWidget {{
+    border: none; padding: 0; background: {c.surface}; color: {c.text}; outline: none;
+}}
+QListWidget#thumbnailList::item {{ padding: 6px 2px 4px 2px; color: {c.muted}; }}
+QListWidget#thumbnailList::item:selected {{ color: {c.text}; font-weight: 700; }}
+QTreeWidget#outlineTree::item {{ padding: 7px 4px; border-radius: 6px; }}
+QTreeWidget#outlineTree::item:hover {{ background: {c.hover}; }}
+QTreeWidget#outlineTree::item:selected {{ background: {c.accent_soft}; color: {c.text}; }}
+QToolButton#panelTab {{
+    border: none; border-radius: 8px; padding: 4px 10px;
+    color: {c.muted}; font-weight: 600; background: transparent;
+}}
+QToolButton#panelTab:hover {{ background: {c.hover}; color: {c.text}; }}
+QToolButton#panelTab:checked {{ background: {c.accent_soft}; color: {c.accent}; }}
+QLabel#panelEmpty {{ color: {c.muted}; padding: 8px; }}
 QLabel#panelTitle {{ font-size: 12pt; font-weight: 700; }}
 QLabel#searchStatus {{ color: {c.muted}; font-size: 9pt; }}
 QWidget#searchPanel QListWidget {{ border: none; padding: 0; }}

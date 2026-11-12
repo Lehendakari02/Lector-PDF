@@ -144,7 +144,7 @@ y no un único `.exe`: la carpeta abre en menos de 1 segundo y el `.exe` único 
 |---|-------|-------------------|--------|
 | 1.1 | Abrir un PDF y verlo con scroll continuo | Abro un tema del BOE y paso páginas con la rueda sin tirones | ✅ |
 | 1.2 | Zoom, ajustar a ancho/página, rotar, pantalla completa | Ctrl+rueda hace zoom; los botones ajustan la vista | ✅ |
-| 1.3 | Panel lateral: miniaturas e índice | Clic en una miniatura o en un apartado del índice me lleva allí | ⬜ |
+| 1.3 | Panel lateral: miniaturas e índice | Clic en una miniatura o en un apartado del índice me lleva allí | ✅ |
 | 1.4 | Buscador sin tildes ni mayúsculas, con palabras partidas por guion | Busco "articulo" y encuentra "Artículo", también si está partido entre líneas | ⬜ |
 | 1.5 | Lista de resultados con contexto, resaltado y siguiente/anterior | Veo todos los resultados con su frase y salto entre ellos con Intro | ⬜ |
 | 1.6 | Seleccionar y copiar texto | Copio un artículo y lo pego en otro programa | ⬜ |
@@ -164,6 +164,13 @@ Notas de la Fase 1:
   archivo; girar páginas de verdad es de Organizar (Fase 5). Pantalla completa con
   F11 (Esc para salir). En la barra de abajo, "Página [12] de 39": se escribe un
   número y con Intro se va allí (Ctrl+G).
+- 1.3: panel a la izquierda con dos pestañas, Miniaturas e Índice (botones de Leer
+  o F4). Viene cerrado; el programa recuerda si lo dejaste abierto y en qué pestaña.
+  Las miniaturas se dibujan solo para las páginas a la vista, después de las páginas
+  que se están leyendo, así que no frenan la lectura ni con 500 páginas. El índice
+  marca el apartado en el que estás. Si el PDF no trae índice, lo dice.
+  De paso: al cambiar el ancho de la ventana (o abrir un panel) con la vista
+  ajustada, el documento se queda en la página que se estaba leyendo (antes saltaba).
 - Revisión del código de la Fase 0 (`docs/revision-codigo-fase-0.md`): sus puntos
   se arreglan dentro de la tarea a la que pertenecen:
   - 1.4 buscador: A1 (letras unidas "fi", "fl"), A2 (tildes y ñ escritas en dos

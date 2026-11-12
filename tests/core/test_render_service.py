@@ -17,6 +17,8 @@ class Collector:
 
     def __init__(self):
         self.pages: list[RenderedPage] = []
+        self.thumbnails: list[RenderedPage] = []
+        self.outlines: list[list] = []
         self.page_failures: list[tuple[int, float, str]] = []
         self.open_failures: list[str] = []
         self.crashes = 0
@@ -26,6 +28,8 @@ class Collector:
             on_page_failed=lambda *failure: self._add(self.page_failures, failure),
             on_open_failed=lambda message: self._add(self.open_failures, message),
             on_crashed=self._crashed,
+            on_outline=lambda entries: self._add(self.outlines, entries),
+            on_thumbnail=lambda page: self._add(self.thumbnails, page),
         )
 
     def _add(self, where, item):
@@ -306,3 +310,36 @@ def test_helper_draws_turned_pages(collector, sample):
     page = collector.pages[0]
     assert page.rotation == 270
     assert page.width > page.height
+
+
+def test_helper_sends_the_outline_when_it_opens_a_document(collector, sample):
+    collector.service.open(sample("boe.pdf"))
+    collector.wait(lambda: len(collector.outlines) == 1)
+    outline = collector.outlines[0]
+    assert len(outline) > 100
+    assert outline[0].title == "Constitución Española."
+    assert outline[0].page == 0
+
+
+def test_a_document_without_outline_sends_an_empty_one(collector, sample):
+    collector.service.open(sample("formulario.pdf"))
+    collector.wait(lambda: len(collector.outlines) == 1)
+    assert collector.outlines[0] == []
+
+
+def test_small_pictures_wait_for_the_pages_being_read(collector, sample):
+    collector.service.open(sample("largo.pdf"))
+    collector.service.want_thumbnails([RenderRequest(page, 0.2) for page in range(30)])
+    collector.service.want([RenderRequest(100, 1.0)])
+    collector.wait(lambda: len(collector.thumbnails) == 30 and len(collector.pages) == 1)
+    assert [picture.page for picture in collector.thumbnails] == list(range(30))
+    assert collector.thumbnails[0].width < 200
+    assert collector.pages[0].page == 100
+
+
+def test_a_new_list_of_small_pictures_replaces_the_old_one(collector, sample):
+    collector.service.open(sample("largo.pdf"))
+    collector.service.want_thumbnails([RenderRequest(page, 0.2) for page in range(400)])
+    collector.service.want_thumbnails([RenderRequest(500, 0.2)])
+    collector.wait(lambda: any(picture.page == 500 for picture in collector.thumbnails))
+    assert len(collector.thumbnails) < 400
