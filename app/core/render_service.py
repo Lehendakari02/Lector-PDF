@@ -49,6 +49,7 @@ class RenderRequest:
 
     page: int
     zoom: float
+    rotation: int = 0  # extra quarter turns for viewing: 0, 90, 180 or 270
 
 
 @dataclass(frozen=True)
@@ -62,10 +63,14 @@ class RenderedPage:
     stride: int
     samples: bytes
     seconds: float
+    rotation: int = 0
 
 
-def render_page(doc, page_index: int, zoom: float) -> RenderedPage:
-    """Draw one page of an open PyMuPDF document."""
+def render_page(doc, page_index: int, zoom: float, rotation: int = 0) -> RenderedPage:
+    """Draw one page of an open PyMuPDF document.
+
+    ``rotation`` turns the picture clockwise for viewing; the file is not changed.
+    """
     import pymupdf
 
     started = time.perf_counter()
@@ -73,7 +78,8 @@ def render_page(doc, page_index: int, zoom: float) -> RenderedPage:
     pixels = page.rect.width * zoom * page.rect.height * zoom
     if pixels > MAX_PIXELS_PER_PAGE:
         zoom *= (MAX_PIXELS_PER_PAGE / pixels) ** 0.5
-    pixmap = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
+    matrix = pymupdf.Matrix(zoom, zoom).prerotate(rotation % 360)
+    pixmap = page.get_pixmap(matrix=matrix, alpha=False)
     return RenderedPage(
         page=page_index,
         zoom=zoom,
@@ -82,6 +88,7 @@ def render_page(doc, page_index: int, zoom: float) -> RenderedPage:
         stride=pixmap.stride,
         samples=pixmap.samples,
         seconds=time.perf_counter() - started,
+        rotation=rotation % 360,
     )
 
 
@@ -123,7 +130,7 @@ def _worker_main(connection: Connection) -> None:
     import pymupdf
 
     doc = None
-    wanted: list[tuple[int, float]] = []
+    wanted: list[tuple[int, float, int]] = []
     token = 0
     search: _SearchJob | None = None
     page_texts: dict[int, PageText] = {}  # letters of pages already read
@@ -178,9 +185,9 @@ def _worker_main(connection: Connection) -> None:
                 search = None
             continue
 
-        page_index, zoom = wanted.pop(0)
+        page_index, zoom, rotation = wanted.pop(0)
         try:
-            result = render_page(doc, page_index, zoom)
+            result = render_page(doc, page_index, zoom, rotation)
             connection.send(
                 (
                     "page",
@@ -191,6 +198,7 @@ def _worker_main(connection: Connection) -> None:
                     result.height,
                     result.stride,
                     result.seconds,
+                    result.rotation,
                 )
             )
             connection.send_bytes(result.samples)
@@ -252,7 +260,7 @@ class RenderService:
             if self._ensure_started():
                 # A new helper knows nothing yet: give it the document again.
                 self._send(("open", self._token, str(self._path), self._password))
-            self._send(("want", self._token, [(r.page, r.zoom) for r in requests]))
+            self._send(("want", self._token, [(r.page, r.zoom, r.rotation) for r in requests]))
 
     def search(self, query: str, options: SearchOptions = DEFAULT_OPTIONS) -> int:
         """Start looking for ``query`` in the whole document.
@@ -372,8 +380,10 @@ class RenderService:
             if message[1] != self._token:
                 continue  # belongs to a document that is no longer open
             if kind == "page":
-                _, _, page, zoom, width, height, stride, seconds = message
-                self._on_page(RenderedPage(page, zoom, width, height, stride, samples, seconds))
+                _, _, page, zoom, width, height, stride, seconds, rotation = message
+                self._on_page(
+                    RenderedPage(page, zoom, width, height, stride, samples, seconds, rotation)
+                )
             elif kind == "page_failed":
                 self._on_page_failed(message[2], message[3], message[4])
             elif kind == "open_failed":

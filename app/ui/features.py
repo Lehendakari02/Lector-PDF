@@ -59,6 +59,15 @@ FEATURES: list[Feature] = [
     _f(
         "fit_page", READ, "Ver página entera", "La página entera cabe en la ventana", "zoom ajustar"
     ),
+    _f(
+        "rotate_view",
+        READ,
+        "Girar vista",
+        "Girar las páginas para leerlas del derecho (no cambia el archivo)",
+        "rotar voltear tumbado",
+    ),
+    _f("fullscreen", READ, "Pantalla completa", "Ver solo el documento (F11)", "completa entera"),
+    _f("go_to_page", READ, "Ir a página", "Saltar a un número de página", "número saltar"),
     _f("outline", READ, "Índice", "Ver los apartados del documento y saltar a ellos", "esquema"),
     _f("thumbnails", READ, "Miniaturas", "Ver todas las páginas en pequeño", "páginas vista"),
     _f("print", READ, "Imprimir", "Imprimir el documento o unas páginas", "impresora papel"),
@@ -174,6 +183,7 @@ FEATURES: list[Feature] = [
 GROUP_STARTS = frozenset(
     {
         "zoom_in",
+        "fullscreen",
         "outline",
         "print",
         "note",

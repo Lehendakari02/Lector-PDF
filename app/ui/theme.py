@@ -307,6 +307,7 @@ QWidget#searchPanel QListWidget {{ border: none; padding: 0; }}
 QDialog#commandPalette {{
     background: {c.surface}; border: 1px solid {c.border}; border-radius: 0;
 }}
+QLineEdit#pageEdit {{ padding: 2px 4px; margin: 0 6px; border-radius: 6px; }}
 QLineEdit#paletteQuery {{
     border: none; border-bottom: 1px solid {c.border}; border-radius: 0;
     font-size: 12pt; padding: 12px 8px;

@@ -142,8 +142,8 @@ y no un único `.exe`: la carpeta abre en menos de 1 segundo y el `.exe` único 
 ## Fase 1 – Lector
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
-| 1.1 | Abrir un PDF y verlo con scroll continuo | Abro un tema del BOE y paso páginas con la rueda sin tirones | ⬜ |
-| 1.2 | Zoom, ajustar a ancho/página, rotar, pantalla completa | Ctrl+rueda hace zoom; los botones ajustan la vista | ⬜ |
+| 1.1 | Abrir un PDF y verlo con scroll continuo | Abro un tema del BOE y paso páginas con la rueda sin tirones | ✅ |
+| 1.2 | Zoom, ajustar a ancho/página, rotar, pantalla completa | Ctrl+rueda hace zoom; los botones ajustan la vista | ✅ |
 | 1.3 | Panel lateral: miniaturas e índice | Clic en una miniatura o en un apartado del índice me lleva allí | ⬜ |
 | 1.4 | Buscador sin tildes ni mayúsculas, con palabras partidas por guion | Busco "articulo" y encuentra "Artículo", también si está partido entre líneas | ⬜ |
 | 1.5 | Lista de resultados con contexto, resaltado y siguiente/anterior | Veo todos los resultados con su frase y salto entre ellos con Intro | ⬜ |
@@ -156,6 +156,23 @@ y no un único `.exe`: la carpeta abre en menos de 1 segundo y el `.exe` único 
 | 1.12 | Imprimir | Imprimo unas páginas concretas | ⬜ |
 | 1.13 | Aviso de nuevas versiones y **actualizar con un clic** (desactivable) | Si hay versión nueva en GitHub, me avisa; pulso "Actualizar ahora", se descarga, se instala y el programa se reinicia ya actualizado, sin perder ajustes ni pestañas (necesita el repositorio público) | ⬜ |
 | 1.14 | Versión 0.1 (instalador y portátil) y repositorio público | Lo instalo, o lo abro sin instalar, y funciona todo lo anterior | ⬜ |
+
+Notas de la Fase 1:
+- 1.1 quedó hecha con las pruebas de la Fase 0 (scroll continuo, páginas dibujadas
+  en un proceso ayudante, abrir desde el menú, el botón o arrastrando).
+- 1.2: "Girar vista" (Ctrl+R) gira las páginas solo en pantalla, sin tocar el
+  archivo; girar páginas de verdad es de Organizar (Fase 5). Pantalla completa con
+  F11 (Esc para salir). En la barra de abajo, "Página [12] de 39": se escribe un
+  número y con Intro se va allí (Ctrl+G).
+- Revisión del código de la Fase 0 (`docs/revision-codigo-fase-0.md`): sus puntos
+  se arreglan dentro de la tarea a la que pertenecen:
+  - 1.4 buscador: A1 (letras unidas "fi", "fl"), A2 (tildes y ñ escritas en dos
+    piezas), A4 (memoria del texto), B7.
+  - 1.7 pestañas: M1 (la ventana no debe tener el PDF abierto), B8.
+  - 1.11 dañados: A3 (PDF cortado sin páginas), M2, M3, M11, B5.
+  - En cualquier tarea de la fase: M4, B1, B3.
+  - 1.14 versión 0.1: M8 (licencias incluidas), M9 (versiones fijadas), B2, B4.
+  - Fase 2B: M10, B6. Fase 4: M5, M6, M7.
 
 ## Fase 2A – Anotar y guardado
 | # | Tarea | Terminado cuando… | Estado |
