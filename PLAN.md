@@ -145,8 +145,8 @@ y no un único `.exe`: la carpeta abre en menos de 1 segundo y el `.exe` único 
 | 1.1 | Abrir un PDF y verlo con scroll continuo | Abro un tema del BOE y paso páginas con la rueda sin tirones | ✅ |
 | 1.2 | Zoom, ajustar a ancho/página, rotar, pantalla completa | Ctrl+rueda hace zoom; los botones ajustan la vista | ✅ |
 | 1.3 | Panel lateral: miniaturas e índice | Clic en una miniatura o en un apartado del índice me lleva allí | ✅ |
-| 1.4 | Buscador sin tildes ni mayúsculas, con palabras partidas por guion | Busco "articulo" y encuentra "Artículo", también si está partido entre líneas | ⬜ |
-| 1.5 | Lista de resultados con contexto, resaltado y siguiente/anterior | Veo todos los resultados con su frase y salto entre ellos con Intro | ⬜ |
+| 1.4 | Buscador sin tildes ni mayúsculas, con palabras partidas por guion | Busco "articulo" y encuentra "Artículo", también si está partido entre líneas | ✅ |
+| 1.5 | Lista de resultados con contexto, resaltado y siguiente/anterior | Veo todos los resultados con su frase y salto entre ellos con Intro | ✅ |
 | 1.6 | Seleccionar y copiar texto | Copio un artículo y lo pego en otro programa | ⬜ |
 | 1.7 | Pestañas (varios PDFs a la vez) | Tengo 3 temas abiertos y cambio entre ellos | ⬜ |
 | 1.8 | Reabrir la sesión anterior, recordar página, archivos recientes | Cierro y reabro: vuelven mis pestañas, cada una en su página | ⬜ |
@@ -171,13 +171,29 @@ Notas de la Fase 1:
   marca el apartado en el que estás. Si el PDF no trae índice, lo dice.
   De paso: al cambiar el ancho de la ventana (o abrir un panel) con la vista
   ajustada, el documento se queda en la página que se estaba leyendo (antes saltaba).
+- 1.4 y 1.5: el buscador ya estaba hecho en la Fase 0; aquí se completa con lo que
+  encontró la revisión y con las frases que pasan de página:
+  - Letras unidas ("ﬁ", "ﬂ"): "oficina" se encuentra aunque el PDF la escriba con
+    una sola pieza para "fi" (A1).
+  - Tildes y "ñ" escritas en dos piezas (letra + acento): "año" sigue sin ser "ano" (A2).
+  - Una frase que acaba en una página y sigue en la siguiente se encuentra, saltándose
+    el pie y la cabecera que hay en medio (se reconocen porque se repiten a la misma
+    altura en las dos páginas). En la lista sale como "Pág. 7-8" y se marca en las dos.
+    Límite: hasta 6 líneas a cada lado del salto de página.
+  - El texto de las páginas ocupa unas 7 veces menos memoria (A4) y el tope ya es
+    por memoria (96 MB), no por número de páginas.
+  - Si el resultado queda fuera por un lado (con mucho zoom), la vista se mueve
+    también en horizontal (B7).
+  - M4: con mucho zoom ya no se piden una y otra vez páginas que no caben en memoria.
+    Sigue pendiente dibujar por trozos para que el zoom alto sea ligero de verdad.
+  - B3: los colores que quedan escritos en la vista son los del papel (blanco en
+    claro y en oscuro), ahora con nombre; no dependen del aspecto.
 - Revisión del código de la Fase 0 (`docs/revision-codigo-fase-0.md`): sus puntos
   se arreglan dentro de la tarea a la que pertenecen:
-  - 1.4 buscador: A1 (letras unidas "fi", "fl"), A2 (tildes y ñ escritas en dos
-    piezas), A4 (memoria del texto), B7.
+  - 1.4 buscador: A1, A2, A4, B7 (hechos).
   - 1.7 pestañas: M1 (la ventana no debe tener el PDF abierto), B8.
   - 1.11 dañados: A3 (PDF cortado sin páginas), M2, M3, M11, B5.
-  - En cualquier tarea de la fase: M4, B1, B3.
+  - En cualquier tarea de la fase: B1 (M4 y B3 hechos).
   - 1.14 versión 0.1: M8 (licencias incluidas), M9 (versiones fijadas), B2, B4.
   - Fase 2B: M10, B6. Fase 4: M5, M6, M7.
 

@@ -206,3 +206,120 @@ def test_a_520_page_document_is_searched_in_a_few_seconds(sample):
         total = sum(len(hits) for _page, hits in search_document(doc, "articulo"))
     assert total > 1000
     assert time.perf_counter() - started < 15  # measured: under 1 second
+
+
+# ---- awkward text: joined letters, accents in two pieces, page breaks ------------
+
+
+@pytest.fixture(scope="module")
+def tricky():
+    from tests.conftest import SAMPLES_DIR
+
+    with pymupdf.open(SAMPLES_DIR / "texto-dificil.pdf") as doc:
+        yield [read_page_text(page) for page in doc]
+
+
+def test_the_sample_really_is_awkward():
+    """The file must keep its traps, or the tests below prove nothing."""
+    from tests.conftest import SAMPLES_DIR
+
+    with pymupdf.open(SAMPLES_DIR / "texto-dificil.pdf") as doc:
+        raw = doc[0].get_text("text", flags=pymupdf.TEXT_PRESERVE_LIGATURES)
+    assert "oﬁcina" in raw and "conﬂicto" in raw  # one glyph for "fi" and "fl"
+    assert "año" in raw  # "n" followed by a separate tilde
+
+
+def test_joined_letters_are_found(tricky):
+    assert matches(tricky[0], "oficina") == ["oficina"]
+    assert matches(tricky[0], "conflicto") == ["conflicto"]
+    assert matches(tricky[0], "eficacia", WHOLE) == ["eficacia"]
+    assert matches(tricky[0], "oficina", EXACT) == ["oficina"]
+    hit = find_in_page(tricky[0], "fi")[0]
+    assert hit.rects[0][2] > hit.rects[0][0], "the mark has some width"
+
+
+def test_accents_written_in_two_pieces(tricky):
+    assert matches(tricky[0], "año", WHOLE) == ["año"]
+    assert matches(tricky[0], "ano") == [], '"ano" must not find "año"'
+    assert matches(tricky[0], "camion") == ["camión"]
+    assert matches(tricky[0], "camión", EXACT) == ["camión"]
+    assert matches(tricky[0], "cañada") == ["cañada"]
+    assert matches(tricky[0], "canada") == []
+
+
+def test_a_phrase_that_goes_on_to_the_next_page(tricky):
+    from app.core.search import find_across_pages
+
+    first, second = tricky
+    # Not on either page alone: the footer and the header are in between.
+    assert matches(first, "presentar alegaciones") == []
+    assert matches(second, "presentar alegaciones") == []
+    hits = find_across_pages(first, second, "presentar alegaciones", page=0)
+    assert [hit.match for hit in hits] == ["presentar alegaciones"]
+    hit = hits[0]
+    assert hit.page == 0
+    assert len(hit.rects) == 1 and len(hit.next_rects) == 1
+    assert hit.rects[0][1] > 600, "first piece at the bottom of the first page"
+    assert hit.next_rects[0][1] < 150, "second piece at the top of the next page"
+    assert hit.before.endswith("los interesados podrán ")
+    assert hit.after.startswith(" en el plazo")
+
+
+def test_a_word_split_between_two_pages(tricky):
+    from app.core.search import find_across_pages
+
+    hits = find_across_pages(tricky[0], tricky[1], "alegaciones", WHOLE, page=0)
+    assert [hit.match for hit in hits] == ["alegaciones"]
+
+
+def test_results_inside_one_page_are_not_repeated(tricky):
+    from app.core.search import find_across_pages
+
+    assert find_across_pages(tricky[0], tricky[1], "interesados") == []
+    assert find_across_pages(tricky[0], tricky[1], "plazo") == []
+    assert find_across_pages(tricky[0], tricky[1], "temario de prueba") == []
+    assert find_across_pages(tricky[0], tricky[1], "") == []
+
+
+def test_headers_and_footers_do_not_join_pages(tricky):
+    from app.core.search import find_across_pages
+
+    # "alega- / Página 1 / Temario de prueba / ciones": none of this is a phrase.
+    assert find_across_pages(tricky[0], tricky[1], "pagina 1 temario") == []
+    assert find_across_pages(tricky[0], tricky[1], "prueba ciones") == []
+
+
+def test_whole_document_search_includes_page_breaks():
+    from tests.conftest import SAMPLES_DIR
+
+    with pymupdf.open(SAMPLES_DIR / "texto-dificil.pdf") as doc:
+        found = dict(search_document(doc, "presentar alegaciones en el plazo"))
+    assert [hit.match for hit in found[0]] == ["presentar alegaciones en el plazo"]
+    assert found[1] == []
+
+
+def test_real_law_phrase_across_pages(boe):
+    """In the BOE sample, article 20 runs from one page to the next."""
+    from app.core.search import _reading_lines, find_across_pages
+
+    crossing = 0
+    for number in range(boe.page_count - 1):
+        first, second = read_page_text(boe[number]), read_page_text(boe[number + 1])
+        # The last reading line of a page and the first of the next, joined:
+        last = _reading_lines(first, second)[-1]
+        start = _reading_lines(second, first)[0]
+        words_before = first.chars[last[0] : last[1]].split()[-2:]
+        words_after = second.chars[start[0] : start[1]].split()[:2]
+        assert "BOLETÍN" not in words_after and "LEGISLACIÓN" not in words_after
+        assert not (words_before and words_before[0] == "Página")
+        phrase = " ".join(words_before + words_after)
+        if find_across_pages(first, second, phrase, page=number):
+            crossing += 1
+    assert crossing >= 30, "most page breaks of the law can be searched across"
+
+
+def test_page_text_is_compact():
+    page = make_page(["Una línea de prueba con bastantes letras para medir."] * 40)
+    assert isinstance(page.chars, str)
+    assert page.size_in_bytes() < 60 * len(page)  # it used to be about 230 per letter
+    assert len(page.boxes) == 4 * len(page)

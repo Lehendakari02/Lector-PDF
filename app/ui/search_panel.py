@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 
 from app.core.search import SearchHit, SearchOptions, prepare_query
 from app.ui import icons
-from app.ui.item_delegates import SearchHitDelegate
+from app.ui.item_delegates import SearchHitDelegate, page_range
 from app.ui.pdf_view import PdfView
 
 CONTEXT_BEFORE = 30  # letters shown before the result in the list
@@ -244,7 +244,9 @@ class SearchPanel(QWidget):
         if len(before) > CONTEXT_BEFORE:
             # Shorten at a space, so the line does not begin in the middle of a word.
             before = before[-CONTEXT_BEFORE:].partition(" ")[2]
-        return self.tr("Pág. {0}:  {1}[{2}]{3}").format(hit.page + 1, before, hit.match, hit.after)
+        return self.tr("Pág. {0}:  {1}[{2}]{3}").format(
+            page_range(hit), before, hit.match, hit.after
+        )
 
     def _row_chosen(self, row: int) -> None:
         if 0 <= row < len(self.hits) and row != self.current:

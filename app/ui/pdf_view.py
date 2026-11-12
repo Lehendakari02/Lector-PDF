@@ -20,7 +20,12 @@ from PySide6.QtWidgets import QAbstractScrollArea, QFrame, QWidget
 
 from app.core.document import PageSize, PdfDocument
 from app.core.outline import OutlineEntry
-from app.core.render_service import RenderedPage, RenderRequest, RenderService
+from app.core.render_service import (
+    MAX_PIXELS_PER_PAGE,
+    RenderedPage,
+    RenderRequest,
+    RenderService,
+)
 from app.core.search import SearchHit
 from app.ui import theme
 
@@ -48,6 +53,10 @@ PAGES_AHEAD = 3
 PAGES_BEHIND = 1
 CACHE_BYTES = 400 * 1024 * 1024
 # Search results: see-through, so the text stays readable in light and dark pages.
+# Colours painted on the pages. They do not follow the light or dark appearance:
+# a page is a white sheet in both.
+PAPER_COLOR = QColor("white")
+WAITING_TEXT_COLOR = QColor("#767676")  # "Página 7" on a sheet not drawn yet
 MARK_COLOR = QColor(255, 213, 0, 110)
 CURRENT_MARK_COLOR = QColor(255, 120, 0, 150)
 
@@ -218,14 +227,14 @@ class PdfView(QAbstractScrollArea):
     def set_search_marks(self, hits: list[SearchHit], current: SearchHit | None = None) -> None:
         """Mark these results on the pages; ``current`` stands out from the rest."""
         self._marks = {}
-        for hit in hits:
-            self._marks.setdefault(hit.page, []).append(hit)
         self._current_mark = current
-        self.viewport().update()
+        self.add_search_marks(hits)
 
     def add_search_marks(self, hits: list[SearchHit]) -> None:
         for hit in hits:
             self._marks.setdefault(hit.page, []).append(hit)
+            if hit.next_rects:  # a result that goes on to the next page
+                self._marks.setdefault(hit.page + 1, []).append(hit)
         self.viewport().update()
 
     def show_search_hit(self, hit: SearchHit) -> None:
@@ -241,6 +250,14 @@ class PdfView(QAbstractScrollArea):
             view_height = self._to_pixels(self.viewport().height())
             if top < view_top or bottom > view_top + view_height:
                 self.verticalScrollBar().setValue(self._to_units(top - view_height / 3))
+            # With a lot of zoom the result can be off to one side.
+            page_left = self._page_left(hit.page) + self._scroll_x()
+            left = page_left + min(first[0], last[0]) * zoom
+            right = page_left + max(first[2], last[2]) * zoom
+            view_left = self._scroll_x()
+            view_width = self._to_pixels(self.viewport().width())
+            if left < view_left or right > view_left + view_width:
+                self.horizontalScrollBar().setValue(self._to_units(left - view_width / 3))
         self.viewport().update()
 
     def search_marks(self) -> dict[int, list[SearchHit]]:
@@ -461,11 +478,17 @@ class PdfView(QAbstractScrollArea):
         order += range(visible.stop, min(self.page_count, visible.stop + PAGES_AHEAD))
         order += range(max(0, visible.start - PAGES_BEHIND), visible.start)
         zoom = self._render_zoom()
-        self._wanted = [
-            RenderRequest(page, zoom, self._rotation)
-            for page in order
-            if page not in self._cache or self._cache[page][0] != zoom
-        ]
+        # With a lot of zoom every page is a huge picture. Pages out of sight are
+        # only drawn ahead of time while they fit in memory; otherwise they would
+        # push out the ones being read and be asked for again, without end.
+        self._wanted = []
+        room = CACHE_BYTES
+        for page in order:
+            room -= min(self._widths[page] * self._heights[page], MAX_PIXELS_PER_PAGE) * 3
+            if room < 0 and page not in visible:
+                break
+            if page not in self._cache or self._cache[page][0] != zoom:
+                self._wanted.append(RenderRequest(page, zoom, self._rotation))
         self.service.want(self._wanted)
 
     def _store_page(self, result: RenderedPage) -> None:
@@ -533,8 +556,8 @@ class PdfView(QAbstractScrollArea):
                 )
             cached = self._cache.get(page)
             if cached is None:
-                painter.fillRect(target, QColor("white"))
-                painter.setPen(QColor("#767676"))
+                painter.fillRect(target, PAPER_COLOR)
+                painter.setPen(WAITING_TEXT_COLOR)
                 painter.drawText(
                     target,
                     Qt.AlignmentFlag.AlignCenter,
@@ -548,7 +571,7 @@ class PdfView(QAbstractScrollArea):
                 painter.drawImage(target, cached[1])
             for hit in self._marks.get(page, ()):
                 color = CURRENT_MARK_COLOR if hit is self._current_mark else MARK_COLOR
-                for rect in hit.rects:
+                for rect in hit.rects if hit.page == page else hit.next_rects:
                     x0, y0, x1, y1 = self._shown_rect(page, rect)
                     mark = QRectF(x0 * zoom, y0 * zoom, (x1 - x0) * zoom, (y1 - y0) * zoom)
                     painter.fillRect(mark.translated(target.left(), target.top()), color)

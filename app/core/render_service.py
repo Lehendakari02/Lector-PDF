@@ -29,6 +29,7 @@ from app.core.search import (
     PageText,
     SearchHit,
     SearchOptions,
+    find_across_pages,
     find_in_page,
     read_page_text,
 )
@@ -41,7 +42,7 @@ MAX_CRASHES_PER_DOCUMENT = 3
 # A search stops after this many results ("a" in a long book has 100 000).
 MAX_SEARCH_HITS = 5000
 # Pages whose letters are kept ready, so the next search is much faster.
-MAX_PAGE_TEXTS = 3000
+MAX_PAGE_TEXT_BYTES = 96 * 1024 * 1024  # letters of pages kept to search again faster
 
 
 @dataclass(frozen=True)
@@ -102,6 +103,17 @@ class _SearchJob:
     found: int = 0
 
 
+def _page_text(doc, number: int, page_texts: dict[int, PageText]) -> PageText:
+    """The letters of a page, read once and kept while they fit in memory."""
+    text = page_texts.get(number)
+    if text is None:
+        used = sum(kept.size_in_bytes() for kept in page_texts.values())
+        if used > MAX_PAGE_TEXT_BYTES:
+            page_texts.clear()
+        text = page_texts[number] = read_page_text(doc[number])
+    return text
+
+
 def _search_next_page(connection, token, doc, job: _SearchJob, page_texts) -> bool:
     """Search one page and send what was found. False when the search is over."""
     if job.next_page >= doc.page_count or job.found >= MAX_SEARCH_HITS:
@@ -111,12 +123,12 @@ def _search_next_page(connection, token, doc, job: _SearchJob, page_texts) -> bo
     number = job.next_page
     job.next_page += 1
     try:
-        text = page_texts.get(number)
-        if text is None:
-            if len(page_texts) >= MAX_PAGE_TEXTS:
-                page_texts.clear()
-            text = page_texts[number] = read_page_text(doc[number])
+        text = _page_text(doc, number, page_texts)
         hits = find_in_page(text, job.query, job.options, number)
+        if number + 1 < doc.page_count:
+            # A phrase that goes on to the next page.
+            following = _page_text(doc, number + 1, page_texts)
+            hits += find_across_pages(text, following, job.query, job.options, number)
     except Exception:
         hits = []  # a page that cannot be read has no results; the search goes on
     if hits:

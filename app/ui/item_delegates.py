@@ -102,6 +102,12 @@ class FeatureDelegate(QStyledItemDelegate):
         painter.restore()
 
 
+def page_range(hit) -> str:
+    """ "7", or "7-8" for a result that goes on to the next page."""
+    first = hit.page + 1
+    return f"{first}-{first + 1}" if hit.next_rects else str(first)
+
+
 class SearchHitDelegate(QStyledItemDelegate):
     """A search result: the page, and the sentence with the found word marked."""
 
@@ -133,7 +139,7 @@ class SearchHitDelegate(QStyledItemDelegate):
         painter.drawText(
             QRect(row.left(), row.top(), row.width(), small_metrics.height()),
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-            self.page_label.format(hit.page + 1),
+            self.page_label.format(page_range(hit)),
         )
 
         before = hit.before

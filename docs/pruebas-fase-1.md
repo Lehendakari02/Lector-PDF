@@ -33,3 +33,15 @@ Lista para probarlo todo junto al final de la fase, con el programa de prueba
 7. Deja el panel abierto en Índice, cierra el programa y abre otro PDF: el panel
    vuelve abierto en Índice.
 8. Gira la vista con el panel de miniaturas abierto: las miniaturas también giran.
+
+## Tareas 1.4 y 1.5 – Buscador (lo que faltaba)
+
+1. Busca una palabra con "fi" o "fl" (oficina, eficacia, conflicto) en varios PDFs
+   tuyos: la encuentra en todos. Antes, en algunos PDFs no salía.
+2. Busca "año" y "ano" en un PDF donde antes fallara: siguen siendo palabras distintas.
+3. Busca una frase que empiece al final de una página y acabe en la siguiente
+   (elige una en un tema del BOE): sale en la lista como "Pág. 7-8" y queda marcada
+   en las dos páginas.
+4. Con mucho zoom (400 %), pasa de un resultado a otro con las flechas: la vista se
+   mueve también hacia los lados para enseñarlo.
+5. Con mucho zoom, mueve el documento arriba y abajo: no da tirones continuos.
