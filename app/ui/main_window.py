@@ -1,11 +1,11 @@
 """Main window: the work modes, their tools and the function finder."""
 
+import os
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QSize, Qt, QTimer, qVersion
 from PySide6.QtGui import QAction, QActionGroup, QGuiApplication, QKeyEvent, QKeySequence
 from PySide6.QtWidgets import (
-    QDockWidget,
     QFileDialog,
     QFrame,
     QGridLayout,
@@ -33,6 +33,7 @@ from app.core.signing import PasswordProtected, SigningError, sign_pdf
 from app.core.windows_store import SigningCancelled
 from app.ui import icons
 from app.ui.command_palette import CommandPalette
+from app.ui.document_page import DocumentPage
 from app.ui.error_reporting import ErrorReporter, ProvokedError
 from app.ui.features import (
     FEATURES,
@@ -57,7 +58,6 @@ MIN_BUTTON_HEIGHT = 40
 STATUS_MESSAGE_MS = 6000
 LAST_FOLDER_SETTING = "ultima_carpeta"
 SIDE_PANEL_SETTING = "panel_lateral"  # "", "miniaturas" or "indice"
-SIDE_PANEL_WIDTH = 204  # one column of thumbnails and the scroll bar
 
 
 class MainWindow(QMainWindow):
@@ -77,8 +77,7 @@ class MainWindow(QMainWindow):
 
         self._full_screen = False
         self._was_maximized = False
-        self._docks_before: list[QDockWidget] = []
-        self._side_panel_sized = False
+        self._docks_before: list[QWidget] = []
         self.feature_actions: dict[str, QAction] = {}
         self.mode_toolbars: dict[Mode, QToolBar] = {}
         self.theme_actions: dict[Theme, QAction] = {}
@@ -88,36 +87,34 @@ class MainWindow(QMainWindow):
         self._build_tool_bars()
         self._build_menus()
         self.welcome = self._build_welcome()
-        self.pdf_view = PdfView()
+        # Every open document is a page of this stack, with a tab above it.
+        self.documents: list[DocumentPage] = []
+        self.document_tabs = DocumentTabBar()
+        self.document_tabs.setObjectName("documentTabs")
+        self.document_tabs.setAccessibleName(self.tr("Documentos abiertos"))
+        self.document_tabs.setMovable(True)
+        self.document_tabs.setExpanding(False)
+        self.document_tabs.setDrawBase(False)
+        self.document_tabs.setElideMode(Qt.TextElideMode.ElideMiddle)
+        self.document_tabs.setUsesScrollButtons(True)
+        self.document_tabs.hide()
         self.pages = QStackedWidget()
         self.pages.addWidget(self.welcome)
-        self.pages.addWidget(self.pdf_view)
-        self.setCentralWidget(self.pages)
+        central = QWidget()
+        central_layout = QVBoxLayout(central)
+        central_layout.setContentsMargins(0, 0, 0, 0)
+        central_layout.setSpacing(0)
+        central_layout.addWidget(self.document_tabs)
+        central_layout.addWidget(self.pages, 1)
+        self.setCentralWidget(central)
+        # A page kept ready for the next document that is opened. While nothing
+        # is open it also stands in as "the current document" (an empty one).
+        self._spare = self._new_page()
+        self._warm_spares = False
+        self.document_tabs.currentChanged.connect(self._tab_changed)
+        self.document_tabs.tabCloseRequested.connect(self.close_document)
+        self.document_tabs.tabMoved.connect(self._tab_moved)
 
-        self.search_panel = SearchPanel(self.pdf_view)
-        self.search_dock = QDockWidget(self.tr("Buscar"), self)
-        self.search_dock.setObjectName("searchDock")
-        self.search_dock.setWidget(self.search_panel)
-        self.search_dock.setTitleBarWidget(QWidget())  # the panel has its own heading
-        self.search_dock.setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
-        self.search_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea)
-        self.search_dock.setMinimumWidth(320)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.search_dock)
-        self.search_dock.hide()
-        self.search_panel.closed.connect(self.close_search)
-
-        self.side_panel = SidePanel(self.pdf_view)
-        self.side_dock = QDockWidget(self.tr("Panel lateral"), self)
-        self.side_dock.setObjectName("sideDock")
-        self.side_dock.setWidget(self.side_panel)
-        self.side_dock.setTitleBarWidget(QWidget())  # the panel has its own heading
-        self.side_dock.setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
-        self.side_dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea)
-        self.side_dock.setMinimumWidth(SIDE_PANEL_WIDTH)
-        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.side_dock)
-        self.side_dock.hide()
-        self.side_panel.closed.connect(self.close_side_panel)
-        self.side_panel.tab_changed.connect(self._side_tab_changed)
         self.search_action = QAction(self.tr("Buscar en el documento"), self)
         self.search_action.setShortcut(QKeySequence(QKeySequence.StandardKey.Find))
         self.search_action.triggered.connect(self.show_search)
@@ -125,6 +122,7 @@ class MainWindow(QMainWindow):
 
         self.statusBar().setSizeGripEnabled(True)
         self.page_box = PageBox(self.pdf_view)
+        self.page_box.go_to.connect(lambda: self.pdf_view.setFocus())
         self.speed_label = QLabel()
         self.speed_label.setObjectName("speedLabel")
         self.speed_label.setVisible(running_from_source_or_test_build())
@@ -132,7 +130,6 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self.page_box)
         self.zoom_control = ZoomControl(self.pdf_view)
         self.statusBar().addPermanentWidget(self.zoom_control)
-        self._slowest_page = 0.0
 
         self._ocr_job: OcrJob | None = None
         self.last_ocr: OcrPage | None = None
@@ -140,32 +137,20 @@ class MainWindow(QMainWindow):
         self._ocr_timer.setInterval(100)
         self._ocr_timer.timeout.connect(self._check_ocr)
 
-        self.pdf_view.page_changed.connect(self._update_position)
-        self.pdf_view.zoom_changed.connect(lambda _zoom: self._update_position())
-        self.pdf_view.page_drawn.connect(self._update_speed)
-        self.pdf_view.document_failed.connect(self._document_failed)
-        self.pdf_view.text_copied.connect(self._text_copied)
-        self.pdf_view.no_text_to_select.connect(self._no_text_to_select)
-        # Ctrl+C and Ctrl+A belong to the document only while it has the keyboard:
-        # in the search box they must keep copying and selecting what is typed.
-        for action in (self.copy_action, self.select_all_action):
-            action.setShortcutContext(Qt.ShortcutContext.WidgetShortcut)
-            self.pdf_view.addAction(action)
-
         # Functions that already work. Every other one says it is not built yet.
         self.feature_handlers = {
             "open": self.choose_and_open,
             "search": self.show_search,
             "sign_certificate": self.sign_with_certificate,
             "ocr": self.recognize_current_page,
-            "zoom_in": self.pdf_view.zoom_in,
-            "zoom_out": self.pdf_view.zoom_out,
-            "fit_width": self.pdf_view.fit_width,
-            "fit_page": self.pdf_view.fit_page,
-            "rotate_view": self.pdf_view.rotate_view,
+            "zoom_in": lambda: self.pdf_view.zoom_in(),
+            "zoom_out": lambda: self.pdf_view.zoom_out(),
+            "fit_width": lambda: self.pdf_view.fit_width(),
+            "fit_page": lambda: self.pdf_view.fit_page(),
+            "rotate_view": lambda: self.pdf_view.rotate_view(),
             "fullscreen": self.toggle_full_screen,
             "go_to_page": self.go_to_page,
-            "copy": self.pdf_view.copy_selection,
+            "copy": lambda: self.pdf_view.copy_selection(),
             "thumbnails": lambda: self.toggle_side_panel(Tab.THUMBNAILS),
             "outline": lambda: self.toggle_side_panel(Tab.OUTLINE),
         }
@@ -285,6 +270,19 @@ class MainWindow(QMainWindow):
         # The shortcut lives here: a tool bar button only answers while its mode is shown.
         self.feature_actions["open"].setShortcut(QKeySequence())
         file_menu.addAction(self.open_menu_action)
+        self.close_tab_action = QAction(self.tr("&Cerrar pestaña"), self)
+        self.close_tab_action.setShortcut(QKeySequence("Ctrl+W"))
+        self.close_tab_action.triggered.connect(lambda _checked=False: self.close_document())
+        self.next_tab_action = QAction(self.tr("Pestaña &siguiente"), self)
+        self.next_tab_action.setShortcut(QKeySequence("Ctrl+Tab"))
+        self.next_tab_action.triggered.connect(lambda _checked=False: self.step_tab(1))
+        self.previous_tab_action = QAction(self.tr("Pestaña a&nterior"), self)
+        self.previous_tab_action.setShortcut(QKeySequence("Ctrl+Shift+Tab"))
+        self.previous_tab_action.triggered.connect(lambda _checked=False: self.step_tab(-1))
+        for action in (self.close_tab_action, self.next_tab_action, self.previous_tab_action):
+            action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+            self.addAction(action)
+            file_menu.addAction(action)
         file_menu.addSeparator()
         self.quit_action = QAction(self.tr("&Salir"), self)
         self.quit_action.triggered.connect(self.close)
@@ -555,19 +553,80 @@ class MainWindow(QMainWindow):
             self.settings.set(LAST_FOLDER_SETTING, str(Path(path).parent))
             self.open_document(path)
 
+    # The parts of the document in front. With nothing open they are those of
+    # an empty page, so the rest of the window never has to ask "is there one?".
+
+    @property
+    def current_document(self) -> DocumentPage:
+        index = self.document_tabs.currentIndex()
+        return self.documents[index] if 0 <= index < len(self.documents) else self._spare
+
+    @property
+    def pdf_view(self) -> PdfView:
+        return self.current_document.view
+
+    @property
+    def search_panel(self) -> SearchPanel:
+        return self.current_document.search_panel
+
+    @property
+    def side_panel(self) -> SidePanel:
+        return self.current_document.side_panel
+
+    # The panels used to be docks of the window; they keep these names.
+    search_dock = search_panel
+    side_dock = side_panel
+
+    def _new_page(self) -> DocumentPage:
+        page = DocumentPage()
+        view = page.view
+        view.page_changed.connect(self._update_position)
+        view.zoom_changed.connect(self._update_position)
+        view.page_drawn.connect(lambda number, seconds, p=page: self._page_drawn(p, seconds))
+        view.document_failed.connect(self._document_failed)
+        view.text_copied.connect(self._text_copied)
+        view.no_text_to_select.connect(self._no_text_to_select)
+        page.search_panel.closed.connect(self.close_search)
+        page.side_panel.closed.connect(self.close_side_panel)
+        page.side_panel.tab_changed.connect(self._side_tab_changed)
+        # Ctrl+C and Ctrl+A belong to the document only while it has the keyboard:
+        # in the search box they must keep copying and selecting what is typed.
+        for action in (self.copy_action, self.select_all_action):
+            action.setShortcutContext(Qt.ShortcutContext.WidgetShortcut)
+            view.addAction(action)
+        self.pages.addWidget(page)
+        return page
+
+    def warm_up(self) -> None:
+        """Start the helper of the next document now, so opening it is immediate."""
+        self._warm_spares = True
+        self._spare.view.service.warm_up()
+
+    def index_of_document(self, path: str | Path) -> int:
+        """The tab that shows the file at ``path``, or -1."""
+        wanted = _same_file_key(path)
+        for index, page in enumerate(self.documents):
+            if page.path is not None and _same_file_key(page.path) == wanted:
+                return index
+        return -1
+
     def open_document(self, path: str | Path) -> bool:
-        """Show the PDF at ``path``. Problems give a message, never a crash."""
+        """Show the PDF at ``path`` in a new tab. Problems give a message, never a crash."""
+        already = self.index_of_document(path)
+        if already >= 0:
+            self.document_tabs.setCurrentIndex(already)  # it is open: go to its tab
+            self.pdf_view.setFocus()
+            return True
+        page = self._spare
         try:
             document = PdfDocument(path)
             if document.needs_password:
-                document.close()
                 self._show_problem(
                     self.tr("Este PDF tiene contraseña"),
                     self.tr("Todavía no se pueden abrir documentos con contraseña."),
                 )
                 return False
-            self._slowest_page = 0.0
-            self.pdf_view.set_document(document)
+            page.view.set_document(document)
         except PdfOpenError:
             self._show_problem(
                 self.tr("No se puede abrir el documento"),
@@ -576,17 +635,69 @@ class MainWindow(QMainWindow):
                 ),
             )
             return False
-        self.pages.setCurrentWidget(self.pdf_view)
-        self.pdf_view.setFocus()
-        self.search_panel.document_changed()
-        self.side_panel.document_changed()
+        page.path = Path(path)
+        page.slowest_page = 0.0
+        page.search_panel.document_changed()
+        page.side_panel.document_changed()
+        self._spare = self._new_page()
+        if self._warm_spares:
+            self._spare.view.service.warm_up()
+        self.documents.append(page)
+        self.document_tabs.blockSignals(True)  # shown below, once everything is in place
+        index = self.document_tabs.addTab(page.title)
+        self.document_tabs.setTabToolTip(index, str(page.path))
+        self.document_tabs.add_close_button(index, self.tr("Cerrar pestaña (Ctrl+W)"))
+        self.document_tabs.setCurrentIndex(index)
+        self.document_tabs.blockSignals(False)
+        self.document_tabs.show()
+        self._tab_changed(index)
         # The side panel comes back as it was left the last time.
         remembered = Tab.from_setting(self.settings.get(SIDE_PANEL_SETTING))
         if remembered is not None and not self._full_screen:
             self.show_side_panel(remembered, remember=False)
-        self.setWindowTitle(f"{Path(path).name} – {APP_NAME}")
-        self._update_position()
         return True
+
+    def close_document(self, index: int | None = None) -> None:
+        """Close a tab (the one in front if none is given)."""
+        if index is None:
+            index = self.document_tabs.currentIndex()
+        if not 0 <= index < len(self.documents):
+            return
+        page = self.documents.pop(index)
+        self.document_tabs.blockSignals(True)
+        self.document_tabs.removeTab(index)
+        self.document_tabs.blockSignals(False)
+        page.shutdown()
+        self.pages.removeWidget(page)
+        page.deleteLater()
+        self.document_tabs.setVisible(bool(self.documents))
+        self._tab_changed(self.document_tabs.currentIndex())
+
+    def step_tab(self, step: int) -> None:
+        """Go to the next (1) or the previous (-1) tab, round and round."""
+        if len(self.documents) > 1:
+            index = (self.document_tabs.currentIndex() + step) % len(self.documents)
+            self.document_tabs.setCurrentIndex(index)
+
+    def _tab_moved(self, origin: int, destination: int) -> None:
+        self.documents.insert(destination, self.documents.pop(origin))
+
+    def _tab_changed(self, _index: int) -> None:
+        """Another document is in front (or none): show it and follow it."""
+        page = self.current_document
+        if self.documents:
+            self.pages.setCurrentWidget(page)
+            self.setWindowTitle(f"{page.title} – {APP_NAME}")
+            page.view.setFocus()
+        else:
+            self.pages.setCurrentWidget(self.welcome)
+            self.setWindowTitle(APP_NAME)
+        self.page_box.set_view(page.view)
+        self.zoom_control.set_view(page.view)
+        self.side_panel_action.setChecked(page.side_panel.isVisible())
+        self._show_speed(page)
+        if self._full_screen:
+            self._hide_panels_for_full_screen()
 
     def show_search(self) -> None:
         if self.pdf_view.page_count == 0:
@@ -608,12 +719,7 @@ class MainWindow(QMainWindow):
             self.set_full_screen(False)
         if tab is not None:
             self.side_panel.set_tab(tab)
-        first_time = not self._side_panel_sized
-        self.side_dock.show()
-        if first_time:
-            # Start narrow: one column of thumbnails. The edge can be dragged.
-            self._side_panel_sized = True
-            self.resizeDocks([self.side_dock], [SIDE_PANEL_WIDTH], Qt.Orientation.Horizontal)
+        self.current_document.show_side_panel()
         self.side_panel_action.setChecked(True)
         if remember:
             self.settings.set(SIDE_PANEL_SETTING, self.side_panel.tab.value)
@@ -793,13 +899,13 @@ class MainWindow(QMainWindow):
         self.full_screen_action.setChecked(on)
         if on:
             self._was_maximized = self.isMaximized()
-            self._docks_before = [d for d in (self.side_dock, self.search_dock) if d.isVisible()]
-            for dock in self._docks_before:
-                dock.hide()
+            self._hide_panels_for_full_screen()
         else:
-            for dock in self._docks_before:
-                dock.show()
+            for panel in self._docks_before:
+                if panel.parent() is not None:  # its tab may have been closed meanwhile
+                    panel.show()
             self._docks_before = []
+        self.document_tabs.setVisible(not on and bool(self.documents))
         self.menuBar().setVisible(not on)
         self.statusBar().setVisible(not on)
         self.mode_bar.setVisible(not on)
@@ -811,6 +917,12 @@ class MainWindow(QMainWindow):
             self.showMaximized()
         else:
             self.showNormal()
+
+    def _hide_panels_for_full_screen(self) -> None:
+        for panel in (self.side_panel, self.search_panel):
+            if panel.isVisible():
+                self._docks_before.append(panel)
+                panel.hide()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
         if event.key() == Qt.Key.Key_Escape and self._full_screen:
@@ -838,22 +950,30 @@ class MainWindow(QMainWindow):
             STATUS_MESSAGE_MS,
         )
 
-    def _update_speed(self, _page: int, seconds: float) -> None:
-        self._slowest_page = max(self._slowest_page, seconds)
+    def _page_drawn(self, page: DocumentPage, seconds: float) -> None:
+        page.slowest_page = max(page.slowest_page, seconds)
+        if page is self.current_document:
+            self._show_speed(page, seconds)
+
+    def _show_speed(self, page: DocumentPage, seconds: float | None = None) -> None:
+        if seconds is None:
+            self.speed_label.setText("")
+            return
         self.speed_label.setText(
             self.tr("Dibujo de página: {0} ms (la más lenta: {1} ms)").format(
-                round(seconds * 1000), round(self._slowest_page * 1000)
+                round(seconds * 1000), round(page.slowest_page * 1000)
             )
         )
 
     # ---- dropping a file on the window ----------------------------------
 
     @staticmethod
-    def _dropped_pdf(event) -> str | None:
-        for url in event.mimeData().urls():
-            if url.isLocalFile() and url.toLocalFile().lower().endswith(".pdf"):
-                return url.toLocalFile()
-        return None
+    def _dropped_pdfs(event) -> list[str]:
+        return [
+            url.toLocalFile()
+            for url in event.mimeData().urls()
+            if url.isLocalFile() and url.toLocalFile().lower().endswith(".pdf")
+        ]
 
     def _show_dropping(self, dropping: bool) -> None:
         self.welcome_card.setProperty("dropping", dropping)
@@ -861,7 +981,7 @@ class MainWindow(QMainWindow):
         self.welcome_card.style().polish(self.welcome_card)
 
     def dragEnterEvent(self, event) -> None:  # noqa: N802 (Qt naming)
-        if self._dropped_pdf(event) is not None:
+        if self._dropped_pdfs(event):
             self._show_dropping(True)
             event.acceptProposedAction()
 
@@ -870,10 +990,11 @@ class MainWindow(QMainWindow):
 
     def dropEvent(self, event) -> None:  # noqa: N802
         self._show_dropping(False)
-        path = self._dropped_pdf(event)
-        if path is not None:
+        paths = self._dropped_pdfs(event)
+        if paths:
             event.acceptProposedAction()
-            self.open_document(path)
+            for path in paths:  # each one in its own tab
+                self.open_document(path)
 
     def changeEvent(self, event) -> None:  # noqa: N802
         super().changeEvent(event)
@@ -885,5 +1006,47 @@ class MainWindow(QMainWindow):
         if self._ocr_job is not None:
             self._ocr_job.cancel()
             self._ocr_job = None
-        self.pdf_view.shutdown()
+        self.shutdown_documents()
         super().closeEvent(event)
+
+    def shutdown_documents(self) -> None:
+        """Stop the helper processes of every tab. Safe to call more than once."""
+        for page in [*self.documents, self._spare]:
+            page.shutdown()
+
+
+def _same_file_key(path: str | Path) -> str:
+    """Two paths with this same key are the same file (Windows ignores capitals)."""
+    return os.path.normcase(os.path.abspath(path))
+
+
+class DocumentTabBar(QTabBar):
+    """The tabs of the open documents, each with its button to close it.
+
+    A click with the wheel on a tab closes it too.
+    """
+
+    def add_close_button(self, index: int, tip: str) -> None:
+        button = QToolButton()
+        button.setObjectName("tabCloseButton")
+        button.setIcon(icons.icon("close", icons.MUTED))
+        button.setIconSize(QSize(14, 14))
+        button.setAccessibleName(tip)
+        button.setToolTip(tip)
+        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        button.clicked.connect(lambda: self._close_tab_of(button))
+        self.setTabButton(index, QTabBar.ButtonPosition.RightSide, button)
+
+    def _close_tab_of(self, button: QToolButton) -> None:
+        for index in range(self.count()):
+            if self.tabButton(index, QTabBar.ButtonPosition.RightSide) is button:
+                self.tabCloseRequested.emit(index)
+                return
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        if event.button() == Qt.MouseButton.MiddleButton:
+            index = self.tabAt(event.position().toPoint())
+            if index >= 0:
+                self.tabCloseRequested.emit(index)
+                return
+        super().mouseReleaseEvent(event)

@@ -313,6 +313,11 @@ class RenderService:
             self._ensure_started()
             self._send(("open", self._token, str(self._path), password))
 
+    def warm_up(self) -> None:
+        """Start the helper before any document is opened, so the first one is quicker."""
+        with self._lock:
+            self._ensure_started()
+
     def want(self, requests: list[RenderRequest]) -> None:
         """Replace the list of pages to draw, most urgent first."""
         with self._lock:

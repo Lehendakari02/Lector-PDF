@@ -29,7 +29,7 @@ class ZoomControl(QWidget):
 
     def __init__(self, view: PdfView, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.view = view
+        self.view: PdfView | None = None
 
         self.smaller = self._button("minus", self.tr("Alejar"), self.tr("Alejar (Ctrl+rueda)"))
         self.bigger = self._button("plus", self.tr("Acercar"), self.tr("Acercar (Ctrl+rueda)"))
@@ -48,11 +48,15 @@ class ZoomControl(QWidget):
         self.figure.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.figure.setMinimumWidth(68)
         menu = QMenu(self.figure)
-        self.fit_width_action = menu.addAction(self.tr("Ajustar al ancho"), view.fit_width)
-        self.fit_page_action = menu.addAction(self.tr("Ver página entera"), view.fit_page)
+        self.fit_width_action = menu.addAction(
+            self.tr("Ajustar al ancho"), lambda: self.view.fit_width()
+        )
+        self.fit_page_action = menu.addAction(
+            self.tr("Ver página entera"), lambda: self.view.fit_page()
+        )
         menu.addSeparator()
         self.preset_actions = {
-            percent: menu.addAction(f"{percent} %", lambda p=percent: view.set_zoom(p / 100))
+            percent: menu.addAction(f"{percent} %", lambda p=percent: self.view.set_zoom(p / 100))
             for percent in PRESETS
         }
         self.figure.setMenu(menu)
@@ -65,10 +69,20 @@ class ZoomControl(QWidget):
         layout.addWidget(self.bigger)
         layout.addWidget(self.figure)
 
-        self.smaller.clicked.connect(view.zoom_out)
-        self.bigger.clicked.connect(view.zoom_in)
+        self.smaller.clicked.connect(lambda: self.view.zoom_out())
+        self.bigger.clicked.connect(lambda: self.view.zoom_in())
         self.slider.valueChanged.connect(self._slider_moved)
-        view.zoom_changed.connect(lambda _zoom: self.refresh())
+        self.set_view(view)
+
+    def set_view(self, view: PdfView) -> None:
+        """Follow another document (the tab that is now in front)."""
+        if self.view is not None:
+            self.view.zoom_changed.disconnect(self._zoom_changed)
+        self.view = view
+        view.zoom_changed.connect(self._zoom_changed)
+        self.refresh()
+
+    def _zoom_changed(self, _zoom: float) -> None:
         self.refresh()
 
     def _button(self, icon_name: str, name: str, tip: str) -> QToolButton:

@@ -5,6 +5,7 @@ from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtTest import QTest
 
+from app.core.document import PdfDocument
 from app.ui.pdf_view import END_OF_PAGE
 
 
@@ -213,7 +214,7 @@ def test_the_pointer_changes_over_text(opened):
 def test_opening_another_document_forgets_the_selection(window, opened, sample):
     view = opened()
     view.select((0, 0), (0, 10))
-    assert window.open_document(sample("boe.pdf"))
+    view.set_document(PdfDocument(sample("boe.pdf")))
     assert not view.has_selection
 
 

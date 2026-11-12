@@ -63,3 +63,17 @@ Lista para probarlo todo junto al final de la fase, con el programa de prueba
    no lo del documento.
 9. En un PDF escaneado, intenta seleccionar: abajo avisa de que la página es una
    imagen y propone "Reconocer texto".
+
+## Tarea 1.7 – Pestañas
+
+1. Abre tres PDFs: cada uno sale en su pestaña, debajo de las herramientas.
+2. Cambia de pestaña: cada documento sigue en la página y con el tamaño en que lo
+   dejaste. Abajo, "Página X de N" y el % cambian con la pestaña.
+3. Busca algo en una pestaña y cambia a otra: la búsqueda se queda en la suya.
+4. Cierra una pestaña con su X, otra con Ctrl+W y otra con un clic de la rueda del
+   ratón. Al cerrar la última vuelve la pantalla de bienvenida.
+5. Ctrl+Tab pasa a la pestaña siguiente; Ctrl+Mayús+Tab, a la anterior.
+6. Arrastra una pestaña para cambiarla de sitio.
+7. Abre un PDF que ya está abierto: no se duplica, te lleva a su pestaña.
+8. Arrastra dos PDFs a la vez a la ventana: se abren los dos.
+9. Con cinco o seis PDFs abiertos, comprueba que todo sigue fluido.

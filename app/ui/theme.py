@@ -315,6 +315,23 @@ QToolButton#panelTab {{
 QToolButton#panelTab:hover {{ background: {c.hover}; color: {c.text}; }}
 QToolButton#panelTab:checked {{ background: {c.accent_soft}; color: {c.accent}; }}
 QLabel#panelEmpty {{ color: {c.muted}; padding: 8px; }}
+QTabBar#documentTabs {{ background: {c.window}; border-bottom: 1px solid {c.border}; }}
+QTabBar#documentTabs::tab {{
+    background: transparent; color: {c.muted};
+    border: 1px solid transparent; border-bottom: none;
+    border-top-left-radius: 8px; border-top-right-radius: 8px;
+    padding: 8px 10px 8px 14px; margin: 4px 2px 0 2px; min-width: 90px; max-width: 260px;
+}}
+QTabBar#documentTabs::tab:hover {{ background: {c.hover}; color: {c.text}; }}
+QTabBar#documentTabs::tab:selected {{
+    background: {c.surface}; color: {c.text}; border-color: {c.border}; font-weight: 600;
+}}
+QToolButton#tabCloseButton {{
+    border: none; border-radius: 6px; padding: 3px; margin-left: 6px; background: transparent;
+}}
+QToolButton#tabCloseButton:hover {{ background: {c.hover}; }}
+QToolButton#tabCloseButton:pressed {{ background: {c.accent_soft}; }}
+QSplitter#documentSplitter::handle {{ background: {c.border}; }}
 QLabel#panelTitle {{ font-size: 12pt; font-weight: 700; }}
 QLabel#searchStatus {{ color: {c.muted}; font-size: 9pt; }}
 QWidget#searchPanel QListWidget {{ border: none; padding: 0; }}

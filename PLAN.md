@@ -148,7 +148,7 @@ y no un único `.exe`: la carpeta abre en menos de 1 segundo y el `.exe` único 
 | 1.4 | Buscador sin tildes ni mayúsculas, con palabras partidas por guion | Busco "articulo" y encuentra "Artículo", también si está partido entre líneas | ✅ |
 | 1.5 | Lista de resultados con contexto, resaltado y siguiente/anterior | Veo todos los resultados con su frase y salto entre ellos con Intro | ✅ |
 | 1.6 | Seleccionar y copiar texto | Copio un artículo y lo pego en otro programa | ✅ |
-| 1.7 | Pestañas (varios PDFs a la vez) | Tengo 3 temas abiertos y cambio entre ellos | ⬜ |
+| 1.7 | Pestañas (varios PDFs a la vez) | Tengo 3 temas abiertos y cambio entre ellos | ✅ |
 | 1.8 | Reabrir la sesión anterior, recordar página, archivos recientes | Cierro y reabro: vuelven mis pestañas, cada una en su página | ⬜ |
 | 1.9 | Modo oscuro, modo lectura (sepia), tamaño de interfaz | Cambio de modo y se ve bien | ⬜ |
 | 1.10 | Abrir con doble clic / "Abrir con" / arrastrar / programa predeterminado | Doble clic en un PDF lo abre en Lector-PDF | ⬜ |
@@ -196,10 +196,21 @@ Notas de la Fase 1:
   La selección puede abarcar varias páginas (arrastrando más allá del borde, el
   documento avanza). En una página escaneada avisa de que no hay texto y propone
   "Reconocer texto".
+- 1.7: cada PDF se abre en su pestaña, con su propio zoom, página, búsqueda y panel
+  lateral. Se cierran con su X, con Ctrl+W o con un clic de la rueda; Ctrl+Tab pasa
+  de una a otra; se pueden reordenar arrastrando. Abrir un PDF que ya está abierto
+  lleva a su pestaña. Arrastrar varios PDFs a la ventana abre varias pestañas.
+  Cada pestaña tiene su propio proceso ayudante: un PDF problemático no afecta a
+  los demás. A cambio, cada pestaña abierta gasta algo de memoria aunque no se
+  mire; si con muchas pestañas pesa, se podrán "dormir" las que no se usan.
+  - M1: la ventana ya no deja el PDF abierto; lo lee y lo suelta. Queda apuntado
+    para la Fase 2 que el ayudante sí lo tiene abierto y habrá que soltarlo al guardar.
+  - B8: al arrancar el programa se prepara ya el ayudante del siguiente documento,
+    así abrir un PDF no espera a que arranque.
 - Revisión del código de la Fase 0 (`docs/revision-codigo-fase-0.md`): sus puntos
   se arreglan dentro de la tarea a la que pertenecen:
   - 1.4 buscador: A1, A2, A4, B7 (hechos).
-  - 1.7 pestañas: M1 (la ventana no debe tener el PDF abierto), B8.
+  - 1.7 pestañas: M1, B8 (hechos).
   - 1.11 dañados: A3 (PDF cortado sin páginas), M2, M3, M11, B5.
   - En cualquier tarea de la fase: B1 (M4 y B3 hechos).
   - 1.14 versión 0.1: M8 (licencias incluidas), M9 (versiones fijadas), B2, B4.
