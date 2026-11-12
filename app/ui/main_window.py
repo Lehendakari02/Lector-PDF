@@ -144,6 +144,13 @@ class MainWindow(QMainWindow):
         self.pdf_view.zoom_changed.connect(lambda _zoom: self._update_position())
         self.pdf_view.page_drawn.connect(self._update_speed)
         self.pdf_view.document_failed.connect(self._document_failed)
+        self.pdf_view.text_copied.connect(self._text_copied)
+        self.pdf_view.no_text_to_select.connect(self._no_text_to_select)
+        # Ctrl+C and Ctrl+A belong to the document only while it has the keyboard:
+        # in the search box they must keep copying and selecting what is typed.
+        for action in (self.copy_action, self.select_all_action):
+            action.setShortcutContext(Qt.ShortcutContext.WidgetShortcut)
+            self.pdf_view.addAction(action)
 
         # Functions that already work. Every other one says it is not built yet.
         self.feature_handlers = {
@@ -158,6 +165,7 @@ class MainWindow(QMainWindow):
             "rotate_view": self.pdf_view.rotate_view,
             "fullscreen": self.toggle_full_screen,
             "go_to_page": self.go_to_page,
+            "copy": self.pdf_view.copy_selection,
             "thumbnails": lambda: self.toggle_side_panel(Tab.THUMBNAILS),
             "outline": lambda: self.toggle_side_panel(Tab.OUTLINE),
         }
@@ -281,6 +289,16 @@ class MainWindow(QMainWindow):
         self.quit_action = QAction(self.tr("&Salir"), self)
         self.quit_action.triggered.connect(self.close)
         file_menu.addAction(self.quit_action)
+
+        edit_menu = self.menuBar().addMenu(self.tr("&Editar"))
+        self.copy_action = QAction(self.tr("&Copiar"), self)
+        self.copy_action.setShortcut(QKeySequence(QKeySequence.StandardKey.Copy))
+        self.copy_action.triggered.connect(lambda _checked=False: self.pdf_view.copy_selection())
+        edit_menu.addAction(self.copy_action)
+        self.select_all_action = QAction(self.tr("&Seleccionar todo"), self)
+        self.select_all_action.setShortcut(QKeySequence(QKeySequence.StandardKey.SelectAll))
+        self.select_all_action.triggered.connect(lambda _checked=False: self.pdf_view.select_all())
+        edit_menu.addAction(self.select_all_action)
 
         view_menu = self.menuBar().addMenu(self.tr("&Ver"))
         self.mode_actions: dict[Mode, QAction] = {}
@@ -799,6 +817,26 @@ class MainWindow(QMainWindow):
             self.set_full_screen(False)
             return
         super().keyPressEvent(event)
+
+    def _text_copied(self, letters: int) -> None:
+        if letters:
+            message = self.tr("Texto copiado. Pégalo donde quieras con Ctrl+V.")
+        elif self.pdf_view.page_count == 0:
+            message = self.tr("Abre primero un documento.")
+        elif self.pdf_view.has_selection:
+            message = self.tr("En lo seleccionado no hay texto que copiar.")
+        else:
+            message = self.tr("Selecciona antes el texto arrastrando el ratón sobre él.")
+        self.statusBar().showMessage(message, STATUS_MESSAGE_MS)
+
+    def _no_text_to_select(self) -> None:
+        self.statusBar().showMessage(
+            self.tr(
+                "Esta página es una imagen (un escaneado): no tiene texto que seleccionar. "
+                "Prueba «Reconocer texto» en el modo Estudiar."
+            ),
+            STATUS_MESSAGE_MS,
+        )
 
     def _update_speed(self, _page: int, seconds: float) -> None:
         self._slowest_page = max(self._slowest_page, seconds)

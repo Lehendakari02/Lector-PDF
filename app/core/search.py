@@ -71,6 +71,8 @@ class PageText:
     lines: array = field(default_factory=lambda: array("I"))  # line number of every letter
     # Position of the hyphen where a word is split at a line end.
     split_hyphens: set[int] = field(default_factory=set)
+    # Paragraph (block of the page) every line belongs to, by line number.
+    line_blocks: array = field(default_factory=lambda: array("I"))
     _streams: dict = field(default_factory=dict, repr=False)
     _line_spans: list | None = field(default=None, repr=False)
     _line_keys: list | None = field(default=None, repr=False)
@@ -97,6 +99,12 @@ class PageText:
         letters = len(self.chars)
         own = 4 * letters + self.boxes.itemsize * len(self.boxes) + self.lines.itemsize * letters
         return own + 2 * 8 * letters  # up to two simplified copies with their maps
+
+    def without_caches(self) -> "PageText":
+        """A copy with only the letters, to send to another process."""
+        return PageText(
+            self.chars, self.boxes, self.lines, set(self.split_hyphens), self.line_blocks
+        )
 
     def line_spans(self) -> list[tuple[int, int]]:
         """First letter and one past the last letter of every line, in order."""
@@ -131,7 +139,8 @@ def read_page_text(page) -> PageText:
     # Ligatures are not preserved: "ﬁ" arrives as "f" and "i", so "oficina" is found.
     flags = pymupdf.TEXT_PRESERVE_WHITESPACE
     line_number = 0
-    for block in page.get_text("rawdict", flags=flags)["blocks"]:
+    line_blocks = array("I")
+    for block_number, block in enumerate(page.get_text("rawdict", flags=flags)["blocks"]):
         for line in block.get("lines", ()):
             before = len(chars)
             for span in line["spans"]:
@@ -152,7 +161,8 @@ def read_page_text(page) -> PageText:
                     lines.append(line_number)
             if len(chars) > before:
                 line_number += 1
-    text = PageText("".join(chars), boxes, lines)
+                line_blocks.append(block_number)
+    text = PageText("".join(chars), boxes, lines, line_blocks=line_blocks)
     _mark_split_hyphens(text)
     return text
 

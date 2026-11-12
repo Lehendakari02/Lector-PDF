@@ -147,7 +147,7 @@ y no un único `.exe`: la carpeta abre en menos de 1 segundo y el `.exe` único 
 | 1.3 | Panel lateral: miniaturas e índice | Clic en una miniatura o en un apartado del índice me lleva allí | ✅ |
 | 1.4 | Buscador sin tildes ni mayúsculas, con palabras partidas por guion | Busco "articulo" y encuentra "Artículo", también si está partido entre líneas | ✅ |
 | 1.5 | Lista de resultados con contexto, resaltado y siguiente/anterior | Veo todos los resultados con su frase y salto entre ellos con Intro | ✅ |
-| 1.6 | Seleccionar y copiar texto | Copio un artículo y lo pego en otro programa | ⬜ |
+| 1.6 | Seleccionar y copiar texto | Copio un artículo y lo pego en otro programa | ✅ |
 | 1.7 | Pestañas (varios PDFs a la vez) | Tengo 3 temas abiertos y cambio entre ellos | ⬜ |
 | 1.8 | Reabrir la sesión anterior, recordar página, archivos recientes | Cierro y reabro: vuelven mis pestañas, cada una en su página | ⬜ |
 | 1.9 | Modo oscuro, modo lectura (sepia), tamaño de interfaz | Cambio de modo y se ve bien | ⬜ |
@@ -188,6 +188,14 @@ Notas de la Fase 1:
     Sigue pendiente dibujar por trozos para que el zoom alto sea ligero de verdad.
   - B3: los colores que quedan escritos en la vista son los del papel (blanco en
     claro y en oscuro), ahora con nombre; no dependen del aspecto.
+- 1.6: se selecciona arrastrando el ratón sobre el texto (doble clic: una palabra;
+  Mayús+clic: hasta ahí; Ctrl+A: todo; Esc o un clic: quitar). Se copia con Ctrl+C,
+  con el botón Copiar, con el menú Editar o con el botón derecho. Lo copiado sale
+  como texto seguido: las líneas de un párrafo se unen y las palabras partidas con
+  guion vuelven a estar enteras, para pegarlo limpio en Word o en unos apuntes.
+  La selección puede abarcar varias páginas (arrastrando más allá del borde, el
+  documento avanza). En una página escaneada avisa de que no hay texto y propone
+  "Reconocer texto".
 - Revisión del código de la Fase 0 (`docs/revision-codigo-fase-0.md`): sus puntos
   se arreglan dentro de la tarea a la que pertenecen:
   - 1.4 buscador: A1, A2, A4, B7 (hechos).
@@ -195,6 +203,9 @@ Notas de la Fase 1:
   - 1.11 dañados: A3 (PDF cortado sin páginas), M2, M3, M11, B5.
   - En cualquier tarea de la fase: B1 (M4 y B3 hechos).
   - 1.14 versión 0.1: M8 (licencias incluidas), M9 (versiones fijadas), B2, B4.
+  - Dos decisiones se consultan cuando llegue su tarea: en la 1.10, si un segundo
+    PDF abierto con doble clic entra como pestaña en la ventana que ya hay (B2); en
+    la 1.14, una ventana "Acerca de" con la licencia y los avisos de terceros (M8).
   - Fase 2B: M10, B6. Fase 4: M5, M6, M7.
 
 ## Fase 2A – Anotar y guardado

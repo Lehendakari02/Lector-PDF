@@ -33,6 +33,7 @@ from app.core.search import (
     find_in_page,
     read_page_text,
 )
+from app.core.selection import selected_text
 
 # Never draw absurdly large images, whatever is asked (protects memory).
 MAX_PIXELS_PER_PAGE = 60_000_000
@@ -114,6 +115,20 @@ def _page_text(doc, number: int, page_texts: dict[int, PageText]) -> PageText:
     return text
 
 
+def _text_between(doc, start: tuple[int, int], stop: tuple[int, int], page_texts) -> str:
+    """The text from one place of the document to another, each (page, caret)."""
+    (first, first_caret), (last, last_caret) = start, stop
+    pieces = []
+    for number in range(max(first, 0), min(last, doc.page_count - 1) + 1):
+        text = _page_text(doc, number, page_texts)
+        begin = first_caret if number == first else 0
+        end = last_caret if number == last else len(text)
+        piece = selected_text(text, begin, end)
+        if piece:
+            pieces.append(piece)
+    return "\n".join(pieces)
+
+
 def _search_next_page(connection, token, doc, job: _SearchJob, page_texts) -> bool:
     """Search one page and send what was found. False when the search is over."""
     if job.next_page >= doc.page_count or job.found >= MAX_SEARCH_HITS:
@@ -188,6 +203,22 @@ def _worker_main(connection: Connection) -> None:
                     search = _SearchJob(search_id, query, SearchOptions(whole_word, exact))
             elif kind == "cancel_search":
                 search = None
+            elif kind == "text":
+                _, text_token, page_index = message
+                if text_token == token and doc is not None:
+                    try:
+                        letters = _page_text(doc, page_index, page_texts).without_caches()
+                    except Exception:
+                        letters = PageText()  # a page that cannot be read has no text
+                    connection.send(("text", token, page_index, letters))
+            elif kind == "copy":
+                _, copy_token, copy_id, start, stop = message
+                if copy_token == token and doc is not None:
+                    try:
+                        copied = _text_between(doc, start, stop, page_texts)
+                    except Exception:
+                        copied = ""
+                    connection.send(("copied", token, copy_id, copied))
             elif kind == "close":
                 wanted, thumbnails, search = [], [], None
                 page_texts.clear()
@@ -244,7 +275,12 @@ class RenderService:
         on_search_done: Callable[[int, bool], None] | None = None,
         on_outline: Callable[[list[OutlineEntry]], None] | None = None,
         on_thumbnail: Callable[[RenderedPage], None] | None = None,
+        on_text: Callable[[int, PageText], None] | None = None,
+        on_copied: Callable[[int, str], None] | None = None,
     ) -> None:
+        self._on_text = on_text or (lambda page, text: None)
+        self._on_copied = on_copied or (lambda copy_id, text: None)
+        self._copy_id = 0
         self._on_outline = on_outline or (lambda entries: None)
         self._on_thumbnail = on_thumbnail or (lambda page: None)
         self._on_hits = on_hits or (lambda search_id, hits: None)
@@ -323,6 +359,29 @@ class RenderService:
                 )
             )
             return self._search_id
+
+    def want_text(self, page: int) -> None:
+        """Ask for the letters of a page and where they are. Arrives in ``on_text``."""
+        with self._lock:
+            if self._path is None:
+                return
+            if self._ensure_started():
+                self._send(("open", self._token, str(self._path), self._password))
+            self._send(("text", self._token, page))
+
+    def copy_text(self, start: tuple[int, int], stop: tuple[int, int]) -> int:
+        """Ask for the text between two places, each (page, caret).
+
+        It arrives in ``on_copied`` with the number this method returns.
+        """
+        with self._lock:
+            self._copy_id += 1
+            if self._path is None:
+                return self._copy_id
+            if self._ensure_started():
+                self._send(("open", self._token, str(self._path), self._password))
+            self._send(("copy", self._token, self._copy_id, start, stop))
+            return self._copy_id
 
     def cancel_search(self) -> None:
         with self._lock:
@@ -421,6 +480,10 @@ class RenderService:
                 (self._on_page if kind == "page" else self._on_thumbnail)(drawn)
             elif kind == "outline":
                 self._on_outline(message[2])
+            elif kind == "text":
+                self._on_text(message[2], message[3])
+            elif kind == "copied":
+                self._on_copied(message[2], message[3])
             elif kind == "page_failed":
                 self._on_page_failed(message[2], message[3], message[4])
             elif kind == "open_failed":

@@ -53,6 +53,13 @@ FEATURES: list[Feature] = [
     # Leer
     _f("open", READ, "Abrir", "Abrir un PDF del ordenador", "archivo documento cargar"),
     _f("search", READ, "Buscar", "Buscar palabras o frases en el documento", "encontrar texto"),
+    _f(
+        "copy",
+        READ,
+        "Copiar",
+        "Copiar el texto seleccionado con el ratón (Ctrl+C)",
+        "texto seleccionar portapapeles pegar",
+    ),
     _f("zoom_in", READ, "Acercar", "Ver el documento más grande", "zoom ampliar aumentar lupa"),
     _f("zoom_out", READ, "Alejar", "Ver el documento más pequeño", "zoom reducir disminuir"),
     _f("fit_width", READ, "Ajustar al ancho", "La página ocupa todo el ancho", "zoom anchura"),
