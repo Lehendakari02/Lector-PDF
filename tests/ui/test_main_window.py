@@ -23,8 +23,9 @@ def visible_tools(window) -> set[str]:
 def test_main_window_shows_name_and_versions(window):
     assert window.isVisible()
     assert window.windowTitle() == APP_NAME
-    assert __version__ in window.findChild(QLabel, "placeholderTitle").text()
-    assert "PyMuPDF" in window.findChild(QLabel, "placeholderVersions").text()
+    assert window.findChild(QLabel, "welcomeTitle").text() == APP_NAME
+    details = window.findChild(QLabel, "welcomeDetails").text()
+    assert __version__ in details and "PyMuPDF" in details
 
 
 def test_starts_in_read_mode_with_only_its_tools(window):

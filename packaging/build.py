@@ -43,7 +43,11 @@ EXCLUDED_MODULES = [
 
 
 # Files the program reads while running; they keep the same path inside it.
-DATA_FOLDERS = ["app/recursos/tessdata"]  # Spanish language file for text recognition
+DATA_FOLDERS = [
+    "app/recursos/tessdata",  # Spanish language file for text recognition
+    "app/recursos/interfaz",  # small pictures of the interface
+]
+ICON = ROOT / "packaging" / "lector-pdf.ico"  # drawn by packaging/make_images.py
 
 
 def write_build_info(label: str) -> None:
@@ -70,6 +74,8 @@ def run_pyinstaller(onefile: bool) -> None:
         "--noconfirm",
         "--clean",
         "--windowed",
+        "--icon",
+        str(ICON),
         "--name",
         PROGRAM_NAME,
         "--paths",

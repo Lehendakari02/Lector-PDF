@@ -1,6 +1,6 @@
 """The search panel: type a word and see every place where it appears."""
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -8,12 +8,14 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
-    QPushButton,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from app.core.search import SearchHit, SearchOptions, prepare_query
+from app.ui import icons
+from app.ui.item_delegates import SearchHitDelegate
 from app.ui.pdf_view import PdfView
 
 CONTEXT_BEFORE = 30  # letters shown before the result in the list
@@ -28,6 +30,7 @@ class SearchPanel(QWidget):
     def __init__(self, view: PdfView, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("searchPanel")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.view = view
         self.hits: list[SearchHit] = []
         self.current = -1
@@ -36,11 +39,17 @@ class SearchPanel(QWidget):
         self._too_many = False
         self._start_page = 0
 
+        title = QLabel(self.tr("Buscar"))
+        title.setObjectName("panelTitle")
+
         self.box = QLineEdit()
         self.box.setPlaceholderText(self.tr("Buscar en el documento"))
         self.box.setAccessibleName(self.tr("Texto que buscar"))
         self.box.setClearButtonEnabled(True)
-        self.box.setMinimumHeight(36)
+        self.box.setMinimumHeight(40)
+        self.box.addAction(
+            icons.icon("search", icons.MUTED), QLineEdit.ActionPosition.LeadingPosition
+        )
         self.box.setToolTip(
             self.tr("No hace falta poner tildes ni mayúsculas. Intro: siguiente resultado.")
         )
@@ -50,14 +59,15 @@ class SearchPanel(QWidget):
         self.exact = QCheckBox(self.tr("Coincidencia exacta"))
         self.exact.setToolTip(self.tr("Tiene en cuenta las tildes y las mayúsculas"))
 
-        self.previous_button = QPushButton(self.tr("Anterior"))
-        self.previous_button.setToolTip(self.tr("Resultado anterior (Mayús+Intro)"))
-        self.next_button = QPushButton(self.tr("Siguiente"))
-        self.next_button.setToolTip(self.tr("Resultado siguiente (Intro)"))
-        self.close_button = QPushButton(self.tr("Cerrar"))
-        self.close_button.setToolTip(self.tr("Cerrar la búsqueda (Esc)"))
-        for button in (self.previous_button, self.next_button, self.close_button):
-            button.setMinimumHeight(36)
+        self.previous_button = self._icon_button(
+            "previous", self.tr("Anterior"), self.tr("Resultado anterior (Mayús+Intro)")
+        )
+        self.next_button = self._icon_button(
+            "next", self.tr("Siguiente"), self.tr("Resultado siguiente (Intro)")
+        )
+        self.close_button = self._icon_button(
+            "close", self.tr("Cerrar"), self.tr("Cerrar la búsqueda (Esc)")
+        )
 
         self.status = QLabel()
         self.status.setObjectName("searchStatus")
@@ -65,20 +75,29 @@ class SearchPanel(QWidget):
         self.results = QListWidget()
         self.results.setAccessibleName(self.tr("Resultados de la búsqueda"))
         self.results.setUniformItemSizes(True)
+        self.results.setMouseTracking(True)
         self.results.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.results.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        delegate = SearchHitDelegate(self._hit_of_row, CONTEXT_BEFORE, self.results)
+        delegate.page_label = self.tr("Pág. {0}")
+        self.results.setItemDelegate(delegate)
 
-        buttons = QHBoxLayout()
-        buttons.addWidget(self.previous_button)
-        buttons.addWidget(self.next_button)
-        buttons.addStretch(1)
-        buttons.addWidget(self.close_button)
+        header = QHBoxLayout()
+        header.addWidget(title)
+        header.addStretch(1)
+        header.addWidget(self.close_button)
+        navigation = QHBoxLayout()
+        navigation.addWidget(self.status, 1)
+        navigation.addWidget(self.previous_button)
+        navigation.addWidget(self.next_button)
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 12, 12, 8)
+        layout.setSpacing(8)
+        layout.addLayout(header)
         layout.addWidget(self.box)
         layout.addWidget(self.whole_word)
         layout.addWidget(self.exact)
-        layout.addLayout(buttons)
-        layout.addWidget(self.status)
+        layout.addLayout(navigation)
         layout.addWidget(self.results, 1)
 
         self._pause = QTimer(self)
@@ -106,6 +125,20 @@ class SearchPanel(QWidget):
         view.search_hits.connect(self._hits_arrived)
         view.search_finished.connect(self._finished)
         self._update_status()
+
+    def _icon_button(self, icon_name: str, name: str, tip: str) -> QToolButton:
+        """A small button with only a drawing; its name is kept for screen readers."""
+        button = QToolButton()
+        button.setObjectName("iconButton")
+        button.setIcon(icons.icon(icon_name))
+        button.setIconSize(QSize(20, 20))
+        button.setMinimumSize(36, 36)
+        button.setAccessibleName(name)
+        button.setToolTip(tip)
+        return button
+
+    def _hit_of_row(self, row: int) -> SearchHit | None:
+        return self.hits[row] if 0 <= row < len(self.hits) else None
 
     # ---- actions --------------------------------------------------------
 

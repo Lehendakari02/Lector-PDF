@@ -94,7 +94,7 @@ y no un único `.exe`: la carpeta abre en menos de 1 segundo y el `.exe` único 
 - Funciona sin instalar nada aparte. El motor Tesseract ya viene dentro de PyMuPDF, así
   que no hace falta incluir otro programa: solo el archivo del idioma español (2,3 MB,
   versión "rápida" de Tesseract, licencia Apache 2.0), en `app/recursos/tessdata`.
-- **El instalador crece unos 2 MB** por el reconocimiento de texto. (La firma de la
+- **El instalador crece 1 MB** (de 51,7 a 52,7 MB) por el reconocimiento de texto. (La firma de la
   tarea 0.8 lo había subido de 42 a 52 MB.)
 - Calidad con el escaneado de prueba (torcido, gris y con ruido): lee bien más del 90 %
   de las palabras, con tildes y eñes. Tarda 1 segundo por página.
@@ -107,6 +107,17 @@ y no un único `.exe`: la carpeta abre en menos de 1 segundo y el `.exe` único 
   documento con progreso y cancelar, enderezar y limpiar la imagen, rehacer un OCR malo
   y decidir si compensa la versión "mejor" del idioma (unos 13 MB, más lenta) viendo
   temarios escaneados de verdad.
+
+**Aspecto del programa** (12/11/2026, a petición tuya: "se ve muy soso"):
+- Diseño propio: color añil con un toque amarillo de rotulador, logotipo (una hoja con
+  una línea subrayada), iconos dibujados para el programa (sin librerías de iconos),
+  modos como pestañas redondeadas, herramientas con icono y nombre, agrupadas.
+- Pantalla de bienvenida con botón "Abrir un PDF"; también se abre arrastrando un PDF
+  a la ventana y con Ctrl+O. Menú Archivo.
+- Panel de búsqueda y buscador de funciones rediseñados; la palabra encontrada sale
+  marcada en la lista. Páginas con sombra. Claro y oscuro con el contraste comprobado.
+- El programa y el instalador tienen ya su icono.
+- "Formas y flechas" pasa a llamarse "Formas" para que quepan todas las herramientas.
 
 ## Fase 1 – Lector
 | # | Tarea | Terminado cuando… | Estado |
