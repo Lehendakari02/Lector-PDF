@@ -346,3 +346,16 @@ def test_rotate_button_turns_the_view(window, sample):
     assert window.pdf_view.rotation == 90
     window.rotate_view_action.trigger()
     assert window.pdf_view.rotation == 180
+
+
+def test_resizing_the_window_keeps_the_page_being_read(view, sample, wait_until, qt_app):
+    show(view, sample("largo.pdf"), wait_until)
+    view.fit_width()
+    view.scroll_to_page(300)
+    assert view.current_page == 300
+    view.resize(500, 600)  # narrower: with "fit to width" every page gets smaller
+    qt_app.processEvents()
+    assert view.current_page == 300
+    view.resize(1100, 600)
+    qt_app.processEvents()
+    assert view.current_page == 300

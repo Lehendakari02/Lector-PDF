@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from multiprocessing.connection import Connection
 from pathlib import Path
 
+from app.core.outline import OutlineEntry, read_outline
 from app.core.search import (
     DEFAULT_OPTIONS,
     PageText,
@@ -131,13 +132,14 @@ def _worker_main(connection: Connection) -> None:
 
     doc = None
     wanted: list[tuple[int, float, int]] = []
+    thumbnails: list[tuple[int, float, int]] = []  # small pictures, drawn when idle
     token = 0
     search: _SearchJob | None = None
     page_texts: dict[int, PageText] = {}  # letters of pages already read
     while True:
         # Read every waiting message before doing anything, so a newer list of
         # wanted pages (or a newer search) always wins over an older one.
-        if not (wanted or search) or connection.poll():
+        if not (wanted or thumbnails or search) or connection.poll():
             try:
                 message = connection.recv()
             except (EOFError, OSError):
@@ -147,7 +149,7 @@ def _worker_main(connection: Connection) -> None:
                 return
             if kind == "open":
                 _, token, path, password = message
-                wanted, search = [], None
+                wanted, thumbnails, search = [], [], None
                 page_texts.clear()
                 if doc is not None:
                     doc.close()
@@ -157,12 +159,16 @@ def _worker_main(connection: Connection) -> None:
                     if doc.needs_pass and not (password and doc.authenticate(password)):
                         raise ValueError("password required")
                     connection.send(("opened", token, doc.page_count))
+                    connection.send(("outline", token, read_outline(doc)))
                 except Exception as exc:
                     doc = None
                     connection.send(("open_failed", token, str(exc)))
             elif kind == "want":
                 _, want_token, items = message
                 wanted = list(items) if want_token == token and doc is not None else []
+            elif kind == "thumbnails":
+                _, want_token, items = message
+                thumbnails = list(items) if want_token == token and doc is not None else []
             elif kind == "search":
                 _, search_token, search_id, query, whole_word, exact = message
                 search = None
@@ -171,26 +177,28 @@ def _worker_main(connection: Connection) -> None:
             elif kind == "cancel_search":
                 search = None
             elif kind == "close":
-                wanted, search = [], None
+                wanted, thumbnails, search = [], [], None
                 page_texts.clear()
                 if doc is not None:
                     doc.close()
                     doc = None
             continue
 
-        if not wanted:
+        if not wanted and not thumbnails:
             # Nothing to draw: search one more page. Drawing always goes first,
             # so searching a long document never slows the scrolling down.
             if not _search_next_page(connection, token, doc, search, page_texts):
                 search = None
             continue
 
-        page_index, zoom, rotation = wanted.pop(0)
+        # The pages being read go before the small pictures of the side panel.
+        kind = "page" if wanted else "thumbnail"
+        page_index, zoom, rotation = (wanted or thumbnails).pop(0)
         try:
             result = render_page(doc, page_index, zoom, rotation)
             connection.send(
                 (
-                    "page",
+                    kind,
                     token,
                     page_index,
                     zoom,
@@ -203,7 +211,8 @@ def _worker_main(connection: Connection) -> None:
             )
             connection.send_bytes(result.samples)
         except Exception as exc:
-            connection.send(("page_failed", token, page_index, zoom, str(exc)))
+            if kind == "page":
+                connection.send(("page_failed", token, page_index, zoom, str(exc)))
 
 
 class RenderService:
@@ -221,7 +230,11 @@ class RenderService:
         on_crashed: Callable[[], None] | None = None,
         on_hits: Callable[[int, list[SearchHit]], None] | None = None,
         on_search_done: Callable[[int, bool], None] | None = None,
+        on_outline: Callable[[list[OutlineEntry]], None] | None = None,
+        on_thumbnail: Callable[[RenderedPage], None] | None = None,
     ) -> None:
+        self._on_outline = on_outline or (lambda entries: None)
+        self._on_thumbnail = on_thumbnail or (lambda page: None)
         self._on_hits = on_hits or (lambda search_id, hits: None)
         self._on_search_done = on_search_done or (lambda search_id, too_many: None)
         self._search_id = 0
@@ -261,6 +274,17 @@ class RenderService:
                 # A new helper knows nothing yet: give it the document again.
                 self._send(("open", self._token, str(self._path), self._password))
             self._send(("want", self._token, [(r.page, r.zoom, r.rotation) for r in requests]))
+
+    def want_thumbnails(self, requests: list[RenderRequest]) -> None:
+        """Replace the list of small pictures to draw. They wait for the pages."""
+        with self._lock:
+            if self._path is None:
+                return
+            if self._ensure_started():
+                self._send(("open", self._token, str(self._path), self._password))
+            self._send(
+                ("thumbnails", self._token, [(r.page, r.zoom, r.rotation) for r in requests])
+            )
 
     def search(self, query: str, options: SearchOptions = DEFAULT_OPTIONS) -> int:
         """Start looking for ``query`` in the whole document.
@@ -374,16 +398,17 @@ class RenderService:
                     break
                 message = connection.recv()
                 kind = message[0]
-                samples = connection.recv_bytes() if kind == "page" else b""
+                samples = connection.recv_bytes() if kind in ("page", "thumbnail") else b""
             except (EOFError, OSError, ValueError, TypeError):
                 break
             if message[1] != self._token:
                 continue  # belongs to a document that is no longer open
-            if kind == "page":
+            if kind in ("page", "thumbnail"):
                 _, _, page, zoom, width, height, stride, seconds, rotation = message
-                self._on_page(
-                    RenderedPage(page, zoom, width, height, stride, samples, seconds, rotation)
-                )
+                drawn = RenderedPage(page, zoom, width, height, stride, samples, seconds, rotation)
+                (self._on_page if kind == "page" else self._on_thumbnail)(drawn)
+            elif kind == "outline":
+                self._on_outline(message[2])
             elif kind == "page_failed":
                 self._on_page_failed(message[2], message[3], message[4])
             elif kind == "open_failed":

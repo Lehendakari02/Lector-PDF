@@ -47,6 +47,7 @@ from app.ui.ocr_dialog import OcrResultDialog
 from app.ui.page_box import PageBox
 from app.ui.pdf_view import PdfView
 from app.ui.search_panel import SearchPanel
+from app.ui.side_panel import SidePanel, Tab
 from app.ui.sign_dialog import CertificateDialog
 from app.ui.theme import THEME_SETTING, Theme, apply_theme
 from app.ui.zoom_control import ZoomControl
@@ -55,6 +56,8 @@ from app.ui.zoom_control import ZoomControl
 MIN_BUTTON_HEIGHT = 40
 STATUS_MESSAGE_MS = 6000
 LAST_FOLDER_SETTING = "ultima_carpeta"
+SIDE_PANEL_SETTING = "panel_lateral"  # "", "miniaturas" or "indice"
+SIDE_PANEL_WIDTH = 204  # one column of thumbnails and the scroll bar
 
 
 class MainWindow(QMainWindow):
@@ -74,6 +77,8 @@ class MainWindow(QMainWindow):
 
         self._full_screen = False
         self._was_maximized = False
+        self._docks_before: list[QDockWidget] = []
+        self._side_panel_sized = False
         self.feature_actions: dict[str, QAction] = {}
         self.mode_toolbars: dict[Mode, QToolBar] = {}
         self.theme_actions: dict[Theme, QAction] = {}
@@ -100,6 +105,19 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.search_dock)
         self.search_dock.hide()
         self.search_panel.closed.connect(self.close_search)
+
+        self.side_panel = SidePanel(self.pdf_view)
+        self.side_dock = QDockWidget(self.tr("Panel lateral"), self)
+        self.side_dock.setObjectName("sideDock")
+        self.side_dock.setWidget(self.side_panel)
+        self.side_dock.setTitleBarWidget(QWidget())  # the panel has its own heading
+        self.side_dock.setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
+        self.side_dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea)
+        self.side_dock.setMinimumWidth(SIDE_PANEL_WIDTH)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.side_dock)
+        self.side_dock.hide()
+        self.side_panel.closed.connect(self.close_side_panel)
+        self.side_panel.tab_changed.connect(self._side_tab_changed)
         self.search_action = QAction(self.tr("Buscar en el documento"), self)
         self.search_action.setShortcut(QKeySequence(QKeySequence.StandardKey.Find))
         self.search_action.triggered.connect(self.show_search)
@@ -140,6 +158,8 @@ class MainWindow(QMainWindow):
             "rotate_view": self.pdf_view.rotate_view,
             "fullscreen": self.toggle_full_screen,
             "go_to_page": self.go_to_page,
+            "thumbnails": lambda: self.toggle_side_panel(Tab.THUMBNAILS),
+            "outline": lambda: self.toggle_side_panel(Tab.OUTLINE),
         }
         self._mark_pending_features()
 
@@ -288,7 +308,16 @@ class MainWindow(QMainWindow):
         self.rotate_view_action.triggered.connect(
             lambda _checked=False: self.pdf_view.rotate_view()
         )
-        for action in (self.full_screen_action, self.go_to_page_action, self.rotate_view_action):
+        self.side_panel_action = QAction(self.tr("Panel &lateral (miniaturas e índice)"), self)
+        self.side_panel_action.setCheckable(True)
+        self.side_panel_action.setShortcut(QKeySequence("F4"))
+        self.side_panel_action.triggered.connect(lambda _checked=False: self.toggle_side_panel())
+        for action in (
+            self.side_panel_action,
+            self.full_screen_action,
+            self.go_to_page_action,
+            self.rotate_view_action,
+        ):
             # They must also answer while the menu bar is hidden (full screen).
             action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
             self.addAction(action)
@@ -532,6 +561,11 @@ class MainWindow(QMainWindow):
         self.pages.setCurrentWidget(self.pdf_view)
         self.pdf_view.setFocus()
         self.search_panel.document_changed()
+        self.side_panel.document_changed()
+        # The side panel comes back as it was left the last time.
+        remembered = Tab.from_setting(self.settings.get(SIDE_PANEL_SETTING))
+        if remembered is not None and not self._full_screen:
+            self.show_side_panel(remembered, remember=False)
         self.setWindowTitle(f"{Path(path).name} – {APP_NAME}")
         self._update_position()
         return True
@@ -544,6 +578,45 @@ class MainWindow(QMainWindow):
             return
         self.search_dock.show()
         self.search_panel.start()
+
+    # ---- side panel: thumbnails and outline ------------------------------
+
+    def show_side_panel(self, tab: Tab | None = None, remember: bool = True) -> None:
+        if self.pdf_view.page_count == 0:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            self.side_panel_action.setChecked(False)
+            return
+        if self._full_screen:
+            self.set_full_screen(False)
+        if tab is not None:
+            self.side_panel.set_tab(tab)
+        first_time = not self._side_panel_sized
+        self.side_dock.show()
+        if first_time:
+            # Start narrow: one column of thumbnails. The edge can be dragged.
+            self._side_panel_sized = True
+            self.resizeDocks([self.side_dock], [SIDE_PANEL_WIDTH], Qt.Orientation.Horizontal)
+        self.side_panel_action.setChecked(True)
+        if remember:
+            self.settings.set(SIDE_PANEL_SETTING, self.side_panel.tab.value)
+
+    def close_side_panel(self) -> None:
+        self.side_dock.hide()
+        self.side_panel_action.setChecked(False)
+        self.settings.set(SIDE_PANEL_SETTING, "")
+        self.pdf_view.setFocus()
+
+    def toggle_side_panel(self, tab: Tab | None = None) -> None:
+        """Open the panel, or close it if it already shows what is asked."""
+        showing = self.side_dock.isVisible()
+        if showing and (tab is None or tab is self.side_panel.tab):
+            self.close_side_panel()
+        else:
+            self.show_side_panel(tab)
+
+    def _side_tab_changed(self, tab: Tab) -> None:
+        if self.side_dock.isVisible():
+            self.settings.set(SIDE_PANEL_SETTING, tab.value)
 
     def close_search(self) -> None:
         self.search_dock.hide()
@@ -702,6 +775,13 @@ class MainWindow(QMainWindow):
         self.full_screen_action.setChecked(on)
         if on:
             self._was_maximized = self.isMaximized()
+            self._docks_before = [d for d in (self.side_dock, self.search_dock) if d.isVisible()]
+            for dock in self._docks_before:
+                dock.hide()
+        else:
+            for dock in self._docks_before:
+                dock.show()
+            self._docks_before = []
         self.menuBar().setVisible(not on)
         self.statusBar().setVisible(not on)
         self.mode_bar.setVisible(not on)
