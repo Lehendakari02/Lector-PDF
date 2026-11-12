@@ -14,6 +14,7 @@ is False and the other functions raise ``StoreError``.
 
 import ctypes
 import hashlib
+import re
 import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -54,6 +55,12 @@ class StoreCertificate:
     valid_until: datetime
     for_signing: bool  # False for certificates meant only for other uses
     der: bytes
+    personal: bool = True  # False for the ones Windows makes for the computer itself
+
+    @property
+    def usable(self) -> bool:
+        """Good for signing a document as a person, today."""
+        return self.for_signing and self.personal and self.is_valid_now()
 
     def is_valid_now(self) -> bool:
         return self.valid_from <= datetime.now(UTC) <= self.valid_until
@@ -72,7 +79,24 @@ def describe(der: bytes) -> StoreCertificate:
         valid_until=certificate.not_valid_after,
         for_signing=for_signing,
         der=der,
+        personal=not _belongs_to_the_computer(certificate),
     )
+
+
+_GUID = re.compile(r"[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}", re.IGNORECASE)
+_COMPUTER_ISSUERS = ("ms-organization", "microsoft intune", "microsoft azure")
+
+
+def _belongs_to_the_computer(certificate: x509.Certificate) -> bool:
+    """Windows keeps its own certificates among the personal ones.
+
+    Work and Microsoft accounts add certificates that identify the computer or
+    the account to a server. They can sign, but the signature names nobody:
+    their name is a long code. Found in the first real test (12/11/2026).
+    """
+    name = _display_name(certificate.subject)
+    issuer = _display_name(certificate.issuer).lower()
+    return bool(_GUID.fullmatch(name.strip())) or issuer.startswith(_COMPUTER_ISSUERS)
 
 
 def _display_name(name: x509.Name) -> str:
@@ -223,7 +247,7 @@ def list_certificates() -> list[StoreCertificate]:
             certificates.append(describe(der))
         except Exception:  # noqa: S112 - one unreadable certificate must not hide the rest
             continue
-    certificates.sort(key=lambda c: (not (c.for_signing and c.is_valid_now()), c.name.lower()))
+    certificates.sort(key=lambda c: (not c.usable, not c.personal, c.name.lower()))
     return certificates
 
 

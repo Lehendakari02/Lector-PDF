@@ -24,9 +24,9 @@ class CommandPalette(QDialog):
         self.setWindowTitle(self.tr("Buscar una función"))
         self.setObjectName("commandPalette")
         self.setModal(True)
-        # No title bar: it is a quick box that appears over the window, like the
-        # finders of other programs. Esc closes it.
-        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
+        # A pop-up, like the finders of other programs: no title bar, and it
+        # closes with Esc or with a click anywhere outside it.
+        self.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
         self.resize(620, 470)
         self.chosen: Feature | None = None
 
@@ -79,6 +79,7 @@ class CommandPalette(QDialog):
                 area.center().x() - self.width() // 2,
                 area.top() + max(60, (area.height() - self.height()) // 4),
             )
+        self.query.setFocus()
 
     def _refresh(self, text: str) -> None:
         self.results.clear()

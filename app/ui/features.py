@@ -56,6 +56,9 @@ FEATURES: list[Feature] = [
     _f("zoom_in", READ, "Acercar", "Ver el documento más grande", "zoom ampliar aumentar lupa"),
     _f("zoom_out", READ, "Alejar", "Ver el documento más pequeño", "zoom reducir disminuir"),
     _f("fit_width", READ, "Ajustar al ancho", "La página ocupa todo el ancho", "zoom anchura"),
+    _f(
+        "fit_page", READ, "Ver página entera", "La página entera cabe en la ventana", "zoom ajustar"
+    ),
     _f("outline", READ, "Índice", "Ver los apartados del documento y saltar a ellos", "esquema"),
     _f("thumbnails", READ, "Miniaturas", "Ver todas las páginas en pequeño", "páginas vista"),
     _f("print", READ, "Imprimir", "Imprimir el documento o unas páginas", "impresora papel"),

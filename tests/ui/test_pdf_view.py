@@ -202,12 +202,12 @@ def test_window_zoom_buttons_work(window, sample, wait_until):
     before = window.pdf_view.zoom
     window.feature_actions["zoom_in"].trigger()
     assert window.pdf_view.zoom > before
-    assert f"{round(window.pdf_view.zoom * 100)} %" in window.position_label.text()
+    assert window.zoom_control.figure.text() == f"{round(window.pdf_view.zoom * 100)} %"
     window.feature_actions["zoom_out"].trigger()
     window.feature_actions["zoom_out"].trigger()
     assert window.pdf_view.zoom < before
     window.feature_actions["fit_width"].trigger()
-    assert window.pdf_view.zoom == pytest.approx(before)
+    assert fills_the_width(window.pdf_view)
 
 
 @pytest.mark.parametrize("name", ["no-existe.pdf", "roto.pdf"])

@@ -27,6 +27,8 @@ def describe_certificate(certificate: StoreCertificate, tr=str) -> str:
     )
     if not certificate.is_valid_now():
         text += tr(" · CADUCADO o todavía no válido")
+    elif not certificate.personal:
+        text += tr(" · Es del ordenador, no identifica a una persona")
     elif not certificate.for_signing:
         text += tr(" · No sirve para firmar")
     return text
@@ -87,8 +89,7 @@ class CertificateDialog(QDialog):
         self.list.setSpacing(4)
         for certificate in certificates:
             item = QListWidgetItem(describe_certificate(certificate, self.tr))
-            usable = certificate.is_valid_now() and certificate.for_signing
-            if not usable:
+            if not certificate.usable:
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
             self.list.addItem(item)
         self.list.setVisible(bool(certificates))
@@ -112,11 +113,7 @@ class CertificateDialog(QDialog):
         layout.addWidget(self.buttons)
 
         first_usable = next(
-            (
-                row
-                for row, certificate in enumerate(certificates)
-                if certificate.is_valid_now() and certificate.for_signing
-            ),
+            (row for row, certificate in enumerate(certificates) if certificate.usable),
             -1,
         )
         self.list.setCurrentRow(first_usable)
@@ -126,7 +123,7 @@ class CertificateDialog(QDialog):
         row = self.list.currentRow()
         if 0 <= row < len(self.certificates):
             certificate = self.certificates[row]
-            if certificate.is_valid_now() and certificate.for_signing:
+            if certificate.usable:
                 return certificate
         return None
 

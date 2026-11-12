@@ -137,14 +137,16 @@ solo, siempre) y **cambiar el PDF** (lo decide el usuario). Decidido el 12/11/20
 - **Pestañas** para tener varios PDFs abiertos; **al abrir el programa vuelven las
   pestañas de la última vez**, cada una en su página.
 - Scroll continuo, miniaturas, ir a página, índice del documento.
-- Zoom, ajustar a ancho/página, rotar, pantalla completa.
+- Zoom, ajustar a ancho/página, rotar, pantalla completa. El documento se abre a
+  un tamaño cómodo de leer (ajustado al ancho, pero nunca más del 125 %). Abajo a
+  la derecha, el tamaño en % con una barra para cambiarlo.
 - **Buscador excelente:**
   - No distingue tildes ni mayúsculas: "articulo" encuentra "Artículo"; "camion",
     "CAMIÓN". **La ñ no es una n**: "año" no encuentra "ano".
   - Encuentra palabras partidas con guion al final de línea y frases que saltan de
     línea (muy habitual en el BOE).
   - Lista de resultados con la frase alrededor; resaltado de todos en la página;
-    siguiente/anterior con Intro y Mayús+Intro.
+    siguiente/anterior con Intro y Mayús+Intro o con las flechas abajo y arriba.
   - Opciones para palabra completa o coincidencia exacta.
 - Seleccionar y copiar texto.
 - Modo oscuro y modo lectura (tono sepia/cálido para leer muchas horas).
@@ -233,10 +235,14 @@ que el OCR es una pieza central y se hace antes de las herramientas de estudio.
   importando una imagen, quitando el fondo) y guardar también las iniciales.
 - **Firmar con un clic**: se coloca la firma guardada; mover y redimensionar.
 - Fecha automática junto a la firma; iniciales en todas las páginas con un clic.
+- Al guardar un documento que se acaba de firmar (a mano o con certificado), el
+  programa propone el nombre con "-firmado" al final, para no pisar el original.
 
 ### Fase 4 – Firma con certificado digital (validez legal)
 - Firmar con el certificado instalado en Windows (p. ej. FNMT), con archivo .p12/.pfx
-  y con DNIe o tarjeta (lector de tarjetas).
+  y con DNIe o tarjeta (lector de tarjetas). Solo se ofrecen certificados de
+  personas: los que Windows crea para el propio ordenador (cuentas de trabajo o de
+  Microsoft, con un código por nombre) se apartan, porque no identifican a nadie.
 - Recordar el certificado y el aspecto de firma preferidos: firmar es elegir dónde y
   poner el PIN o la contraseña (que nunca se guarda).
 - Formato PAdES (el estándar europeo/español), con sello de tiempo opcional.

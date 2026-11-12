@@ -94,6 +94,16 @@ Con un PDF escaneado tuyo (un tema fotocopiado y escaneado, por ejemplo):
 De momento el texto solo se enseña; guardarlo dentro del PDF para poder buscar y
 subrayar llega con la fase de documentos escaneados.
 
+## Correcciones de la primera prueba (12/11/2026)
+- [ ] Buscador de funciones (Ctrl+K): un clic fuera lo cierra, sin pitido.
+- [ ] Un PDF se abre a un tamaño cómodo, no ampliado a todo el ancho.
+- [ ] Abajo a la derecha: la barra y los botones − y + cambian el tamaño; al pulsar
+      el % sale un menú con "Ajustar al ancho", "Ver página entera" y tamaños fijos.
+- [ ] Buscando una palabra, flecha abajo y flecha arriba cambian de resultado.
+- [ ] Firmar con certificado: el del código largo aparece apagado y no se puede
+      elegir. ¿Aparece el tuyo de la FNMT? Firma con él y súbelo a VALIDe.
+- [ ] Las funciones sin hacer (por ejemplo Organizar → Rotar) se ven más apagadas.
+
 ## Aspecto del programa
 - [ ] Al abrirlo se ve la pantalla de bienvenida con el logotipo y el botón "Abrir un PDF".
 - [ ] El icono del programa aparece en la barra de tareas y en el archivo `Lector-PDF.exe`.

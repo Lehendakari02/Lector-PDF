@@ -9,7 +9,7 @@ from PySide6.QtGui import QDragEnterEvent, QDropEvent, QIcon, QImage
 from PySide6.QtWidgets import QToolButton
 
 from app.ui import icons, theme
-from app.ui.features import FEATURES, MODES
+from app.ui.features import FEATURES, MODES, Mode
 from app.ui.theme import Theme
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -158,3 +158,94 @@ def test_dropping_something_that_is_not_a_pdf_is_ignored(window, tmp_path):
     window.dragEnterEvent(enter)
     assert not enter.isAccepted()
     assert window.pages.currentWidget() is window.welcome
+
+
+# ---- zoom control, pending functions, finder (first real test, 12/11/2026) ----
+
+
+def test_a_document_opens_at_a_comfortable_size(window):
+    """Fitted to the width, but never so big that it is tiring to read."""
+    from app.ui.pdf_view import COMFORTABLE_ZOOM, POINT_TO_PIXEL
+
+    window.show_problem_dialogs = False
+    window.open_document(EXAMPLES / "boe.pdf")
+    view = window.pdf_view
+    full_width = view._zoom_to_fit_width() / POINT_TO_PIXEL
+    assert full_width > COMFORTABLE_ZOOM, "the test window must be wide enough to matter"
+    assert view.zoom == pytest.approx(COMFORTABLE_ZOOM)
+    assert window.zoom_control.figure.text() == "125 %"
+
+
+def test_in_a_narrow_window_a_document_opens_fitted_to_the_width(qt_app):
+    from app.core.document import PdfDocument
+    from app.ui.pdf_view import Fit, PdfView
+
+    view = PdfView()
+    view.resize(500, 600)
+    view.show()
+    qt_app.processEvents()
+    view.set_document(PdfDocument(EXAMPLES / "boe.pdf"))
+    assert view.fit is Fit.COMFORTABLE
+    assert view.zoom < 1.0
+    view.shutdown()
+
+
+def test_zoom_control_follows_and_changes_the_zoom(window):
+    from app.ui.zoom_control import step_of_zoom, zoom_of_step
+
+    control = window.zoom_control
+    assert not control.isEnabled(), "nothing to zoom while no document is open"
+    window.open_document(EXAMPLES / "boe.pdf")
+    assert control.isEnabled()
+
+    window.pdf_view.set_zoom(2.0)
+    assert control.figure.text() == "200 %"
+    assert control.slider.value() == step_of_zoom(2.0)
+
+    control.slider.setValue(step_of_zoom(0.5))
+    assert window.pdf_view.zoom == pytest.approx(zoom_of_step(step_of_zoom(0.5)))
+    control.bigger.click()
+    assert window.pdf_view.zoom > 0.5
+    control.preset_actions[100].trigger()
+    assert window.pdf_view.zoom == pytest.approx(1.0)
+    assert control.figure.text() == "100 %"
+
+
+def test_the_middle_of_the_zoom_slider_is_100_percent():
+    from app.ui.zoom_control import SLIDER_STEPS, zoom_of_step
+
+    assert zoom_of_step(SLIDER_STEPS // 2) == pytest.approx(1.0)
+    assert zoom_of_step(0) == pytest.approx(0.25)
+    assert zoom_of_step(SLIDER_STEPS) == pytest.approx(4.0)
+
+
+def test_whole_page_fits_in_the_window_and_follows_its_size(window, qt_app):
+    from app.ui.pdf_view import Fit
+
+    window.open_document(EXAMPLES / "boe.pdf")
+    window.feature_actions["fit_page"].trigger()
+    view = window.pdf_view
+    assert view.fit is Fit.PAGE
+    assert view._heights[0] <= view._to_pixels(view.viewport().height())
+    assert window.zoom_control.fit_page_action.isChecked()
+    before = view.zoom
+    window.resize(window.width(), window.height() - 200)
+    qt_app.processEvents()
+    assert view.zoom < before
+    assert window.zoom_control.figure.text() == f"{round(view.zoom * 100)} %"
+
+
+def test_functions_not_built_yet_look_different_and_say_so(window):
+    built = window.feature_actions["open"]
+    pending = window.feature_actions["merge"]
+    assert "todavía no disponible" in pending.toolTip()
+    assert "todavía no disponible" not in built.toolTip()
+    button = window.mode_toolbars[Mode.ORGANIZE].widgetForAction(pending)
+    assert button.property("pending") is True
+
+
+def test_function_finder_closes_with_a_click_outside(qt_app, window):
+    from app.ui.command_palette import CommandPalette
+
+    palette = CommandPalette(window)
+    assert palette.windowType() == Qt.WindowType.Popup
