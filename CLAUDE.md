@@ -1,6 +1,8 @@
 # Instrucciones del proyecto: Lector-PDF
 
-> Versión 0.6 (12/11/2026). Todas las decisiones principales están tomadas.
+> Versión 0.7 (12/11/2026). Todas las decisiones principales están tomadas.
+> Cambios de la 0.7: el PDF solo se guarda cuando el usuario quiere (pregunta al
+> cerrar); el guardado automático pasa a ser un ajuste; comodidad con ajustes.
 > Cambios de la 0.6: actualización con un clic ("Actualizar ahora" y se reinicia).
 > Cambios de la 0.5: guardado y recuperación redefinidos, OCR como fase fija,
 > pruebas de concepto en la Fase 0 y decisiones de la revisión del plan.
@@ -34,9 +36,10 @@ Sin ánimo de lucro: se podrá compartir con familia, amigos o publicarse.
 4. **Guardar es sencillo y seguro:**
    - **Guardar** (Ctrl+S): guarda los cambios en el mismo archivo.
    - **Guardar como** (Ctrl+Mayús+S): crea una copia nueva.
-   - El programa también guarda solo (ver sección 5), pero siempre se puede volver a
-     una versión anterior, y pregunta antes de guardar cuando importa (PDF firmado,
-     cambios fuertes).
+   - El PDF solo cambia cuando el usuario guarda. Al cerrar con cambios pendientes
+     pregunta (Guardar / No guardar / Cancelar). Quien lo prefiera puede activar en
+     los ajustes que el programa guarde solo (ver sección 5).
+   - Siempre se puede volver a una versión anterior.
 5. **Nunca perder trabajo.** Imprescindible: un apagón, un cierre por error o un fallo
    del programa no pueden borrar horas de estudio. Ver sección 5.
 6. **Completo pero ordenado.** Ver sección 4. Cada cosa en su sitio: nunca todo a la
@@ -76,36 +79,50 @@ Reglas:
   suficiente para el dedo.
 
 ## 5. Guardado, recuperación y versiones (obligatorio desde la Fase 2)
-Se copia lo bueno de otros programas (la autorrecuperación de Word, las versiones de
-Google Docs y Apple) y se evita lo malo (preguntar en cada cierre, hasta que se
-contesta "sí" sin leer).
+Dos cosas distintas que no se mezclan: **no perder trabajo** (lo hace el programa
+solo, siempre) y **cambiar el PDF** (lo decide el usuario). Decidido el 12/11/2026.
 
-1. **Diario de recuperación (al instante, invisible).** Archivo pequeño, aparte del
-   PDF, en la carpeta de datos del programa. Cada cambio (subrayado, nota, texto,
-   campo, página…) se apunta en el momento. Escritura segura: nunca queda a medias.
-   Tras un apagón o un cierre inesperado, al abrir el programa ofrece recuperar los
-   cambios de cada documento. Cuando el PDF se guarda bien, esa parte se vacía.
-2. **Guardado automático en el PDF.** Activado por defecto:
-   - tras un rato sin editar (30 segundos por defecto, ajustable o desactivable);
-   - al cambiar de pestaña;
-   - al cerrar la pestaña o el programa: la X es "guardar y cerrar".
-   Nunca cada pocos segundos mientras se edita.
-3. **Escritura segura del PDF.** Se escribe en un archivo temporal completo junto al
+1. **Diario de recuperación (al instante, invisible, siempre activo).** Archivo
+   pequeño, aparte del PDF, en la carpeta de datos del programa. Cada cambio
+   (subrayado, nota, texto, campo, página…) se apunta en el momento. Escritura
+   segura: nunca queda a medias. No toca el PDF. Tras un apagón, un cuelgue o un
+   cierre inesperado, al abrir el programa ofrece recuperar los cambios de cada
+   documento, y vuelven las pestañas y la página donde se estaba (como Word).
+   Cuando el PDF se guarda bien, esa parte se vacía.
+2. **Guardar en el PDF lo decide el usuario (por defecto).**
+   - Botones **Guardar** y **Guardar como** junto a Imprimir (Ctrl+S, Ctrl+Mayús+S).
+     Guardar está apagado cuando no hay nada pendiente.
+   - Al cerrar una pestaña o el programa con cambios pendientes, pregunta:
+     **Guardar / No guardar / Cancelar**. Con varios documentos pendientes, una
+     sola ventana con la lista y "Guardar todos".
+   - **"No guardar" tampoco pierde nada al momento:** los cambios descartados se
+     conservan unos días en el diario y se pueden recuperar ("Archivo → Recuperar
+     cambios descartados"), por si se pulsó con prisa.
+   - **"Volver a como estaba al abrirlo"**: descarta de una vez todos los cambios
+     de la sesión.
+3. **Ajustes de guardado** (con valores por defecto coherentes; nadie tiene que
+   tocarlos):
+   - "Al cerrar con cambios": *Preguntar* (por defecto) / *Guardar siempre* /
+     *No guardar nunca sin que lo pida*.
+   - "Guardar solo mientras trabajo": desactivado por defecto. Si se activa,
+     guarda en el PDF tras un rato sin editar (30 segundos, ajustable) y al
+     cambiar de pestaña. Nunca cada pocos segundos mientras se edita.
+   - Cuántas versiones anteriores se conservan y cuánto espacio pueden ocupar.
+   - Cuántos días se conservan los cambios descartados.
+4. **Escritura segura del PDF.** Se escribe en un archivo temporal completo junto al
    original y luego se sustituye. Si falla (archivo bloqueado por otro programa,
    OneDrive/Dropbox sincronizando, sin permisos), no se pierde nada: los cambios
    siguen en el diario, se reintenta y se avisa.
-4. **Versiones anteriores (red de seguridad).** La primera vez que se cambia un PDF
-   en cada sesión se guarda una copia de cómo estaba. "Archivo → Versiones
-   anteriores" permite ver y restaurar cualquiera (se conservan las últimas; número
-   y espacio ajustables). Así, si se guardó algo que no se quería, se puede volver.
-5. **Pregunta antes de guardar solo cuando importa:**
+5. **Versiones anteriores (red de seguridad).** La primera vez que se guarda un PDF
+   en cada sesión se conserva una copia de cómo estaba. "Archivo → Versiones
+   anteriores" permite ver y restaurar cualquiera. Así, si se guardó algo que no
+   se quería, se puede volver.
+6. **Avisos que salen siempre, con cualquier ajuste:**
    - el PDF está firmado (guardar invalida la firma): nunca se guarda solo;
    - hay cambios fuertes: borrar páginas, tapar datos, cambiar el texto original;
    - el archivo no se puede guardar en su sitio (adjunto de correo en carpeta
      temporal, solo lectura): ofrece "Guardar como";
    - otro programa ha cambiado el archivo mientras estaba abierto.
-6. **Ajuste opcional** "Preguntar siempre antes de guardar al cerrar", desactivado
-   por defecto.
 7. **Indicador visible:** siempre se ve el estado ("Guardado", "Guardando…",
    "Cambios sin guardar").
 8. **Diseño interno:** cada cambio es una "orden" que sabe aplicarse, deshacerse y
@@ -304,6 +321,10 @@ de empresa o colaboración en línea.
 - El usuario no programa: dirige, prueba y decide. Claude programa todo.
 - Explicar los avances en lenguaje sencillo, sin jerga.
 - Al terminar cada tarea: qué se ha hecho, cómo probarlo y qué sigue.
+- **Comodidad del usuario en todas las funciones:** cada función trae un
+  comportamiento por defecto coherente, que sirve sin tocar nada, y las preferencias
+  razonables se pueden cambiar en los ajustes. Vale para el guardado y para todo lo
+  demás.
 - Los detalles pequeños de diseño los decide Claude y los explica. Se consultan
   antes las decisiones que cambian qué hace el programa, añaden una función o una
   dependencia, o tocan estos principios.
