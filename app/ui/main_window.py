@@ -26,12 +26,14 @@ from app import APP_NAME, BUILD_LABEL, __version__
 from app.core.document import PdfDocument, PdfOpenError, engine_version
 from app.core.error_log import running_from_source_or_test_build
 from app.core.history import History, file_key
+from app.core.interface_size import NORMAL_SIZE
 from app.core.ocr import OcrError, OcrJob, OcrPage
 from app.core.paths import data_dir, is_portable
 from app.core.settings import Settings
 from app.core.signing import PasswordProtected, SigningError, sign_pdf
 from app.core.windows_store import SigningCancelled
 from app.ui import icons
+from app.ui import theme as theme_module
 from app.ui.command_palette import CommandPalette
 from app.ui.document_page import DocumentPage
 from app.ui.error_reporting import ErrorReporter, ProvokedError
@@ -48,9 +50,10 @@ from app.ui.ocr_dialog import OcrResultDialog
 from app.ui.page_box import PageBox
 from app.ui.pdf_view import PdfView
 from app.ui.search_panel import SearchPanel
+from app.ui.settings_dialog import SettingsDialog
 from app.ui.side_panel import SidePanel, Tab
 from app.ui.sign_dialog import CertificateDialog
-from app.ui.theme import THEME_SETTING, Theme, apply_theme
+from app.ui.theme import PAPER_SETTING, THEME_SETTING, Paper, Theme, apply_theme
 from app.ui.zoom_control import ZoomControl
 
 # Big enough to press comfortably with a finger on a touch screen.
@@ -83,6 +86,11 @@ class MainWindow(QMainWindow):
         self.feature_actions: dict[str, QAction] = {}
         self.mode_toolbars: dict[Mode, QToolBar] = {}
         self.theme_actions: dict[Theme, QAction] = {}
+        self.paper_actions: dict[Paper, QAction] = {}
+        # The size of the interface this copy of the program started with.
+        self.interface_size = NORMAL_SIZE
+        # Set when the program must start again after this window closes.
+        self.restart_wanted = False
 
         self._build_feature_actions()
         self._build_mode_bar()
@@ -155,10 +163,12 @@ class MainWindow(QMainWindow):
             "copy": lambda: self.pdf_view.copy_selection(),
             "thumbnails": lambda: self.toggle_side_panel(Tab.THUMBNAILS),
             "outline": lambda: self.toggle_side_panel(Tab.OUTLINE),
+            "reading_mode": self.toggle_reading_mode,
         }
         self._mark_pending_features()
 
         self.set_theme(Theme.from_setting(self.settings.get(THEME_SETTING)), remember=False)
+        self.set_paper(Paper.from_setting(self.settings.get(PAPER_SETTING)), remember=False)
         # Follow Windows when it switches between light and dark.
         QGuiApplication.styleHints().colorSchemeChanged.connect(self._system_theme_changed)
         self.set_mode(Mode.READ)
@@ -289,6 +299,14 @@ class MainWindow(QMainWindow):
             self.addAction(action)
             file_menu.addAction(action)
         file_menu.addSeparator()
+        self.settings_action = QAction(self.tr("A&justes…"), self)
+        self.settings_action.setShortcut(QKeySequence("Ctrl+,"))
+        self.settings_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        self.settings_action.setMenuRole(QAction.MenuRole.NoRole)
+        self.settings_action.triggered.connect(lambda _checked=False: self.open_settings())
+        self.addAction(self.settings_action)
+        file_menu.addAction(self.settings_action)
+        file_menu.addSeparator()
         self.quit_action = QAction(self.tr("&Salir"), self)
         self.quit_action.triggered.connect(self.close)
         file_menu.addAction(self.quit_action)
@@ -345,7 +363,7 @@ class MainWindow(QMainWindow):
             view_menu.addAction(action)
 
         view_menu.addSeparator()
-        theme_menu = view_menu.addMenu(self.tr("&Aspecto"))
+        theme_menu = view_menu.addMenu(self.tr("&Tema"))
         theme_group = QActionGroup(self)
         names = {
             Theme.SYSTEM: self.tr("Como el sistema"),
@@ -359,6 +377,20 @@ class MainWindow(QMainWindow):
             theme_group.addAction(action)
             theme_menu.addAction(action)
             self.theme_actions[theme] = action
+        paper_menu = view_menu.addMenu(self.tr("Pap&el de las páginas"))
+        paper_group = QActionGroup(self)
+        papers = {
+            Paper.WHITE: self.tr("Blanco"),
+            Paper.SEPIA: self.tr("Sepia (modo lectura)"),
+            Paper.NIGHT: self.tr("Noche"),
+        }
+        for paper, name in papers.items():
+            action = QAction(name, self)
+            action.setCheckable(True)
+            action.triggered.connect(lambda _checked=False, p=paper: self.set_paper(p))
+            paper_group.addAction(action)
+            paper_menu.addAction(action)
+            self.paper_actions[paper] = action
 
         help_menu = self.menuBar().addMenu(self.tr("A&yuda"))
         self.finder_action = QAction(self.tr("Buscar una función…"), self)
@@ -539,6 +571,43 @@ class MainWindow(QMainWindow):
         self.theme_actions[theme].setChecked(True)
         if remember:
             self.settings.set(THEME_SETTING, theme.value)
+
+    @property
+    def paper(self) -> Paper:
+        return self._paper
+
+    def set_paper(self, paper: Paper, remember: bool = True) -> None:
+        """Change the tone of the pages on screen (white, sepia or night)."""
+        self._paper = paper
+        theme_module.set_paper(paper)
+        self.paper_actions[paper].setChecked(True)
+        for page in [*self.documents, self._spare]:
+            page.view.viewport().update()
+        if remember:
+            self.settings.set(PAPER_SETTING, paper.value)
+
+    def toggle_reading_mode(self) -> None:
+        """Warm paper for long hours of reading; again, back to white."""
+        reading = self._paper is not Paper.SEPIA
+        self.set_paper(Paper.SEPIA if reading else Paper.WHITE)
+        message = (
+            self.tr("Modo lectura: papel en tono cálido. Pulsa otra vez para volver al blanco.")
+            if reading
+            else self.tr("Papel blanco, como es el documento.")
+        )
+        self.statusBar().showMessage(message, STATUS_MESSAGE_MS)
+
+    def open_settings(self) -> SettingsDialog:
+        """Show the settings window. Returned so that tests can use it."""
+        dialog = SettingsDialog(self)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        dialog.open()
+        return dialog
+
+    def restart_program(self) -> None:
+        """Close the program and start it again (``main`` starts the new copy)."""
+        self.restart_wanted = True
+        self.close()
 
     def _system_theme_changed(self, _scheme: Qt.ColorScheme) -> None:
         if self._theme is Theme.SYSTEM:

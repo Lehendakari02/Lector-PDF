@@ -6,6 +6,7 @@ Usage (from the repository root, only after changing the logo or the colours):
 Result:
 - ``packaging/lector-pdf.ico``: the icon of the program file and the installer.
 - ``app/recursos/interfaz/marca-*.png``: the tick of a checked box, one per theme.
+- ``app/recursos/interfaz/flecha-*.png``: the arrow of a drop-down list, one per theme.
 """
 
 import struct
@@ -26,6 +27,11 @@ TICK = (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" fill="none" stroke="{colour}" '
     'stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">'
     '<path d="M4.5 9.3l3 3 6-6.3"/></svg>'
+)
+ARROW = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" fill="none" stroke="{colour}" '
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M4.5 7l4.5 4.5L13.5 7"/></svg>'
 )
 TICK_PIXELS = 54  # three times the size on screen: sharp at any Windows scale
 
@@ -68,6 +74,8 @@ def main() -> int:
     for name, colours in (("clara", theme.LIGHT), ("oscura", theme.DARK)):
         tick = render(TICK.format(colour=colours.on_accent), TICK_PIXELS)
         (folder / f"marca-{name}.png").write_bytes(png_bytes(tick))
+        arrow = render(ARROW.format(colour=colours.muted), TICK_PIXELS)
+        (folder / f"flecha-{name}.png").write_bytes(png_bytes(arrow))
     del app
     return 0
 

@@ -150,7 +150,7 @@ y no un único `.exe`: la carpeta abre en menos de 1 segundo y el `.exe` único 
 | 1.6 | Seleccionar y copiar texto | Copio un artículo y lo pego en otro programa | ✅ |
 | 1.7 | Pestañas (varios PDFs a la vez) | Tengo 3 temas abiertos y cambio entre ellos | ✅ |
 | 1.8 | Reabrir la sesión anterior, recordar página, archivos recientes | Cierro y reabro: vuelven mis pestañas, cada una en su página | ✅ |
-| 1.9 | Modo oscuro, modo lectura (sepia), tamaño de interfaz | Cambio de modo y se ve bien | ⬜ |
+| 1.9 | Modo oscuro, modo lectura (sepia), tamaño de interfaz | Cambio de modo y se ve bien | ✅ |
 | 1.10 | Abrir con doble clic / "Abrir con" / arrastrar / programa predeterminado | Doble clic en un PDF lo abre en Lector-PDF | ⬜ |
 | 1.11 | PDFs con contraseña o dañados | Pide la contraseña; un PDF roto da un aviso y no cierra el programa | ⬜ |
 | 1.12 | Imprimir | Imprimo unas páginas concretas | ⬜ |
@@ -214,6 +214,21 @@ Notas de la Fase 1:
   también en la pantalla de bienvenida. Si un documento ya no está, se salta y se
   avisa abajo. Todo esto se guarda solo en el ordenador, en el archivo de ajustes.
   Volver a las pestañas se podrá desactivar en la ventana de Ajustes (tarea 1.9).
+- 1.9: el **papel de las páginas** se elige aparte del tema claro u oscuro: blanco
+  (como es el documento), sepia (tono cálido) o noche (papel oscuro y letra clara).
+  Solo cambia lo que se ve en pantalla, nunca el PDF ni lo que se imprime. El botón
+  "Modo lectura" del modo Leer pone y quita el sepia. "Ver → Tema" y "Ver → Papel
+  de las páginas" lo cambian también. Nueva ventana **Archivo → Ajustes** (Ctrl+,)
+  con tema, papel, tamaño de la interfaz (100, 110, 125, 150 o 175 %) y "Volver a
+  las pestañas de la última vez". Todo se aplica al momento menos el tamaño, que
+  necesita reiniciar: la ventana lo dice y ofrece "Reiniciar ahora" (vuelven las
+  pestañas). El reinicio (`app/core/restart.py`) servirá también para la
+  actualización con un clic (1.13).
+  - En el papel "noche" los colores se invierten (el azul del BOE se ve anaranjado).
+    Cuando haya subrayados de colores (Fase 2) habrá que cuidar que el amarillo
+    siga viéndose amarillo.
+  - Las pruebas de la interfaz tardaban cada vez más porque las ventanas de cada
+    prueba no se destruían; ahora sí, y vuelven a tardar la mitad.
 - Revisión del código de la Fase 0 (`docs/revision-codigo-fase-0.md`): sus puntos
   se arreglan dentro de la tarea a la que pertenecen:
   - 1.4 buscador: A1, A2, A4, B7 (hechos).

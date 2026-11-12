@@ -604,6 +604,8 @@ class PdfView(QAbstractScrollArea):
                 # Drawn for another zoom: stretch it until the sharp one arrives.
                 painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
                 painter.drawImage(target, cached[1])
+                painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
+            self._tint_paper(painter, target)
             for hit in self._marks.get(page, ()):
                 color = CURRENT_MARK_COLOR if hit is self._current_mark else MARK_COLOR
                 for rect in hit.rects if hit.page == page else hit.next_rects:
@@ -614,6 +616,30 @@ class PdfView(QAbstractScrollArea):
                 x0, y0, x1, y1 = self._shown_rect(page, rect)
                 mark = QRectF(x0 * zoom, y0 * zoom, (x1 - x0) * zoom, (y1 - y0) * zoom)
                 painter.fillRect(mark.translated(target.left(), target.top()), SELECTION_COLOR)
+
+    @staticmethod
+    def _tint_paper(painter: QPainter, target: QRect) -> None:
+        """Give the page the tone chosen for reading (sepia or night).
+
+        Only what is seen on screen changes: the PDF and the printed pages stay
+        as they are.
+        """
+        tone = theme.paper()
+        if tone is theme.Paper.WHITE:
+            return
+        modes = QPainter.CompositionMode
+        if tone is theme.Paper.SEPIA:
+            steps = ((modes.CompositionMode_Multiply, theme.SEPIA_TONE),)
+        else:
+            steps = (
+                (modes.CompositionMode_Difference, "#ffffff"),  # dark paper, light ink
+                (modes.CompositionMode_Screen, theme.NIGHT_PAPER),
+                (modes.CompositionMode_Multiply, theme.NIGHT_INK),
+            )
+        for mode, colour in steps:
+            painter.setCompositionMode(mode)
+            painter.fillRect(target, QColor(colour))
+        painter.setCompositionMode(modes.CompositionMode_SourceOver)
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)

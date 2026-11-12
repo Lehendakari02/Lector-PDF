@@ -17,6 +17,7 @@ from PySide6.QtGui import QColor, QGuiApplication, QPalette
 from PySide6.QtWidgets import QApplication
 
 THEME_SETTING = "tema"
+PAPER_SETTING = "papel"
 # Small pictures the style sheet needs as files (drawn by packaging/make_images.py).
 _IMAGES = Path(__file__).resolve().parents[1] / "recursos" / "interfaz"
 
@@ -31,6 +32,29 @@ class Theme(Enum):
     @classmethod
     def from_setting(cls, value: object) -> "Theme":
         return next((theme for theme in cls if theme.value == value), cls.SYSTEM)
+
+
+class Paper(Enum):
+    """The tone of the pages on screen. It never changes the PDF nor what is printed.
+
+    The value is what is stored in the settings file.
+    """
+
+    WHITE = "blanco"  # as the document is
+    SEPIA = "sepia"  # warm paper, easier on the eyes for long hours
+    NIGHT = "noche"  # dark paper with light letters
+
+    @classmethod
+    def from_setting(cls, value: object) -> "Paper":
+        return next((paper for paper in cls if paper.value == value), cls.WHITE)
+
+
+# Sepia: every colour of the page is multiplied by this warm tone.
+SEPIA_TONE = "#f6ecd4"
+# Night: the page is inverted, then black is lifted to this dark grey and white
+# is lowered to this soft grey, so the contrast does not tire the eyes.
+NIGHT_PAPER = "#1e2025"
+NIGHT_INK = "#d9dbe0"
 
 
 @dataclass(frozen=True)
@@ -99,11 +123,22 @@ DARK = Colours(
 MARKER = "#ffd43b"
 
 _current = LIGHT
+_paper = Paper.WHITE
 
 
 def colours() -> Colours:
     """The colours in use right now."""
     return _current
+
+
+def paper() -> Paper:
+    """The tone of the pages in use right now."""
+    return _paper
+
+
+def set_paper(tone: Paper) -> None:
+    global _paper
+    _paper = tone
 
 
 Role = QPalette.ColorRole
@@ -138,6 +173,7 @@ def build_palette(dark: bool) -> QPalette:
 def build_style_sheet(c: Colours) -> str:
     """The look of every control, written once for the whole program."""
     tick = (_IMAGES / ("marca-oscura.png" if c.dark else "marca-clara.png")).as_posix()
+    arrow = (_IMAGES / ("flecha-oscura.png" if c.dark else "flecha-clara.png")).as_posix()
     return f"""
 QWidget {{ font-size: 10pt; }}
 QMainWindow, QDialog {{ background: {c.window}; }}
@@ -241,6 +277,20 @@ QCheckBox::indicator:hover, QCheckBox::indicator:focus {{ border-color: {c.accen
 QCheckBox::indicator:checked {{
     background: {c.accent}; border-color: {c.accent}; image: url("{tick}");
 }}
+
+QComboBox {{
+    background: {c.surface}; color: {c.text};
+    border: 1px solid {c.border}; border-radius: 8px; padding: 6px 10px; min-height: 22px;
+}}
+QComboBox:hover {{ background: {c.hover}; }}
+QComboBox:focus {{ border-color: {c.accent}; }}
+QComboBox::drop-down {{ border: none; width: 30px; }}
+QComboBox::down-arrow {{ image: url("{arrow}"); width: 14px; height: 14px; }}
+QComboBox QAbstractItemView {{
+    background: {c.surface}; color: {c.text}; border: 1px solid {c.border};
+    selection-background-color: {c.accent_soft}; selection-color: {c.text}; outline: none;
+}}
+QLabel#settingsHeading {{ font-size: 11pt; font-weight: 700; padding-top: 6px; }}
 
 /* ---- scroll bars ---- */
 QScrollBar:vertical {{ background: transparent; width: 14px; margin: 0; }}

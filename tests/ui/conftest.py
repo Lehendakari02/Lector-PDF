@@ -3,6 +3,7 @@
 import time
 
 import pytest
+from PySide6.QtCore import QCoreApplication, QEvent
 from PySide6.QtWidgets import QApplication
 
 from app.core.settings import Settings
@@ -29,6 +30,10 @@ def window(qt_app, settings):
     qt_app.processEvents()
     yield main_window
     main_window.close()
+    # Really destroy it. Windows left behind make every later change of the
+    # style sheet slower, and the tests ended up taking twice as long.
+    main_window.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
 
 @pytest.fixture

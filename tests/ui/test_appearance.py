@@ -249,3 +249,14 @@ def test_function_finder_closes_with_a_click_outside(qt_app, window):
 
     palette = CommandPalette(window)
     assert palette.windowType() == Qt.WindowType.Popup
+
+
+def test_every_picture_of_the_style_sheet_exists():
+    import re
+    from pathlib import Path
+
+    for colours in (theme.LIGHT, theme.DARK):
+        pictures = re.findall(r'url\("([^"]+)"\)', theme.build_style_sheet(colours))
+        assert len(pictures) >= 2
+        for picture in pictures:
+            assert Path(picture).is_file(), picture
