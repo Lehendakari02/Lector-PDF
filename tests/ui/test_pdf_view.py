@@ -3,6 +3,7 @@
 import pytest
 from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtGui import QWheelEvent
+from PySide6.QtTest import QTest
 
 from app.core.document import PdfDocument
 from app.main import AUTOCLOSE_FLAG, EXIT_PAGE_NOT_SHOWN, main
@@ -189,11 +190,12 @@ def test_window_opens_a_document_and_tells_where_you_are(window, sample, wait_un
     assert window.open_document(sample("boe.pdf"))
     assert window.pages.currentWidget() is window.pdf_view
     assert "boe.pdf" in window.windowTitle()
-    assert window.position_label.text().startswith("Página 1 de 39")
+    assert window.page_box.edit.text() == "1"
+    assert window.page_box.total.text() == "de 39"
     wait_until(lambda: 0 in window.pdf_view.cached_pages())
     assert "ms" in window.speed_label.text()
     window.pdf_view.scroll_to_page(11)
-    assert window.position_label.text().startswith("Página 12 de 39")
+    assert window.page_box.edit.text() == "12"
 
 
 def test_window_zoom_buttons_work(window, sample, wait_until):
@@ -247,3 +249,100 @@ def test_program_opens_the_file_it_is_given_and_shows_its_first_page(sample):
 
 def test_program_reports_a_file_it_cannot_show(tmp_path):
     assert main(["lector-pdf", AUTOCLOSE_FLAG, str(tmp_path / "nada.pdf")]) == EXIT_PAGE_NOT_SHOWN
+
+
+# ---- turning the view, full screen and going to a page ----------------------
+
+
+def test_rotating_the_view_turns_the_pages_and_keeps_the_place(view, sample, wait_until):
+    show(view, sample("boe.pdf"), wait_until)
+    view.scroll_to_page(5)
+    upright = (view._widths[0], view._heights[0])
+    seen = []
+    view.rotation_changed.connect(seen.append)
+    view.rotate_view()
+    assert view.rotation == 90
+    assert seen == [90]
+    assert view.current_page == 5
+    assert view._widths[0] > view._heights[0]  # the page now lies on its side
+    wait_until(lambda: 5 in view.cached_pages())
+    for _ in range(3):
+        view.rotate_view()
+    assert view.rotation == 0
+    assert (view._widths[0], view._heights[0]) == upright
+
+
+def test_a_new_document_starts_upright(view, sample, wait_until):
+    show(view, sample("boe.pdf"), wait_until)
+    view.rotate_view()
+    show(view, sample("boe.pdf"), wait_until)
+    assert view.rotation == 0
+
+
+@pytest.mark.parametrize("rotation", [90, 180, 270])
+def test_marks_follow_the_turned_page(view, tmp_path, wait_until, rotation):
+    # A page with one black square: the turned mark must land on the turned square.
+    import pymupdf
+
+    path = tmp_path / "square.pdf"
+    with pymupdf.open() as doc:
+        page = doc.new_page(width=200, height=300)
+        page.draw_rect(pymupdf.Rect(20, 40, 60, 70), color=(0, 0, 0), fill=(0, 0, 0))
+        doc.save(path)
+    show(view, path, wait_until)
+    view.set_rotation(rotation)
+    x0, y0, x1, y1 = view._shown_rect(0, (20, 40, 60, 70))
+    with pymupdf.open(path) as doc:
+        pixmap = doc[0].get_pixmap(matrix=pymupdf.Matrix(1, 1).prerotate(rotation))
+    middle = pixmap.pixel(round((x0 + x1) / 2), round((y0 + y1) / 2))
+    outside = pixmap.pixel(round(x0) - 5, round(y0) - 5)
+    assert middle == (0, 0, 0)
+    assert outside == (255, 255, 255)
+
+
+def test_typing_a_page_number_goes_there(window, sample, wait_until, qt_app):
+    window.show_problem_dialogs = False
+    assert window.open_document(sample("boe.pdf"))
+    window.go_to_page_action.trigger()
+    box = window.page_box
+    box.edit.setText("20")
+    box.edit.returnPressed.emit()
+    assert window.pdf_view.current_page == 19
+    box.edit.setText("999")  # further than the last page: go to the last one
+    box.edit.returnPressed.emit()
+    assert window.pdf_view.current_page == 38
+    assert box.edit.text() == "39"
+
+
+def test_page_box_is_hidden_without_a_document(window):
+    assert not window.page_box.isVisible()
+    window.go_to_page()  # must not fail
+    assert "Abre primero" in window.statusBar().currentMessage()
+
+
+def test_full_screen_shows_only_the_document(window, sample, qt_app):
+    window.show_problem_dialogs = False
+    assert window.open_document(sample("boe.pdf"))
+    window.full_screen_action.trigger()
+    qt_app.processEvents()
+    assert window.full_screen
+    assert window.isFullScreen()
+    assert not window.menuBar().isVisible()
+    assert not window.statusBar().isVisible()
+    assert not window.mode_bar.isVisible()
+    assert not any(bar.isVisible() for bar in window.mode_toolbars.values())
+    QTest.keyClick(window.pdf_view, Qt.Key.Key_Escape)
+    qt_app.processEvents()
+    assert not window.full_screen
+    assert window.menuBar().isVisible()
+    assert window.statusBar().isVisible()
+    assert window.mode_toolbars[window.mode].isVisible()
+
+
+def test_rotate_button_turns_the_view(window, sample):
+    window.show_problem_dialogs = False
+    assert window.open_document(sample("boe.pdf"))
+    window.feature_actions["rotate_view"].trigger()
+    assert window.pdf_view.rotation == 90
+    window.rotate_view_action.trigger()
+    assert window.pdf_view.rotation == 180

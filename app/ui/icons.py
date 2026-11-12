@@ -51,6 +51,11 @@ ICONS: dict[str, str] = {
         '<rect x="6.5" y="3.5" width="11" height="17" rx="1.5"/>'
         '<path d="M2.5 7V3.5H5M21.5 7V3.5H19M2.5 17v3.5H5M21.5 17v3.5H19"/>'
     ),
+    "rotate_view": ('<path d="M19.5 12a7.5 7.5 0 1 1-2.6-5.7"/><path d="M17.5 2.5v4.3h-4.3"/>'),
+    "fullscreen": '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+    "go_to_page": (
+        '<path d="M6.5 3.5h7l4 4v13h-11z"/><path d="M9.5 14h5M12.5 11.5l2.5 2.5-2.5 2.5"/>'
+    ),
     "minus": '<path d="M6 12h12"/>',
     "plus": '<path d="M12 6v12M6 12h12"/>',
     "outline": (

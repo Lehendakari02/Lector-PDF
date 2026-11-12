@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QSize, Qt, QTimer, qVersion
-from PySide6.QtGui import QAction, QActionGroup, QGuiApplication, QKeySequence
+from PySide6.QtGui import QAction, QActionGroup, QGuiApplication, QKeyEvent, QKeySequence
 from PySide6.QtWidgets import (
     QDockWidget,
     QFileDialog,
@@ -44,6 +44,7 @@ from app.ui.features import (
     translate,
 )
 from app.ui.ocr_dialog import OcrResultDialog
+from app.ui.page_box import PageBox
 from app.ui.pdf_view import PdfView
 from app.ui.search_panel import SearchPanel
 from app.ui.sign_dialog import CertificateDialog
@@ -71,6 +72,8 @@ class MainWindow(QMainWindow):
         self.resize(1240, 800)
         self.setAcceptDrops(True)  # a PDF dropped on the window is opened
 
+        self._full_screen = False
+        self._was_maximized = False
         self.feature_actions: dict[str, QAction] = {}
         self.mode_toolbars: dict[Mode, QToolBar] = {}
         self.theme_actions: dict[Theme, QAction] = {}
@@ -103,13 +106,12 @@ class MainWindow(QMainWindow):
         self.addAction(self.search_action)
 
         self.statusBar().setSizeGripEnabled(True)
-        self.position_label = QLabel()
-        self.position_label.setObjectName("positionLabel")
+        self.page_box = PageBox(self.pdf_view)
         self.speed_label = QLabel()
         self.speed_label.setObjectName("speedLabel")
         self.speed_label.setVisible(running_from_source_or_test_build())
         self.statusBar().addPermanentWidget(self.speed_label)
-        self.statusBar().addPermanentWidget(self.position_label)
+        self.statusBar().addPermanentWidget(self.page_box)
         self.zoom_control = ZoomControl(self.pdf_view)
         self.statusBar().addPermanentWidget(self.zoom_control)
         self._slowest_page = 0.0
@@ -135,6 +137,9 @@ class MainWindow(QMainWindow):
             "zoom_out": self.pdf_view.zoom_out,
             "fit_width": self.pdf_view.fit_width,
             "fit_page": self.pdf_view.fit_page,
+            "rotate_view": self.pdf_view.rotate_view,
+            "fullscreen": self.toggle_full_screen,
+            "go_to_page": self.go_to_page,
         }
         self._mark_pending_features()
 
@@ -210,7 +215,7 @@ class MainWindow(QMainWindow):
         layout.addStretch()
         layout.addWidget(self.finder_button)
 
-        holder = QToolBar(self.tr("Modos"))
+        holder = self.mode_bar = QToolBar(self.tr("Modos"))
         holder.setObjectName("modeBar")
         holder.setMovable(False)
         holder.setFloatable(False)
@@ -269,6 +274,25 @@ class MainWindow(QMainWindow):
             mode_group.addAction(action)
             view_menu.addAction(action)
             self.mode_actions[mode] = action
+
+        view_menu.addSeparator()
+        self.full_screen_action = QAction(self.tr("&Pantalla completa"), self)
+        self.full_screen_action.setCheckable(True)
+        self.full_screen_action.setShortcut(QKeySequence("F11"))
+        self.full_screen_action.triggered.connect(lambda _checked=False: self.toggle_full_screen())
+        self.go_to_page_action = QAction(self.tr("&Ir a página…"), self)
+        self.go_to_page_action.setShortcut(QKeySequence("Ctrl+G"))
+        self.go_to_page_action.triggered.connect(lambda _checked=False: self.go_to_page())
+        self.rotate_view_action = QAction(self.tr("&Girar vista"), self)
+        self.rotate_view_action.setShortcut(QKeySequence("Ctrl+R"))
+        self.rotate_view_action.triggered.connect(
+            lambda _checked=False: self.pdf_view.rotate_view()
+        )
+        for action in (self.full_screen_action, self.go_to_page_action, self.rotate_view_action):
+            # They must also answer while the menu bar is hidden (full screen).
+            action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+            self.addAction(action)
+            view_menu.addAction(action)
 
         view_menu.addSeparator()
         theme_menu = view_menu.addMenu(self.tr("&Aspecto"))
@@ -414,7 +438,7 @@ class MainWindow(QMainWindow):
         """Show the tools of ``mode`` and hide those of the other modes."""
         self._mode = mode
         for other, toolbar in self.mode_toolbars.items():
-            toolbar.setVisible(other is mode)
+            toolbar.setVisible(other is mode and not self._full_screen)
         self.mode_actions[mode].setChecked(True)
         index = MODES.index(mode)
         if self.mode_tabs.currentIndex() != index:
@@ -650,14 +674,51 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, title, text)
 
     def _update_position(self, *_args: object) -> None:
+        self.page_box.refresh()
+
+    def go_to_page(self) -> None:
+        """Put the cursor in the page number of the status bar."""
         if self.pdf_view.page_count == 0:
-            self.position_label.setText("")
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
             return
-        self.position_label.setText(
-            self.tr("Página {0} de {1}").format(
-                self.pdf_view.current_page + 1, self.pdf_view.page_count
-            )
-        )
+        if self._full_screen:
+            self.set_full_screen(False)  # the page number lives in the status bar
+        self.page_box.start()
+
+    # ---- full screen ----------------------------------------------------
+
+    @property
+    def full_screen(self) -> bool:
+        return self._full_screen
+
+    def toggle_full_screen(self) -> None:
+        self.set_full_screen(not self._full_screen)
+
+    def set_full_screen(self, on: bool) -> None:
+        """Only the document, on the whole screen. Esc or F11 comes back."""
+        if on == self._full_screen:
+            return
+        self._full_screen = on
+        self.full_screen_action.setChecked(on)
+        if on:
+            self._was_maximized = self.isMaximized()
+        self.menuBar().setVisible(not on)
+        self.statusBar().setVisible(not on)
+        self.mode_bar.setVisible(not on)
+        self.set_mode(self._mode)  # shows or hides the tools of the mode
+        if on:
+            self.showFullScreen()
+            self.pdf_view.setFocus()
+        elif self._was_maximized:
+            self.showMaximized()
+        else:
+            self.showNormal()
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+        if event.key() == Qt.Key.Key_Escape and self._full_screen:
+            self.set_full_screen(False)
+            return
+        super().keyPressEvent(event)
 
     def _update_speed(self, _page: int, seconds: float) -> None:
         self._slowest_page = max(self._slowest_page, seconds)

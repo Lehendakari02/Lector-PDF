@@ -71,6 +71,7 @@ class PdfView(QAbstractScrollArea):
     # Current page (1-based), page count.
     page_changed = Signal(int, int)
     zoom_changed = Signal(float)
+    rotation_changed = Signal(int)
     # Seconds the helper needed for the last page, for the speed read-out.
     page_drawn = Signal(int, float)
     first_page_shown = Signal()
@@ -97,6 +98,7 @@ class PdfView(QAbstractScrollArea):
         self._document: PdfDocument | None = None
         self._sizes: list[PageSize] = []
         self._zoom = 1.0  # Qt units per point
+        self._rotation = 0
         self._fit = Fit.WIDTH
         self._tops: list[int] = []  # top of every page, in screen pixels
         self._heights: list[int] = []
@@ -133,6 +135,7 @@ class PdfView(QAbstractScrollArea):
         self._sizes = document.page_sizes()
         self.service.open(document.path, password)
         self._fit = Fit.COMFORTABLE
+        self._rotation = 0
         self._layout()
         self.zoom_changed.emit(self.zoom)
         self.verticalScrollBar().setValue(0)
@@ -190,8 +193,10 @@ class PdfView(QAbstractScrollArea):
         self._current_mark = hit
         if 0 <= hit.page < self.page_count and hit.rects:
             zoom = self._render_zoom()
-            top = self._tops[hit.page] + hit.rects[0][1] * zoom
-            bottom = self._tops[hit.page] + hit.rects[-1][3] * zoom
+            first = self._shown_rect(hit.page, hit.rects[0])
+            last = self._shown_rect(hit.page, hit.rects[-1])
+            top = self._tops[hit.page] + min(first[1], last[1]) * zoom
+            bottom = self._tops[hit.page] + max(first[3], last[3]) * zoom
             view_top = self._scroll_y()
             view_height = self._to_pixels(self.viewport().height())
             if top < view_top or bottom > view_top + view_height:
@@ -222,6 +227,47 @@ class PdfView(QAbstractScrollArea):
     def zoom_out(self) -> None:
         self.set_zoom(self.zoom / ZOOM_STEP)
 
+    @property
+    def rotation(self) -> int:
+        """Quarter turns added for viewing, in degrees. The file is not changed."""
+        return self._rotation
+
+    def set_rotation(self, degrees: int) -> None:
+        degrees %= 360
+        if degrees == self._rotation or degrees % 90:
+            return
+        page = max(self._current_page, 0)
+        self._rotation = degrees
+        self._cache.clear()  # every picture was drawn the other way round
+        self._cache_bytes = 0
+        self._layout()
+        self.scroll_to_page(page)
+        self.rotation_changed.emit(degrees)
+        self.zoom_changed.emit(self.zoom)
+        self._scrolled()
+
+    def rotate_view(self) -> None:
+        """Turn the pages a quarter turn to the right, only on screen."""
+        self.set_rotation(self._rotation + 90)
+
+    def _shown_sizes(self) -> list[PageSize]:
+        """Page sizes as they are seen, with the viewing rotation applied."""
+        if self._rotation in (90, 270):
+            return [PageSize(size.height, size.width) for size in self._sizes]
+        return self._sizes
+
+    def _shown_rect(self, page: int, rect: tuple[float, float, float, float]):
+        """Where a rectangle of the page is on the turned page (in points)."""
+        x0, y0, x1, y1 = rect
+        size = self._sizes[page]
+        if self._rotation == 90:
+            return (size.height - y1, x0, size.height - y0, x1)
+        if self._rotation == 180:
+            return (size.width - x1, size.height - y1, size.width - x0, size.height - y0)
+        if self._rotation == 270:
+            return (y0, size.width - x1, y1, size.width - x0)
+        return rect
+
     def fit_width(self) -> None:
         """Make the page as wide as the window."""
         self._fit = Fit.WIDTH
@@ -235,7 +281,7 @@ class PdfView(QAbstractScrollArea):
     def _zoom_to_fit_page(self) -> float:
         if not self._sizes:
             return self._zoom
-        tallest = max(size.height for size in self._sizes)
+        tallest = max(size.height for size in self._shown_sizes())
         available = self.viewport().height() - 2 * PAGE_GAP - 0.5
         return max(MIN_ZOOM, min(self._zoom_to_fit_width(), available / tallest))
 
@@ -249,7 +295,7 @@ class PdfView(QAbstractScrollArea):
     def _zoom_to_fit_width(self) -> float:
         if not self._sizes:
             return self._zoom
-        widest = max(size.width for size in self._sizes)
+        widest = max(size.width for size in self._shown_sizes())
         # Half a unit less, so that rounding up to whole pixels never makes
         # the page one pixel too wide (a sideways scroll bar would appear).
         available = self.viewport().width() - 2 * SIDE_MARGIN - 0.5
@@ -304,7 +350,7 @@ class PdfView(QAbstractScrollArea):
         gap = self._to_pixels(PAGE_GAP)
         self._tops, self._heights, self._widths = [], [], []
         top = gap
-        for size in self._sizes:
+        for size in self._shown_sizes():
             self._tops.append(top)
             self._widths.append(_engine_pixels(size.width, zoom))
             self._heights.append(_engine_pixels(size.height, zoom))
@@ -363,7 +409,7 @@ class PdfView(QAbstractScrollArea):
         order += range(max(0, visible.start - PAGES_BEHIND), visible.start)
         zoom = self._render_zoom()
         self._wanted = [
-            RenderRequest(page, zoom)
+            RenderRequest(page, zoom, self._rotation)
             for page in order
             if page not in self._cache or self._cache[page][0] != zoom
         ]
@@ -372,6 +418,8 @@ class PdfView(QAbstractScrollArea):
     def _store_page(self, result: RenderedPage) -> None:
         if self._document is None or result.page >= self.page_count:
             return
+        if result.rotation != self._rotation:
+            return  # drawn before the view was turned
         image = QImage(
             result.samples,
             result.width,
@@ -447,7 +495,8 @@ class PdfView(QAbstractScrollArea):
                 painter.drawImage(target, cached[1])
             for hit in self._marks.get(page, ()):
                 color = CURRENT_MARK_COLOR if hit is self._current_mark else MARK_COLOR
-                for x0, y0, x1, y1 in hit.rects:
+                for rect in hit.rects:
+                    x0, y0, x1, y1 = self._shown_rect(page, rect)
                     mark = QRectF(x0 * zoom, y0 * zoom, (x1 - x0) * zoom, (y1 - y0) * zoom)
                     painter.fillRect(mark.translated(target.left(), target.top()), color)
 

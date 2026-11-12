@@ -286,3 +286,23 @@ def test_a_search_cut_short_by_a_crash_still_ends(searcher, sample):
     searcher.service._process.kill()
     searcher.wait(lambda: searcher.finished)
     assert searcher.finished[-1][0] == search_id
+
+
+def test_render_page_can_turn_the_page(sample):
+    with pymupdf.open(sample("boe.pdf")) as doc:
+        upright = render_page(doc, 0, 1.0)
+        sideways = render_page(doc, 0, 1.0, rotation=90)
+        upside_down = render_page(doc, 0, 1.0, rotation=180)
+    assert (sideways.width, sideways.height) == (upright.height, upright.width)
+    assert (upside_down.width, upside_down.height) == (upright.width, upright.height)
+    assert sideways.rotation == 90
+    assert upside_down.samples != upright.samples
+
+
+def test_helper_draws_turned_pages(collector, sample):
+    collector.service.open(sample("boe.pdf"))
+    collector.service.want([RenderRequest(0, 1.0, 270)])
+    collector.wait(lambda: len(collector.pages) == 1)
+    page = collector.pages[0]
+    assert page.rotation == 270
+    assert page.width > page.height
