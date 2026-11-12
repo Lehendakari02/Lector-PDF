@@ -48,6 +48,7 @@ from app.ui.pdf_view import PdfView
 from app.ui.search_panel import SearchPanel
 from app.ui.sign_dialog import CertificateDialog
 from app.ui.theme import THEME_SETTING, Theme, apply_theme
+from app.ui.zoom_control import ZoomControl
 
 # Big enough to press comfortably with a finger on a touch screen.
 MIN_BUTTON_HEIGHT = 40
@@ -109,6 +110,8 @@ class MainWindow(QMainWindow):
         self.speed_label.setVisible(running_from_source_or_test_build())
         self.statusBar().addPermanentWidget(self.speed_label)
         self.statusBar().addPermanentWidget(self.position_label)
+        self.zoom_control = ZoomControl(self.pdf_view)
+        self.statusBar().addPermanentWidget(self.zoom_control)
         self._slowest_page = 0.0
 
         self._ocr_job: OcrJob | None = None
@@ -131,7 +134,9 @@ class MainWindow(QMainWindow):
             "zoom_in": self.pdf_view.zoom_in,
             "zoom_out": self.pdf_view.zoom_out,
             "fit_width": self.pdf_view.fit_width,
+            "fit_page": self.pdf_view.fit_page,
         }
+        self._mark_pending_features()
 
         self.set_theme(Theme.from_setting(self.settings.get(THEME_SETTING)), remember=False)
         # Follow Windows when it switches between light and dark.
@@ -153,6 +158,21 @@ class MainWindow(QMainWindow):
         open_action = self.feature_actions["open"]
         open_action.setShortcut(QKeySequence(QKeySequence.StandardKey.Open))
         open_action.setToolTip(f"{open_action.toolTip()} (Ctrl+O)")
+
+    def _mark_pending_features(self) -> None:
+        """Functions that are not built yet look fainter and say so."""
+        for feature in FEATURES:
+            if feature.id in self.feature_handlers:
+                continue
+            action = self.feature_actions[feature.id]
+            if icons.has_icon(feature.id):
+                action.setIcon(icons.icon(feature.id, icons.PENDING))
+            action.setToolTip(
+                self.tr("{0} (todavía no disponible)").format(translate(feature.description))
+            )
+            button = self.mode_toolbars[feature.mode].widgetForAction(action)
+            if button is not None:
+                button.setProperty("pending", True)
 
     def _build_mode_bar(self) -> None:
         self.mode_tabs = QTabBar()
@@ -634,10 +654,8 @@ class MainWindow(QMainWindow):
             self.position_label.setText("")
             return
         self.position_label.setText(
-            self.tr("Página {0} de {1} · {2} %").format(
-                self.pdf_view.current_page + 1,
-                self.pdf_view.page_count,
-                round(self.pdf_view.zoom * 100),
+            self.tr("Página {0} de {1}").format(
+                self.pdf_view.current_page + 1, self.pdf_view.page_count
             )
         )
 

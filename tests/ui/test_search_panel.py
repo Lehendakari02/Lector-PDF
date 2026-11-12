@@ -88,6 +88,20 @@ def test_results_are_marked_on_the_page(window, opened, wait_until):
     assert margin == plain.pixelColor(5, 5)
 
 
+def test_up_and_down_arrows_walk_through_the_results(window, opened, wait_until):
+    panel = opened("boe.pdf")
+    search(panel, "articulo 27", wait_until)
+    assert panel.current == 0
+    QTest.keyClick(panel.box, Qt.Key.Key_Down)
+    assert panel.current == 1
+    QTest.keyClick(panel.box, Qt.Key.Key_Up)
+    assert panel.current == 0
+    # Left and right still move through the letters of the word.
+    panel.box.setCursorPosition(3)
+    QTest.keyClick(panel.box, Qt.Key.Key_Left)
+    assert panel.box.cursorPosition() == 2 and panel.current == 0
+
+
 def test_enter_and_shift_enter_walk_through_the_results(window, opened, wait_until):
     panel = opened("boe.pdf")
     search(panel, "articulo 27", wait_until)

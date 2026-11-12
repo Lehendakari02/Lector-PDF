@@ -1,6 +1,6 @@
 """The search panel: type a word and see every place where it appears."""
 
-from PySide6.QtCore import QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -51,7 +51,10 @@ class SearchPanel(QWidget):
             icons.icon("search", icons.MUTED), QLineEdit.ActionPosition.LeadingPosition
         )
         self.box.setToolTip(
-            self.tr("No hace falta poner tildes ni mayúsculas. Intro: siguiente resultado.")
+            self.tr(
+                "No hace falta poner tildes ni mayúsculas. "
+                "Intro o flecha abajo: siguiente resultado. Flecha arriba: el anterior."
+            )
         )
 
         self.whole_word = QCheckBox(self.tr("Palabra completa"))
@@ -60,10 +63,12 @@ class SearchPanel(QWidget):
         self.exact.setToolTip(self.tr("Tiene en cuenta las tildes y las mayúsculas"))
 
         self.previous_button = self._icon_button(
-            "previous", self.tr("Anterior"), self.tr("Resultado anterior (Mayús+Intro)")
+            "previous",
+            self.tr("Anterior"),
+            self.tr("Resultado anterior (flecha arriba o Mayús+Intro)"),
         )
         self.next_button = self._icon_button(
-            "next", self.tr("Siguiente"), self.tr("Resultado siguiente (Intro)")
+            "next", self.tr("Siguiente"), self.tr("Resultado siguiente (flecha abajo o Intro)")
         )
         self.close_button = self._icon_button(
             "close", self.tr("Cerrar"), self.tr("Cerrar la búsqueda (Esc)")
@@ -122,9 +127,25 @@ class SearchPanel(QWidget):
             shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
             shortcut.activated.connect(action)
 
+        self.box.installEventFilter(self)
         view.search_hits.connect(self._hits_arrived)
         view.search_finished.connect(self._finished)
         self._update_status()
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802 (Qt naming)
+        """While typing, the up and down arrows walk through the results.
+
+        Left and right are not used for this: they move through the letters
+        of the word being typed.
+        """
+        if watched is self.box and event.type() == QEvent.Type.KeyPress:
+            if event.key() == Qt.Key.Key_Down:
+                self.go_next()
+                return True
+            if event.key() == Qt.Key.Key_Up:
+                self.go_previous()
+                return True
+        return super().eventFilter(watched, event)
 
     def _icon_button(self, icon_name: str, name: str, tip: str) -> QToolButton:
         """A small button with only a drawing; its name is kept for screen readers."""

@@ -184,6 +184,7 @@ QToolBar[tools="true"] QToolButton {{
     background: transparent; color: {c.text}; font-size: 9pt;
     border: 2px solid transparent; border-radius: 8px; padding: 4px 3px 3px 3px;
 }}
+QToolBar[tools="true"] QToolButton[pending="true"] {{ color: {c.muted}; }}
 QToolBar[tools="true"] QToolButton:hover {{ background: {c.hover}; }}
 QToolBar[tools="true"] QToolButton:pressed {{ background: {c.accent_soft}; }}
 QToolBar[tools="true"] QToolButton:focus {{ border-color: {c.accent}; }}
@@ -250,6 +251,26 @@ QScrollBar::handle:horizontal {{ min-width: 40px; }}
 QScrollBar::handle:hover, QScrollBar::handle:pressed {{ background: {c.muted}; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; }}
 QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
+
+/* ---- zoom control ---- */
+QSlider#zoomSlider::groove:horizontal {{
+    height: 4px; background: {c.border}; border-radius: 2px;
+}}
+QSlider#zoomSlider::sub-page:horizontal {{ background: {c.accent}; border-radius: 2px; }}
+QSlider#zoomSlider::handle:horizontal {{
+    background: {c.surface}; border: 2px solid {c.accent};
+    width: 12px; height: 12px; margin: -6px 0; border-radius: 8px;
+}}
+QSlider#zoomSlider::handle:horizontal:hover {{ background: {c.accent_soft}; }}
+QSlider#zoomSlider::groove:horizontal:disabled {{ background: {c.hover}; }}
+QSlider#zoomSlider::sub-page:horizontal:disabled {{ background: {c.border}; }}
+QSlider#zoomSlider::handle:horizontal:disabled {{ border-color: {c.border}; }}
+QToolButton#zoomFigure {{
+    background: transparent; color: {c.text}; font-size: 9pt; font-weight: 600;
+    border: 1px solid transparent; border-radius: 7px; padding: 3px 8px;
+}}
+QToolButton#zoomFigure:hover {{ background: {c.hover}; }}
+QToolButton#zoomFigure::menu-indicator {{ image: none; }}
 
 /* ---- status bar ---- */
 QStatusBar {{ background: {c.window}; color: {c.muted}; border-top: 1px solid {c.border}; }}

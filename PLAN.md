@@ -119,6 +119,26 @@ y no un único `.exe`: la carpeta abre en menos de 1 segundo y el `.exe` único 
 - El programa y el instalador tienen ya su icono.
 - "Formas y flechas" pasa a llamarse "Formas" para que quepan todas las herramientas.
 
+**Primera prueba tuya en Windows** (12/11/2026) y lo que se ha corregido:
+- La firma funciona, pero se firmó con un certificado que Windows crea para el
+  ordenador (su nombre es un código), y por eso Adobe avisaba de "problemas". Ahora
+  esos certificados se apartan y solo se puede firmar con los de personas.
+  **Pendiente:** repetir la prueba con el certificado FNMT y validarlo en VALIDe.
+- El buscador de funciones se cierra también con un clic fuera.
+- El documento se abre a un tamaño cómodo (como mucho 125 %) y no ampliado a todo
+  el ancho. Nuevo control de tamaño abajo a la derecha (barra, − y +, y el % con
+  un menú) y nueva función "Ver página entera".
+- En la búsqueda, flecha abajo y flecha arriba pasan al resultado siguiente y al
+  anterior. (Izquierda y derecha no: mueven el cursor por la palabra escrita.)
+- Las funciones que aún no están hechas se ven más apagadas y lo dicen al pasar
+  el ratón (por ejemplo "Rotar", que llegará en la Fase 5).
+- Escaneado girado y de mala calidad: el reconocimiento falla porque la hoja está
+  tumbada. Girándola antes mejora mucho, pero no llega a ser bueno. Girar y
+  enderezar solo es parte de la Fase 2B; con escaneados así de malos no se puede
+  prometer un resultado perfecto.
+- Apuntado para la Fase 3: firma manuscrita guardada y sellos, fáciles de usar, y
+  proponer el nombre "-firmado" al guardar un documento firmado.
+
 ## Fase 1 – Lector
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|

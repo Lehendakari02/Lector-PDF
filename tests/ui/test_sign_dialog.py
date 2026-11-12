@@ -33,6 +33,27 @@ def test_dialog_lists_certificates_and_preselects_the_first_usable(qt_app, store
     assert "No sirve para firmar" in dialog.list.item(2).text()
 
 
+def test_certificates_of_the_computer_are_set_apart(qt_app):
+    """Windows keeps its own certificates among the personal ones; they name nobody."""
+    key = certificates.new_key()
+    authority = certificates.make_certificate("MS-Organization-Access", key, authority=True)
+    made = [
+        certificates.make_certificate("686ad455-b8bd-4c96-93a0-67df57b22300", key),
+        certificates.make_certificate("Portátil de Ana", key, issuer=authority, issuer_key=key),
+        certificates.make_certificate("PRUEBA PRUEBA ANA - 00000000T", key),
+    ]
+    store = [describe(certificates.der(certificate)) for certificate in made]
+    assert [certificate.personal for certificate in store] == [False, False, True]
+    assert [certificate.usable for certificate in store] == [False, False, True]
+
+    dialog = CertificateDialog(certificates=store)
+    assert dialog.selected() is store[2]
+    assert "no identifica a una persona" in dialog.list.item(0).text()
+    dialog.list.setCurrentRow(0)
+    assert dialog.selected() is None
+    assert not dialog.sign_button.isEnabled()
+
+
 def test_expired_certificates_cannot_be_chosen(qt_app, store):
     dialog = CertificateDialog(certificates=store)
     dialog.list.setCurrentRow(0)

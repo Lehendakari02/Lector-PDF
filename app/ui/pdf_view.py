@@ -11,6 +11,7 @@ copies finished images to the screen, which is what keeps scrolling smooth.
 import bisect
 import math
 from collections import OrderedDict
+from enum import Enum
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QRect, QRectF, Qt, Signal
@@ -27,6 +28,21 @@ SIDE_MARGIN = 16
 MIN_ZOOM = 0.2  # screen pixels per point, before the screen scale
 MAX_ZOOM = 8.0
 ZOOM_STEP = 1.2
+# A document opens fitted to the width, but never bigger than this (1.0 = 100 %):
+# on a wide screen the full width makes the letters far too big to read at ease.
+COMFORTABLE_ZOOM = 1.25
+POINT_TO_PIXEL = 96 / 72  # at 100 %, one point of the page is this many pixels
+
+
+class Fit(Enum):
+    """How the zoom follows the size of the window."""
+
+    NONE = "none"  # a zoom chosen by hand: it stays
+    WIDTH = "width"  # the page is as wide as the window
+    PAGE = "page"  # the whole page is visible
+    COMFORTABLE = "comfortable"  # as wide as the window, but not too big: on opening
+
+
 PAGES_AHEAD = 3
 PAGES_BEHIND = 1
 CACHE_BYTES = 400 * 1024 * 1024
@@ -81,7 +97,7 @@ class PdfView(QAbstractScrollArea):
         self._document: PdfDocument | None = None
         self._sizes: list[PageSize] = []
         self._zoom = 1.0  # Qt units per point
-        self._fit_width = True
+        self._fit = Fit.WIDTH
         self._tops: list[int] = []  # top of every page, in screen pixels
         self._heights: list[int] = []
         self._widths: list[int] = []
@@ -116,8 +132,9 @@ class PdfView(QAbstractScrollArea):
         self._document = document
         self._sizes = document.page_sizes()
         self.service.open(document.path, password)
-        self._fit_width = True
+        self._fit = Fit.COMFORTABLE
         self._layout()
+        self.zoom_changed.emit(self.zoom)
         self.verticalScrollBar().setValue(0)
         self._scrolled()
 
@@ -189,11 +206,15 @@ class PdfView(QAbstractScrollArea):
     @property
     def zoom(self) -> float:
         """Zoom as people understand it: 1.0 means 100 %."""
-        return self._zoom / (96 / 72)
+        return self._zoom / POINT_TO_PIXEL
+
+    @property
+    def fit(self) -> Fit:
+        return self._fit
 
     def set_zoom(self, zoom: float) -> None:
-        self._fit_width = False
-        self._apply_zoom(zoom * 96 / 72)
+        self._fit = Fit.NONE
+        self._apply_zoom(zoom * POINT_TO_PIXEL)
 
     def zoom_in(self) -> None:
         self.set_zoom(self.zoom * ZOOM_STEP)
@@ -202,8 +223,28 @@ class PdfView(QAbstractScrollArea):
         self.set_zoom(self.zoom / ZOOM_STEP)
 
     def fit_width(self) -> None:
-        self._fit_width = True
+        """Make the page as wide as the window."""
+        self._fit = Fit.WIDTH
         self._apply_zoom(self._zoom_to_fit_width())
+
+    def fit_page(self) -> None:
+        """Make a whole page visible at once."""
+        self._fit = Fit.PAGE
+        self._apply_zoom(self._zoom_to_fit_page())
+
+    def _zoom_to_fit_page(self) -> float:
+        if not self._sizes:
+            return self._zoom
+        tallest = max(size.height for size in self._sizes)
+        available = self.viewport().height() - 2 * PAGE_GAP - 0.5
+        return max(MIN_ZOOM, min(self._zoom_to_fit_width(), available / tallest))
+
+    def _zoom_for_fit(self) -> float:
+        if self._fit is Fit.PAGE:
+            return self._zoom_to_fit_page()
+        if self._fit is Fit.COMFORTABLE:
+            return min(self._zoom_to_fit_width(), COMFORTABLE_ZOOM * POINT_TO_PIXEL)
+        return self._zoom_to_fit_width()
 
     def _zoom_to_fit_width(self) -> float:
         if not self._sizes:
@@ -254,8 +295,11 @@ class PdfView(QAbstractScrollArea):
         return self._to_pixels(self.horizontalScrollBar().value())
 
     def _layout(self) -> None:
-        if self._fit_width and self._sizes:
-            self._zoom = self._zoom_to_fit_width()
+        if self._fit is not Fit.NONE and self._sizes:
+            fitted = self._zoom_for_fit()
+            if abs(fitted - self._zoom) > 1e-6:
+                self._zoom = fitted
+                self.zoom_changed.emit(self.zoom)
         zoom = self._render_zoom()
         gap = self._to_pixels(PAGE_GAP)
         self._tops, self._heights, self._widths = [], [], []

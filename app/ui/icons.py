@@ -47,6 +47,12 @@ ICONS: dict[str, str] = {
     "fit_width": (
         '<path d="M3.5 5v14M20.5 5v14M7.5 12h9M10 9.5L7.5 12l2.5 2.5M14 9.5l2.5 2.5-2.5 2.5"/>'
     ),
+    "fit_page": (
+        '<rect x="6.5" y="3.5" width="11" height="17" rx="1.5"/>'
+        '<path d="M2.5 7V3.5H5M21.5 7V3.5H19M2.5 17v3.5H5M21.5 17v3.5H19"/>'
+    ),
+    "minus": '<path d="M6 12h12"/>',
+    "plus": '<path d="M12 6v12M6 12h12"/>',
     "outline": (
         '<path d="M4 6h16M9 12h11M9 18h11"/>'
         '<circle cx="5" cy="12" r=".7"/><circle cx="5" cy="18" r=".7"/>'
@@ -193,6 +199,7 @@ LOGO = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
 
 # Which colour of the appearance an icon is painted with.
 TEXT, MUTED, ACCENT = "text", "muted", "accent"
+PENDING = "disabled"  # a function that is not built yet
 
 _renderers: dict[tuple[str, str], QSvgRenderer] = {}
 _engines: list[QIconEngine] = []  # Qt does not keep the Python objects alive
