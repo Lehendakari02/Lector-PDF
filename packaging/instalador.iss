@@ -26,6 +26,8 @@ SetupIconFile=lector-pdf.ico
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\Lector-PDF.exe
+; The program is offered for PDFs ("Abrir con", default programs): see [Registry].
+ChangesAssociations=yes
 
 [Languages]
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
@@ -41,6 +43,22 @@ Source: "..\dist\Lector-PDF\*"; DestDir: "{app}"; Excludes: "portable.txt"; Flag
 [Icons]
 Name: "{group}\Lector-PDF"; Filename: "{app}\Lector-PDF.exe"
 Name: "{autodesktop}\Lector-PDF"; Filename: "{app}\Lector-PDF.exe"; Tasks: desktopicon
+
+[Registry]
+; Offers the program to Windows for PDFs, for this user only. It does not make
+; itself the default program: Windows asks the user. Keep these lines the same as
+; app/core/file_association.py (a test compares them).
+Root: HKA; Subkey: "Software\Classes\LectorPDF.Documento"; ValueType: string; ValueData: "Documento PDF"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\LectorPDF.Documento\DefaultIcon"; ValueType: string; ValueData: """{app}\Lector-PDF.exe"",0"
+Root: HKA; Subkey: "Software\Classes\LectorPDF.Documento\shell\open\command"; ValueType: string; ValueData: """{app}\Lector-PDF.exe"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\.pdf\OpenWithProgids"; ValueType: string; ValueName: "LectorPDF.Documento"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\Applications\Lector-PDF.exe"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "Lector-PDF"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\Lector-PDF.exe\shell\open\command"; ValueType: string; ValueData: """{app}\Lector-PDF.exe"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\Applications\Lector-PDF.exe\SupportedTypes"; ValueType: string; ValueName: ".pdf"; ValueData: ""
+Root: HKA; Subkey: "Software\Lector-PDF\Capabilities"; ValueType: string; ValueName: "ApplicationName"; ValueData: "Lector-PDF"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Lector-PDF\Capabilities"; ValueType: string; ValueName: "ApplicationDescription"; ValueData: "Lee, estudia, rellena y firma tus PDF. Todo se queda en tu ordenador."; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Lector-PDF\Capabilities\FileAssociations"; ValueType: string; ValueName: ".pdf"; ValueData: "LectorPDF.Documento"
+Root: HKA; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueName: "Lector-PDF"; ValueData: "Software\Lector-PDF\Capabilities"; Flags: uninsdeletevalue
 
 [Run]
 Filename: "{app}\Lector-PDF.exe"; Description: "{cm:LaunchProgram,Lector-PDF}"; Flags: nowait postinstall skipifsilent

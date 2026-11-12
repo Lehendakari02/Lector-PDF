@@ -94,11 +94,20 @@ jobs:
           python packaging/run_check.py dist\Lector-PDF\Lector-PDF.exe --check-ocr tests\ejemplos\escaneado.pdf Artículo
           if ($LASTEXITCODE -ne 0) { throw "The packaged program cannot recognise text." }
 
+      - name: Check a second start joins the window already open
+        run: |
+          python packaging/check_single_copy.py dist\Lector-PDF\Lector-PDF.exe tests\ejemplos\boe.pdf tests\ejemplos\largo.pdf
+          if ($LASTEXITCODE -ne 0) { throw "A second start does not join the first window." }
+
       - name: Check the portable version left nothing outside its folder
         run: |
           if (Test-Path "$env:LOCALAPPDATA\Lector-PDF") {
             throw "The portable version wrote to LOCALAPPDATA."
           }
+
+      - name: Remove what the checks left in the portable folder
+        run: |
+          if (Test-Path dist\Lector-PDF\datos) { Remove-Item dist\Lector-PDF\datos -Recurse -Force }
 
       - name: Upload program folder
         uses: actions/upload-artifact@v4

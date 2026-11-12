@@ -3,13 +3,14 @@
 import os
 import sys
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
 from app import APP_NAME, __version__
 from app.core.interface_size import NORMAL_SIZE, apply_before_start
 from app.core.restart import relaunch
 from app.core.settings import Settings
+from app.core.single_instance import InstanceServer, send_to_running_copy
 from app.ui.icons import logo_icon
 from app.ui.main_window import MainWindow
 from app.ui.theme import prepare_application
@@ -77,6 +78,16 @@ def check_ocr(source: str, expected_word: str) -> int:
     return 0 if expected_word in text else EXIT_OCR_FAILED
 
 
+class _OtherCopies(QObject):
+    """Brings to the window the files another copy of the program was asked to open.
+
+    The listening happens in a background thread; the signal carries the files
+    safely to the thread of the interface.
+    """
+
+    files_arrived = Signal(list)
+
+
 def main(argv: list[str] | None = None) -> int:
     """Start the program and return its exit code."""
     args = list(sys.argv if argv is None else argv)
@@ -94,6 +105,12 @@ def main(argv: list[str] | None = None) -> int:
     if autoclose:
         args.remove(AUTOCLOSE_FLAG)
 
+    # A file given on the command line ("Abrir con…", double click) is opened.
+    files = [arg for arg in args[1:] if not arg.startswith("-")]
+    # If the program is already open, its window opens the files in new tabs.
+    if not autoclose and QApplication.instance() is None and send_to_running_copy(files):
+        return 0
+
     # The size of the interface must be known before the application exists.
     settings = Settings()
     interface_size = NORMAL_SIZE
@@ -110,8 +127,13 @@ def main(argv: list[str] | None = None) -> int:
     window.reporter.install(window)
     window.show()
 
-    # A file given on the command line ("Abrir con…", double click) is opened.
-    files = [arg for arg in args[1:] if not arg.startswith("-")]
+    other_copies = _OtherCopies()
+    other_copies.files_arrived.connect(window.open_from_another_copy)
+    listening = None
+    if not autoclose:
+        listening = InstanceServer(other_copies.files_arrived.emit)
+        listening.start()
+
     if autoclose:
         window.show_problem_dialogs = False
     opened = False
@@ -131,6 +153,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         code = qt_app.exec()
     finally:
+        if listening is not None:
+            listening.close()  # from now on, a new copy is the main one
         window.shutdown_documents()
         window.reporter.uninstall()
     if window.restart_wanted:
