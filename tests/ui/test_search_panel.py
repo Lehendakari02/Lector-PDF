@@ -174,3 +174,33 @@ def test_opening_another_document_searches_it_again(window, opened, sample, wait
     window.open_document(sample("boe.pdf"))
     wait_until(lambda: not panel._searching)
     assert panel.results.count() == 2
+
+
+def test_a_phrase_across_two_pages_is_found_and_marked_on_both(window, opened, wait_until):
+    panel = opened("texto-dificil.pdf")
+    search(panel, "presentar alegaciones", wait_until)
+    assert panel.results.count() == 1
+    assert panel.results.item(0).text().startswith("Pág. 1-2:")
+    marks = window.pdf_view.search_marks()
+    assert len(marks[0]) == 1 and marks[1] == marks[0]  # the same result, on both pages
+
+
+def test_joined_letters_and_split_accents_in_the_window(opened, wait_until):
+    panel = opened("texto-dificil.pdf")
+    search(panel, "oficina", wait_until)
+    assert panel.results.count() == 1
+    search(panel, "canada", wait_until)
+    assert panel.results.count() == 0
+    search(panel, "cañada", wait_until)
+    assert panel.results.count() == 1
+
+
+def test_a_result_off_to_one_side_is_brought_into_view(window, opened, wait_until):
+    panel = opened("boe.pdf")
+    window.pdf_view.set_zoom(4.0)  # the page is now much wider than the window
+    search(panel, "discriminación", wait_until)
+    view = window.pdf_view
+    hit = panel.hits[panel.current]
+    zoom = view._render_zoom()
+    left = view._page_left(hit.page) + hit.rects[0][0] * zoom
+    assert 0 <= left <= view._to_pixels(view.viewport().width())

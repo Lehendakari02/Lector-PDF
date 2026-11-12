@@ -359,3 +359,18 @@ def test_resizing_the_window_keeps_the_page_being_read(view, sample, wait_until,
     view.resize(1100, 600)
     qt_app.processEvents()
     assert view.current_page == 300
+
+
+def test_huge_pages_are_not_drawn_again_and_again(view, sample, wait_until, monkeypatch, qt_app):
+    # With a lot of zoom, the pages ahead do not fit in memory next to the ones
+    # being read. They used to be asked for, thrown away and asked for again.
+    monkeypatch.setattr(pdf_view, "CACHE_BYTES", 50 * 1024 * 1024)
+    show(view, sample("boe.pdf"), wait_until)
+    view.set_zoom(4.0)
+    zoom = view._render_zoom()
+    wait_until(lambda: view.cached_pages().get(view.current_page) == zoom)
+    for _ in range(3):
+        view.verticalScrollBar().setValue(view.verticalScrollBar().value() + 20)
+        qt_app.processEvents()
+        assert view._wanted == []
+    assert view.current_page in view.cached_pages()

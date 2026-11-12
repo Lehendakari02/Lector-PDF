@@ -261,6 +261,45 @@ def make_bad_ocr(pages: int = 2) -> Path:
     return save(doc, "ocr-malo.pdf")
 
 
+# A font with real "fi" and "fl" ligatures. Only needed to create the sample again.
+LIGATURE_FONT = Path("/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf")
+
+
+def make_tricky_text() -> Path:
+    """Text as awkward PDFs carry it: joined letters, accents in two pieces and
+    a sentence that goes on to the next page, between a footer and a header.
+
+    Needs the DejaVu Serif font and, to keep the file small, the fontTools package.
+    """
+    import unicodedata
+
+    doc = new_document("Texto difícil")
+    pages = [
+        [
+            "La o\ufb01cina resolverá el con\ufb02icto con e\ufb01cacia.",
+            unicodedata.normalize("NFD", "El año pasado el camión cruzó la cañada."),
+            "",
+            "Recibida la propuesta, los interesados podrán presentar alega-",
+        ],
+        [
+            "ciones en el plazo de diez días. Transcurrido el plazo, el órgano",
+            "competente dictará resolución.",
+        ],
+    ]
+    for number, lines in enumerate(pages, start=1):
+        page = doc.new_page(width=A4.width, height=A4.height)
+        options = {"fontname": "dejavu", "fontfile": str(LIGATURE_FONT)}
+        page.insert_text((MARGIN, 50), "Temario de prueba", fontsize=9, **options)
+        # The first page is filled down to the bottom margin; the second starts at the top.
+        top = A4.height - MARGIN - 18 * len(lines) if number == 1 else MARGIN + 30
+        for line in lines:
+            page.insert_text((MARGIN, top), line, fontsize=11, **options)
+            top += 18
+        page.insert_text((MARGIN, A4.height - 40), f"Página {number}", fontsize=9, **options)
+    doc.subset_fonts()
+    return save(doc, "texto-dificil.pdf")
+
+
 def make_test_certificate() -> Path:
     """A made-up, self-signed certificate. It identifies nobody and protects nothing."""
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
