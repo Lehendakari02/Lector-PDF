@@ -1,6 +1,5 @@
 """Main window: the work modes, their tools and the function finder."""
 
-import os
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QSize, Qt, QTimer, qVersion
@@ -26,6 +25,7 @@ from PySide6.QtWidgets import (
 from app import APP_NAME, BUILD_LABEL, __version__
 from app.core.document import PdfDocument, PdfOpenError, engine_version
 from app.core.error_log import running_from_source_or_test_build
+from app.core.history import History, file_key
 from app.core.ocr import OcrError, OcrJob, OcrPage
 from app.core.paths import data_dir, is_portable
 from app.core.settings import Settings
@@ -57,6 +57,7 @@ from app.ui.zoom_control import ZoomControl
 MIN_BUTTON_HEIGHT = 40
 STATUS_MESSAGE_MS = 6000
 LAST_FOLDER_SETTING = "ultima_carpeta"
+WELCOME_RECENT = 5  # recent documents offered on the welcome page
 SIDE_PANEL_SETTING = "panel_lateral"  # "", "miniaturas" or "indice"
 
 
@@ -71,6 +72,7 @@ class MainWindow(QMainWindow):
         self.reporter = reporter if reporter is not None else ErrorReporter(parent=self)
         # Tests turn this off so that message boxes do not block them.
         self.show_problem_dialogs = True
+        self.history = History(self.settings)
         self.setWindowTitle(APP_NAME)
         self.resize(1240, 800)
         self.setAcceptDrops(True)  # a PDF dropped on the window is opened
@@ -160,6 +162,7 @@ class MainWindow(QMainWindow):
         # Follow Windows when it switches between light and dark.
         QGuiApplication.styleHints().colorSchemeChanged.connect(self._system_theme_changed)
         self.set_mode(Mode.READ)
+        self._refresh_welcome_recent()
 
     # ---- construction -------------------------------------------------
 
@@ -270,6 +273,8 @@ class MainWindow(QMainWindow):
         # The shortcut lives here: a tool bar button only answers while its mode is shown.
         self.feature_actions["open"].setShortcut(QKeySequence())
         file_menu.addAction(self.open_menu_action)
+        self.recent_menu = file_menu.addMenu(self.tr("Abrir &recientes"))
+        self.recent_menu.aboutToShow.connect(self._fill_recent_menu)
         self.close_tab_action = QAction(self.tr("&Cerrar pestaña"), self)
         self.close_tab_action.setShortcut(QKeySequence("Ctrl+W"))
         self.close_tab_action.triggered.connect(lambda _checked=False: self.close_document())
@@ -435,6 +440,12 @@ class MainWindow(QMainWindow):
         card.addWidget(self.open_button, 0, centre)
         card.addSpacing(8)
         card.addWidget(drop, 0, centre)
+        self.welcome_recent = QWidget()
+        self.welcome_recent.setObjectName("welcomeRecent")
+        recent_layout = QVBoxLayout(self.welcome_recent)
+        recent_layout.setContentsMargins(0, 22, 0, 0)
+        recent_layout.setSpacing(2)
+        card.addWidget(self.welcome_recent)
         card.addSpacing(28)
         card.addLayout(hints)
         card.setAlignment(hints, centre)
@@ -479,9 +490,35 @@ class MainWindow(QMainWindow):
     def mode(self) -> Mode:
         return self._mode
 
+    def _refresh_welcome_recent(self) -> None:
+        """The last few documents, one click away on the welcome page."""
+        layout = self.welcome_recent.layout()
+        while layout.count():
+            item = layout.takeAt(0)
+            if item.widget() is not None:
+                item.widget().deleteLater()
+        recent = self.history.recent()[:WELCOME_RECENT]
+        self.welcome_recent.setVisible(bool(recent))
+        if not recent:
+            return
+        heading = QLabel(self.tr("Abiertos hace poco"))
+        heading.setObjectName("welcomeRecentTitle")
+        layout.addWidget(heading)
+        for path in recent:
+            button = QPushButton(path.name)
+            button.setObjectName("recentButton")
+            button.setIcon(icons.icon("go_to_page", icons.MUTED))
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setMinimumHeight(MIN_BUTTON_HEIGHT)
+            button.setToolTip(str(path))
+            button.clicked.connect(lambda _checked=False, p=path: self.open_document(p))
+            layout.addWidget(button)
+
     def set_mode(self, mode: Mode) -> None:
         """Show the tools of ``mode`` and hide those of the other modes."""
         self._mode = mode
+        if self.documents:
+            self.current_document.mode = mode
         for other, toolbar in self.mode_toolbars.items():
             toolbar.setVisible(other is mode and not self._full_screen)
         self.mode_actions[mode].setChecked(True)
@@ -604,9 +641,9 @@ class MainWindow(QMainWindow):
 
     def index_of_document(self, path: str | Path) -> int:
         """The tab that shows the file at ``path``, or -1."""
-        wanted = _same_file_key(path)
+        wanted = file_key(path)
         for index, page in enumerate(self.documents):
-            if page.path is not None and _same_file_key(page.path) == wanted:
+            if page.path is not None and file_key(page.path) == wanted:
                 return index
         return -1
 
@@ -635,8 +672,14 @@ class MainWindow(QMainWindow):
                 ),
             )
             return False
-        page.path = Path(path)
+        page.path = Path(path).absolute()
         page.slowest_page = 0.0
+        # Back to the page and the work mode where this document was left.
+        place = self.history.place_of(page.path)
+        page.mode = _mode_named(place.mode)
+        if 0 < place.page < page.view.page_count:
+            page.view.scroll_to_page(place.page)
+        self.history.add_recent(page.path)
         page.search_panel.document_changed()
         page.side_panel.document_changed()
         self._spare = self._new_page()
@@ -655,7 +698,60 @@ class MainWindow(QMainWindow):
         remembered = Tab.from_setting(self.settings.get(SIDE_PANEL_SETTING))
         if remembered is not None and not self._full_screen:
             self.show_side_panel(remembered, remember=False)
+        self._save_session()
         return True
+
+    def restore_session(self) -> int:
+        """Open again the documents of the last time. Returns how many came back."""
+        if not self.history.restore_wanted:
+            return 0
+        paths, current = self.history.session()
+        asking = self.show_problem_dialogs
+        self.show_problem_dialogs = False  # a file that is gone is not worth a dialog
+        try:
+            opened = [path for path in paths if path.is_file() and self.open_document(path)]
+        finally:
+            self.show_problem_dialogs = asking
+        if 0 <= current < len(paths) and paths[current] in opened:
+            self.document_tabs.setCurrentIndex(self.index_of_document(paths[current]))
+        missing = len(paths) - len(opened)
+        if missing:
+            self.statusBar().showMessage(
+                self.tr("No se han encontrado {0} de los documentos de la última vez.").format(
+                    missing
+                ),
+                STATUS_MESSAGE_MS,
+            )
+        self._save_session()
+        return len(opened)
+
+    def _save_session(self) -> None:
+        paths = [page.path for page in self.documents if page.path is not None]
+        self.history.save_session(paths, self.document_tabs.currentIndex())
+
+    def _remember_place(self, page: DocumentPage) -> None:
+        if page.path is not None and page.view.page_count:
+            self.history.remember_place(page.path, max(page.view.current_page, 0), page.mode.name)
+
+    def _fill_recent_menu(self) -> None:
+        self.recent_menu.clear()
+        recent = self.history.recent()
+        for number, path in enumerate(recent, start=1):
+            action = self.recent_menu.addAction(f"&{number % 10}  {path.name}")
+            action.setToolTip(str(path))
+            action.setStatusTip(str(path))
+            action.triggered.connect(lambda _checked=False, p=path: self.open_document(p))
+        if not recent:
+            self.recent_menu.addAction(self.tr("(todavía no hay ninguno)")).setEnabled(False)
+            return
+        self.recent_menu.addSeparator()
+        self.recent_menu.addAction(self.tr("Vaciar esta lista")).triggered.connect(
+            self.forget_recent
+        )
+
+    def forget_recent(self) -> None:
+        self.history.forget_recent()
+        self._refresh_welcome_recent()
 
     def close_document(self, index: int | None = None) -> None:
         """Close a tab (the one in front if none is given)."""
@@ -664,14 +760,16 @@ class MainWindow(QMainWindow):
         if not 0 <= index < len(self.documents):
             return
         page = self.documents.pop(index)
+        self._remember_place(page)
         self.document_tabs.blockSignals(True)
         self.document_tabs.removeTab(index)
         self.document_tabs.blockSignals(False)
         page.shutdown()
         self.pages.removeWidget(page)
         page.deleteLater()
-        self.document_tabs.setVisible(bool(self.documents))
+        self.document_tabs.setVisible(bool(self.documents) and not self._full_screen)
         self._tab_changed(self.document_tabs.currentIndex())
+        self._save_session()
 
     def step_tab(self, step: int) -> None:
         """Go to the next (1) or the previous (-1) tab, round and round."""
@@ -681,6 +779,7 @@ class MainWindow(QMainWindow):
 
     def _tab_moved(self, origin: int, destination: int) -> None:
         self.documents.insert(destination, self.documents.pop(origin))
+        self._save_session()
 
     def _tab_changed(self, _index: int) -> None:
         """Another document is in front (or none): show it and follow it."""
@@ -689,7 +788,10 @@ class MainWindow(QMainWindow):
             self.pages.setCurrentWidget(page)
             self.setWindowTitle(f"{page.title} – {APP_NAME}")
             page.view.setFocus()
+            if page.mode is not self._mode:
+                self.set_mode(page.mode)  # every document keeps its work mode
         else:
+            self._refresh_welcome_recent()
             self.pages.setCurrentWidget(self.welcome)
             self.setWindowTitle(APP_NAME)
         self.page_box.set_view(page.view)
@@ -1006,6 +1108,9 @@ class MainWindow(QMainWindow):
         if self._ocr_job is not None:
             self._ocr_job.cancel()
             self._ocr_job = None
+        for page in self.documents:
+            self._remember_place(page)
+        self._save_session()
         self.shutdown_documents()
         super().closeEvent(event)
 
@@ -1015,9 +1120,9 @@ class MainWindow(QMainWindow):
             page.shutdown()
 
 
-def _same_file_key(path: str | Path) -> str:
-    """Two paths with this same key are the same file (Windows ignores capitals)."""
-    return os.path.normcase(os.path.abspath(path))
+def _mode_named(name: str) -> Mode:
+    """The work mode with that name; reading if it is unknown."""
+    return next((mode for mode in MODES if mode.name == name), Mode.READ)
 
 
 class DocumentTabBar(QTabBar):

@@ -105,6 +105,8 @@ def main(argv: list[str] | None = None) -> int:
     if autoclose:
         window.show_problem_dialogs = False
     opened = False
+    if not autoclose:
+        window.restore_session()  # the tabs of the last time, each on its page
     for file in files:  # each one in its own tab
         opened = window.open_document(file) or opened
     if not autoclose:
