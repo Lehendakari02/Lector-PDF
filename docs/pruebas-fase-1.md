@@ -45,3 +45,21 @@ Lista para probarlo todo junto al final de la fase, con el programa de prueba
 4. Con mucho zoom (400 %), pasa de un resultado a otro con las flechas: la vista se
    mueve también hacia los lados para enseñarlo.
 5. Con mucho zoom, mueve el documento arriba y abajo: no da tirones continuos.
+
+## Tarea 1.6 – Seleccionar y copiar texto
+
+1. Arrastra el ratón sobre unas palabras: quedan marcadas en azul. Sobre el texto,
+   el puntero cambia a la forma de escribir.
+2. Pulsa Ctrl+C (o el botón **Copiar**, o botón derecho → Copiar) y pega en el Bloc
+   de notas o en Word: sale el mismo texto.
+3. Selecciona un artículo entero de varias líneas y pégalo: sale como texto seguido,
+   sin saltos a mitad de frase y sin guiones de final de línea.
+4. Doble clic en una palabra: se selecciona esa palabra.
+5. Haz clic al principio de un párrafo y Mayús+clic al final: se selecciona todo el tramo.
+6. Empieza a seleccionar y arrastra por debajo del borde de la ventana: el documento
+   avanza y la selección sigue en la página siguiente.
+7. Ctrl+A y Ctrl+C en un PDF corto: se copia todo el documento.
+8. Escribe algo en el buscador, selecciónalo y pulsa Ctrl+C: copia lo del buscador,
+   no lo del documento.
+9. En un PDF escaneado, intenta seleccionar: abajo avisa de que la página es una
+   imagen y propone "Reconocer texto".

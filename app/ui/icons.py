@@ -56,6 +56,11 @@ ICONS: dict[str, str] = {
     "go_to_page": (
         '<path d="M6.5 3.5h7l4 4v13h-11z"/><path d="M9.5 14h5M12.5 11.5l2.5 2.5-2.5 2.5"/>'
     ),
+    "copy": (
+        '<rect x="8.5" y="8.5" width="11" height="12" rx="1.5"/>'
+        '<path d="M15.5 8.5v-3a1.5 1.5 0 0 0-1.5-1.5H6A1.5 1.5 0 0 0 4.5 5.5v9"/>'
+        '<path d="M4.5 14.5A1.5 1.5 0 0 0 6 16h2.5"/>'
+    ),
     "minus": '<path d="M6 12h12"/>',
     "plus": '<path d="M12 6v12M6 12h12"/>',
     "outline": (

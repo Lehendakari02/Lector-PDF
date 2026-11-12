@@ -343,3 +343,43 @@ def test_a_new_list_of_small_pictures_replaces_the_old_one(collector, sample):
     collector.service.want_thumbnails([RenderRequest(500, 0.2)])
     collector.wait(lambda: any(picture.page == 500 for picture in collector.thumbnails))
     assert len(collector.thumbnails) < 400
+
+
+def test_helper_gives_the_letters_of_a_page(sample):
+    texts = {}
+    got = threading.Event()
+
+    def on_text(page, text):
+        texts[page] = text
+        got.set()
+
+    service = RenderService(on_page=lambda page: None, on_text=on_text)
+    try:
+        service.open(sample("boe.pdf"))
+        service.want_text(3)
+        assert got.wait(WAIT_SECONDS)
+        assert "Artículo 4." in texts[3].chars
+        assert len(texts[3].boxes) == 4 * len(texts[3])
+    finally:
+        service.shutdown()
+
+
+def test_helper_copies_text_across_pages(sample):
+    copied = {}
+    got = threading.Event()
+
+    def on_copied(copy_id, text):
+        copied[copy_id] = text
+        got.set()
+
+    service = RenderService(on_page=lambda page: None, on_copied=on_copied)
+    try:
+        service.open(sample("texto-dificil.pdf"))
+        number = service.copy_text((0, 0), (1, 10_000))  # the whole document
+        assert got.wait(WAIT_SECONDS)
+        text = copied[number]
+        assert "La oficina resolverá el conflicto con eficacia." in text
+        assert "El año pasado el camión cruzó la cañada." in text
+        assert text.count("Temario de prueba") == 2
+    finally:
+        service.shutdown()

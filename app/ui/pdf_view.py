@@ -14,9 +14,9 @@ from collections import OrderedDict
 from enum import Enum
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QRect, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPalette
-from PySide6.QtWidgets import QAbstractScrollArea, QFrame, QWidget
+from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QFont, QGuiApplication, QImage, QPainter, QPalette
+from PySide6.QtWidgets import QAbstractScrollArea, QFrame, QMenu, QWidget
 
 from app.core.document import PageSize, PdfDocument
 from app.core.outline import OutlineEntry
@@ -26,7 +26,8 @@ from app.core.render_service import (
     RenderRequest,
     RenderService,
 )
-from app.core.search import SearchHit
+from app.core.search import PageText, SearchHit
+from app.core.selection import caret_at, is_on_text, selection_rects, word_at
 from app.ui import theme
 
 PAGE_GAP = 12  # space between pages, in Qt units
@@ -59,6 +60,10 @@ PAPER_COLOR = QColor("white")
 WAITING_TEXT_COLOR = QColor("#767676")  # "Página 7" on a sheet not drawn yet
 MARK_COLOR = QColor(255, 213, 0, 110)
 CURRENT_MARK_COLOR = QColor(255, 120, 0, 150)
+SELECTION_COLOR = QColor(61, 79, 208, 80)
+PAGE_TEXTS_KEPT = 40  # pages whose letters are kept ready for selecting
+END_OF_PAGE = 10**9  # a caret after the last letter, whatever the page has
+AUTOSCROLL_MS = 40  # while dragging a selection past the edge of the window
 
 
 def _engine_pixels(points: float, zoom: float) -> int:
@@ -97,8 +102,16 @@ class PdfView(QAbstractScrollArea):
     outline_changed = Signal()
     # A small picture asked with want_thumbnails is ready: RenderedPage.
     thumbnail_drawn = Signal(object)
+    # Text is selected or not any more: bool.
+    selection_changed = Signal(bool)
+    # "Copy" has finished: number of letters put on the clipboard (0: nothing to copy).
+    text_copied = Signal(int)
+    # Someone tried to select on a page that is only a picture (a scan).
+    no_text_to_select = Signal()
     _open_failed = Signal(str)
     _outline_ready = Signal(object)
+    _text_ready = Signal(int, object)
+    _copied = Signal(int, str)
     _crashed = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -128,9 +141,23 @@ class PdfView(QAbstractScrollArea):
         self._marks: dict[int, list[SearchHit]] = {}  # search results by page
         self._current_mark: SearchHit | None = None
         self._outline: list[OutlineEntry] = []
+        self._texts: OrderedDict[int, PageText] = OrderedDict()  # letters, to select
+        self._asked_texts: set[int] = set()
+        # The selection: where it was started and where it ends, each (page, caret).
+        self._anchor: tuple[int, int] | None = None
+        self._focus: tuple[int, int] | None = None
+        self._selecting = False
+        self._drag_position = QPoint()
+        self._copy_id = 0
+        self._autoscroll = QTimer(self)
+        self._autoscroll.setInterval(AUTOSCROLL_MS)
+        self._autoscroll.timeout.connect(self._autoscroll_step)
+        self.viewport().setMouseTracking(True)  # to change the pointer over text
 
         self._rendered.connect(self._store_page)
         self._outline_ready.connect(self._store_outline)
+        self._text_ready.connect(self._store_text)
+        self._copied.connect(self._put_on_clipboard)
         self._open_failed.connect(self.document_failed)
         self._crashed.connect(self._request_pages)
         self.service = RenderService(
@@ -141,6 +168,8 @@ class PdfView(QAbstractScrollArea):
             on_search_done=self.search_finished.emit,
             on_outline=self._outline_ready.emit,
             on_thumbnail=self.thumbnail_drawn.emit,
+            on_text=self._text_ready.emit,
+            on_copied=self._copied.emit,
         )
         self.verticalScrollBar().valueChanged.connect(self._scrolled)
         self.horizontalScrollBar().valueChanged.connect(self._scrolled)
@@ -175,6 +204,11 @@ class PdfView(QAbstractScrollArea):
         if self._outline:
             self._outline = []
             self.outline_changed.emit()
+        self._texts.clear()
+        self._asked_texts.clear()
+        self._selecting = False
+        self._autoscroll.stop()
+        self.clear_selection()
         self._layout()
 
     @property
@@ -510,6 +544,7 @@ class PdfView(QAbstractScrollArea):
         self._cache_bytes += image.sizeInBytes()
         self._trim_cache()
         self.page_drawn.emit(result.page, result.seconds)
+        self._want_text(result.page)  # a page on screen can be selected at once
         if result.page in self._visible_pages():
             self.viewport().update()
             if not self._shown_first:
@@ -575,6 +610,10 @@ class PdfView(QAbstractScrollArea):
                     x0, y0, x1, y1 = self._shown_rect(page, rect)
                     mark = QRectF(x0 * zoom, y0 * zoom, (x1 - x0) * zoom, (y1 - y0) * zoom)
                     painter.fillRect(mark.translated(target.left(), target.top()), color)
+            for rect in self._selection_rects(page):
+                x0, y0, x1, y1 = self._shown_rect(page, rect)
+                mark = QRectF(x0 * zoom, y0 * zoom, (x1 - x0) * zoom, (y1 - y0) * zoom)
+                painter.fillRect(mark.translated(target.left(), target.top()), SELECTION_COLOR)
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
@@ -593,6 +632,200 @@ class PdfView(QAbstractScrollArea):
             # Moved to a screen with another scale: lay out and draw again.
             self._layout()
             self._scrolled()
+
+    # ---- selecting and copying text ---------------------------------------
+
+    @property
+    def has_selection(self) -> bool:
+        return self._anchor is not None and self._anchor != self._focus
+
+    def selection(self) -> tuple[tuple[int, int], tuple[int, int]] | None:
+        """Where the selection starts and ends, each (page, caret), in reading order."""
+        if not self.has_selection:
+            return None
+        return min(self._anchor, self._focus), max(self._anchor, self._focus)
+
+    def select(self, start: tuple[int, int], stop: tuple[int, int]) -> None:
+        """Select from one place to another, each (page, caret)."""
+        had = self.has_selection
+        self._anchor, self._focus = start, stop
+        if had or self.has_selection:
+            self.selection_changed.emit(self.has_selection)
+        self.viewport().update()
+
+    def select_all(self) -> None:
+        if self.page_count:
+            self.select((0, 0), (self.page_count - 1, END_OF_PAGE))
+
+    def clear_selection(self) -> None:
+        had = self.has_selection
+        self._anchor = self._focus = None
+        if had:
+            self.selection_changed.emit(False)
+            self.viewport().update()
+
+    def copy_selection(self) -> None:
+        """Put the selected text on the clipboard. ``text_copied`` tells when it is there."""
+        chosen = self.selection()
+        if chosen is None:
+            self.text_copied.emit(0)
+            return
+        self._copy_id = self.service.copy_text(*chosen)
+
+    def _put_on_clipboard(self, copy_id: int, text: str) -> None:
+        if copy_id != self._copy_id:
+            return  # an older request, or one of a document that is no longer open
+        if text:
+            QGuiApplication.clipboard().setText(text)
+        self.text_copied.emit(len(text))
+
+    def _want_text(self, page: int) -> None:
+        if page not in self._texts and page not in self._asked_texts:
+            self._asked_texts.add(page)
+            self.service.want_text(page)
+
+    def _store_text(self, page: int, text: PageText) -> None:
+        if self._document is None:
+            return
+        self._asked_texts.discard(page)
+        self._texts[page] = text
+        while len(self._texts) > PAGE_TEXTS_KEPT:
+            self._texts.popitem(last=False)
+        if self.has_selection:
+            self.viewport().update()
+
+    def _selection_rects(self, page: int):
+        chosen = self.selection()
+        if chosen is None or not chosen[0][0] <= page <= chosen[1][0]:
+            return ()
+        text = self._texts.get(page)
+        if text is None:
+            self._want_text(page)  # painted as soon as its letters arrive
+            return ()
+        (first, start), (last, stop) = chosen
+        return selection_rects(
+            text, start if page == first else 0, stop if page == last else len(text)
+        )
+
+    def _page_point(self, position: QPoint) -> tuple[int, float, float] | None:
+        """The page under a place of the window and the point of that page, in points.
+
+        Above, below or between pages it gives the nearest page.
+        """
+        if not self._tops:
+            return None
+        y = self._to_pixels(position.y()) + self._scroll_y()
+        page = max(0, bisect.bisect_right(self._tops, y) - 1)
+        zoom = self._render_zoom()
+        shown_x = (self._to_pixels(position.x()) - self._page_left(page)) / zoom
+        shown_y = (y - self._tops[page]) / zoom
+        size = self._sizes[page]
+        if self._rotation == 90:
+            return page, shown_y, size.height - shown_x
+        if self._rotation == 180:
+            return page, size.width - shown_x, size.height - shown_y
+        if self._rotation == 270:
+            return page, size.width - shown_y, shown_x
+        return page, shown_x, shown_y
+
+    def _caret_at(self, position: QPoint) -> tuple[int, int] | None:
+        """The place of the text nearest to a place of the window: (page, caret)."""
+        point = self._page_point(position)
+        if point is None:
+            return None
+        page, x, y = point
+        text = self._texts.get(page)
+        if text is None:
+            self._want_text(page)
+            return None
+        caret = caret_at(text, x, y)
+        return None if caret is None else (page, caret)
+
+    def _is_picture_page(self, position: QPoint) -> bool:
+        point = self._page_point(position)
+        text = self._texts.get(point[0]) if point else None
+        return text is not None and not len(text)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if event.button() != Qt.MouseButton.LeftButton:
+            super().mousePressEvent(event)
+            return
+        self.setFocus()
+        position = event.position().toPoint()
+        place = self._caret_at(position)
+        if place is None:
+            self.clear_selection()
+            if self._is_picture_page(position):
+                self.no_text_to_select.emit()
+            return
+        if event.modifiers() & Qt.KeyboardModifier.ShiftModifier and self._anchor is not None:
+            self.select(self._anchor, place)  # Shift+click: up to here
+        else:
+            self.clear_selection()
+            self._anchor = self._focus = place
+        self._selecting = True
+        self._drag_position = position
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        position = event.position().toPoint()
+        if not self._selecting:
+            self._update_pointer(position)
+            return
+        self._drag_position = position
+        self._extend_selection()
+        outside = position.y() < 0 or position.y() > self.viewport().height()
+        if outside and not self._autoscroll.isActive():
+            self._autoscroll.start()
+        elif not outside:
+            self._autoscroll.stop()
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._selecting = False
+            self._autoscroll.stop()
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802
+        place = self._caret_at(event.position().toPoint())
+        if event.button() != Qt.MouseButton.LeftButton or place is None:
+            return
+        page, caret = place
+        start, stop = word_at(self._texts[page], caret)
+        self.select((page, start), (page, stop))
+
+    def _extend_selection(self) -> None:
+        place = self._caret_at(self._drag_position)
+        if place is not None and self._anchor is not None and place != self._focus:
+            self.select(self._anchor, place)
+
+    def _autoscroll_step(self) -> None:
+        """Dragging past the top or the bottom moves the document along."""
+        y, height = self._drag_position.y(), self.viewport().height()
+        distance = y if y < 0 else y - height
+        bar = self.verticalScrollBar()
+        bar.setValue(bar.value() + max(-120, min(120, distance)))
+        self._extend_selection()
+
+    def _update_pointer(self, position: QPoint) -> None:
+        """An I-beam over text, an arrow elsewhere."""
+        over_text = False
+        point = self._page_point(position)
+        if point is not None:
+            text = self._texts.get(point[0])
+            over_text = text is not None and is_on_text(text, point[1], point[2])
+        shape = Qt.CursorShape.IBeamCursor if over_text else Qt.CursorShape.ArrowCursor
+        if self.viewport().cursor().shape() != shape:
+            self.viewport().setCursor(shape)
+
+    def contextMenuEvent(self, event) -> None:  # noqa: N802
+        if not self.page_count:
+            return
+        menu = QMenu(self)
+        copy = menu.addAction(self.tr("Copiar"))
+        copy.setEnabled(self.has_selection)
+        copy.triggered.connect(self.copy_selection)
+        menu.addAction(self.tr("Seleccionar todo")).triggered.connect(self.select_all)
+        menu.exec(event.globalPos())
 
     def wheelEvent(self, event) -> None:  # noqa: N802
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
@@ -619,6 +852,8 @@ class PdfView(QAbstractScrollArea):
             bar.setValue(bar.value() + bar.singleStep())
         elif key == Qt.Key.Key_Up:
             bar.setValue(bar.value() - bar.singleStep())
+        elif key == Qt.Key.Key_Escape and self.has_selection:
+            self.clear_selection()
         else:
             super().keyPressEvent(event)
 
