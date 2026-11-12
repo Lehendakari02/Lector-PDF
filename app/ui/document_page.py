@@ -9,6 +9,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QSplitter, QWidget
 
+from app.ui.features import Mode
 from app.ui.pdf_view import PdfView
 from app.ui.search_panel import SearchPanel
 from app.ui.side_panel import SidePanel
@@ -24,6 +25,7 @@ class DocumentPage(QWidget):
         super().__init__(parent)
         self.path: Path | None = None
         self.slowest_page = 0.0  # seconds, for the drawing figure of test builds
+        self.mode = Mode.READ  # the work mode this document is used in
         self.view = PdfView()
         self.search_panel = SearchPanel(self.view)
         self.search_panel.setMinimumWidth(SEARCH_PANEL_WIDTH)

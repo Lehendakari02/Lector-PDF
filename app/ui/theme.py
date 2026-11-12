@@ -315,6 +315,15 @@ QToolButton#panelTab {{
 QToolButton#panelTab:hover {{ background: {c.hover}; color: {c.text}; }}
 QToolButton#panelTab:checked {{ background: {c.accent_soft}; color: {c.accent}; }}
 QLabel#panelEmpty {{ color: {c.muted}; padding: 8px; }}
+QLabel#welcomeRecentTitle {{
+    color: {c.muted}; font-size: 9pt; font-weight: 600; padding: 0 0 4px 8px;
+}}
+QPushButton#recentButton {{
+    text-align: left; border: none; border-radius: 8px; padding: 6px 10px;
+    background: transparent; color: {c.text};
+}}
+QPushButton#recentButton:hover {{ background: {c.hover}; }}
+QPushButton#recentButton:focus {{ background: {c.accent_soft}; }}
 QTabBar#documentTabs {{ background: {c.window}; border-bottom: 1px solid {c.border}; }}
 QTabBar#documentTabs::tab {{
     background: transparent; color: {c.muted};

@@ -77,3 +77,19 @@ Lista para probarlo todo junto al final de la fase, con el programa de prueba
 7. Abre un PDF que ya está abierto: no se duplica, te lleva a su pestaña.
 8. Arrastra dos PDFs a la vez a la ventana: se abren los dos.
 9. Con cinco o seis PDFs abiertos, comprueba que todo sigue fluido.
+
+## Tarea 1.8 – Volver a las pestañas, recordar la página y archivos recientes
+
+1. Abre tres PDFs, deja cada uno en una página distinta y cierra el programa.
+   Ábrelo otra vez: vuelven las tres pestañas, cada una en su página, y delante la
+   misma que estaba delante.
+2. Cierra una pestaña con su X y cierra el programa: al volver, esa ya no aparece.
+3. Cierra un PDF en la página 50 y vuelve a abrirlo más tarde: aparece en la 50.
+4. Pon un documento en modo Estudiar y otro en Rellenar y firmar: al cambiar de
+   pestaña cambia el modo, y al día siguiente cada uno sigue en el suyo.
+5. Archivo → Abrir recientes: salen los últimos documentos, el más nuevo arriba.
+6. Cierra todas las pestañas: en la pantalla de bienvenida salen los últimos PDFs,
+   a un clic.
+7. Cambia de nombre o mueve un PDF que estaba abierto y arranca el programa: no
+   falla, abre los demás y avisa abajo de que no ha encontrado uno.
+8. Archivo → Abrir recientes → Vaciar esta lista: la lista queda vacía.

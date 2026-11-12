@@ -149,7 +149,7 @@ y no un único `.exe`: la carpeta abre en menos de 1 segundo y el `.exe` único 
 | 1.5 | Lista de resultados con contexto, resaltado y siguiente/anterior | Veo todos los resultados con su frase y salto entre ellos con Intro | ✅ |
 | 1.6 | Seleccionar y copiar texto | Copio un artículo y lo pego en otro programa | ✅ |
 | 1.7 | Pestañas (varios PDFs a la vez) | Tengo 3 temas abiertos y cambio entre ellos | ✅ |
-| 1.8 | Reabrir la sesión anterior, recordar página, archivos recientes | Cierro y reabro: vuelven mis pestañas, cada una en su página | ⬜ |
+| 1.8 | Reabrir la sesión anterior, recordar página, archivos recientes | Cierro y reabro: vuelven mis pestañas, cada una en su página | ✅ |
 | 1.9 | Modo oscuro, modo lectura (sepia), tamaño de interfaz | Cambio de modo y se ve bien | ⬜ |
 | 1.10 | Abrir con doble clic / "Abrir con" / arrastrar / programa predeterminado | Doble clic en un PDF lo abre en Lector-PDF | ⬜ |
 | 1.11 | PDFs con contraseña o dañados | Pide la contraseña; un PDF roto da un aviso y no cierra el programa | ⬜ |
@@ -207,6 +207,13 @@ Notas de la Fase 1:
     para la Fase 2 que el ayudante sí lo tiene abierto y habrá que soltarlo al guardar.
   - B8: al arrancar el programa se prepara ya el ayudante del siguiente documento,
     así abrir un PDF no espera a que arranque.
+- 1.8: al abrir el programa vuelven las pestañas de la última vez, cada una en su
+  página y con la que estaba delante. Cualquier documento, al volver a abrirlo,
+  aparece en la página y en el modo de trabajo en que se dejó. "Archivo → Abrir
+  recientes" guarda los 12 últimos (con "Vaciar esta lista") y los 5 últimos salen
+  también en la pantalla de bienvenida. Si un documento ya no está, se salta y se
+  avisa abajo. Todo esto se guarda solo en el ordenador, en el archivo de ajustes.
+  Volver a las pestañas se podrá desactivar en la ventana de Ajustes (tarea 1.9).
 - Revisión del código de la Fase 0 (`docs/revision-codigo-fase-0.md`): sus puntos
   se arreglan dentro de la tarea a la que pertenecen:
   - 1.4 buscador: A1, A2, A4, B7 (hechos).
