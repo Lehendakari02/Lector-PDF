@@ -48,39 +48,37 @@ class PageSize:
 
 
 class PdfDocument:
-    """An open PDF: what the interface needs to lay out its pages.
+    """The facts of a PDF the interface needs to lay out its pages.
 
-    Drawing the pages is done elsewhere (``app.core.render_service``), in a
-    separate process, so this object stays cheap and never blocks the window.
+    The file is read and closed at once: it is not kept open here. Drawing the
+    pages is done elsewhere (``app.core.render_service``), in a separate
+    process, so this object stays cheap and never blocks the window, and the
+    program does not hold the file while other programs want to change it.
     """
 
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
         if not self.path.is_file():
             raise PdfOpenError(f"File not found: {self.path}")
+        self._sizes: list[PageSize] = []
         try:
-            self._doc = pymupdf.open(self.path, filetype="pdf")
+            with pymupdf.open(self.path, filetype="pdf") as doc:
+                self.needs_password = bool(doc.needs_pass)
+                if not self.needs_password:  # a locked file does not show its pages
+                    self._sizes = [PageSize(page.rect.width, page.rect.height) for page in doc]
         except Exception as exc:  # PyMuPDF raises several unrelated error types
             raise PdfOpenError(f"Cannot open {self.path.name}: {exc}") from exc
-        self.needs_password = bool(self._doc.needs_pass)
-        self._sizes: list[PageSize] | None = None
 
     @property
     def page_count(self) -> int:
-        return self._doc.page_count
+        return len(self._sizes)
 
     def page_sizes(self) -> list[PageSize]:
-        """Sizes of all pages. Read once; fast even with hundreds of pages."""
-        if self._sizes is None:
-            try:
-                self._sizes = [PageSize(page.rect.width, page.rect.height) for page in self._doc]
-            except Exception as exc:
-                raise PdfOpenError(f"Cannot read {self.path.name}: {exc}") from exc
+        """Sizes of all pages."""
         return self._sizes
 
     def close(self) -> None:
-        if not self._doc.is_closed:
-            self._doc.close()
+        """Nothing to release: kept so callers can treat it as an open document."""
 
     def __enter__(self) -> "PdfDocument":
         return self

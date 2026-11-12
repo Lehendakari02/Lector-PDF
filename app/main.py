@@ -104,7 +104,11 @@ def main(argv: list[str] | None = None) -> int:
     files = [arg for arg in args[1:] if not arg.startswith("-")]
     if autoclose:
         window.show_problem_dialogs = False
-    opened = bool(files) and window.open_document(files[0])
+    opened = False
+    for file in files:  # each one in its own tab
+        opened = window.open_document(file) or opened
+    if not autoclose:
+        window.warm_up()  # the next document will open without waiting
 
     if autoclose and opened:
         window.pdf_view.first_page_shown.connect(qt_app.quit)
@@ -115,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return qt_app.exec()
     finally:
-        window.pdf_view.shutdown()
+        window.shutdown_documents()
         window.reporter.uninstall()
 
 

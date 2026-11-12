@@ -5,6 +5,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence
 from PySide6.QtTest import QTest
 
+from app.core.document import PdfDocument
+
 
 @pytest.fixture
 def opened(window, sample, wait_until):
@@ -171,9 +173,21 @@ def test_opening_another_document_searches_it_again(window, opened, sample, wait
     panel = opened()
     search(panel, "articulo 27", wait_until)
     assert panel.results.count() == 0
-    window.open_document(sample("boe.pdf"))
+    # The same view is given another document: what was typed is looked for in it.
+    window.pdf_view.set_document(PdfDocument(sample("boe.pdf")))
+    panel.document_changed()
     wait_until(lambda: not panel._searching)
     assert panel.results.count() == 2
+
+
+def test_a_new_tab_starts_with_an_empty_search(window, opened, sample, wait_until):
+    panel = opened()
+    search(panel, "articulo", wait_until)
+    assert window.open_document(sample("boe.pdf"))
+    assert window.search_panel is not panel
+    assert not window.search_panel.isVisible()
+    window.document_tabs.setCurrentIndex(0)
+    assert window.search_panel is panel and panel.results.count() == 2
 
 
 def test_a_phrase_across_two_pages_is_found_and_marked_on_both(window, opened, wait_until):

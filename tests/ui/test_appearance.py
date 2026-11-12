@@ -139,7 +139,7 @@ def test_dropping_a_pdf_on_the_window_opens_it(window):
     assert enter.isAccepted()
     assert window.welcome_card.property("dropping") is True
     window.dropEvent(QDropEvent(QPointF(50, 50), Qt.DropAction.CopyAction, data, buttons, keys))
-    assert window.pages.currentWidget() is window.pdf_view
+    assert window.pages.currentWidget() is window.current_document
     assert window.welcome_card.property("dropping") is False
 
 

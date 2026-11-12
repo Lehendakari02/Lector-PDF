@@ -188,7 +188,7 @@ def test_window_opens_a_document_and_tells_where_you_are(window, sample, wait_un
     window.show_problem_dialogs = False
     assert window.pages.currentWidget() is window.welcome
     assert window.open_document(sample("boe.pdf"))
-    assert window.pages.currentWidget() is window.pdf_view
+    assert window.pages.currentWidget() is window.current_document
     assert "boe.pdf" in window.windowTitle()
     assert window.page_box.edit.text() == "1"
     assert window.page_box.total.text() == "de 39"
