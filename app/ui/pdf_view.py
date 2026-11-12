@@ -113,6 +113,7 @@ class PdfView(QAbstractScrollArea):
     _text_ready = Signal(int, object)
     _copied = Signal(int, str)
     _crashed = Signal()
+    _page_failed = Signal(int, float, str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -137,6 +138,7 @@ class PdfView(QAbstractScrollArea):
         self._cache_bytes = 0
         self._current_page = -1
         self._shown_first = False
+        self._failed_pages: set[int] = set()  # pages that cannot be drawn
         self._wanted: list[RenderRequest] = []
         self._marks: dict[int, list[SearchHit]] = {}  # search results by page
         self._current_mark: SearchHit | None = None
@@ -159,9 +161,11 @@ class PdfView(QAbstractScrollArea):
         self._text_ready.connect(self._store_text)
         self._copied.connect(self._put_on_clipboard)
         self._open_failed.connect(self.document_failed)
-        self._crashed.connect(self._request_pages)
+        self._crashed.connect(self._helper_restarted)
+        self._page_failed.connect(self._mark_failed)
         self.service = RenderService(
             on_page=self._rendered.emit,
+            on_page_failed=self._page_failed.emit,
             on_open_failed=self._open_failed.emit,
             on_crashed=self._crashed.emit,
             on_hits=self.search_hits.emit,
@@ -181,7 +185,7 @@ class PdfView(QAbstractScrollArea):
         self.close_document()
         self._document = document
         self._sizes = document.page_sizes()
-        self.service.open(document.path, password)
+        self.service.open(document.path, password or document.password)
         self._fit = Fit.COMFORTABLE
         self._rotation = 0
         self._layout()
@@ -197,6 +201,7 @@ class PdfView(QAbstractScrollArea):
         self._sizes = []
         self._cache.clear()
         self._cache_bytes = 0
+        self._failed_pages = set()
         self._current_page = -1
         self._shown_first = False
         self._marks = {}
@@ -521,9 +526,28 @@ class PdfView(QAbstractScrollArea):
             room -= min(self._widths[page] * self._heights[page], MAX_PIXELS_PER_PAGE) * 3
             if room < 0 and page not in visible:
                 break
+            if page in self._failed_pages:
+                continue  # it cannot be drawn: asking again would only fail again
             if page not in self._cache or self._cache[page][0] != zoom:
                 self._wanted.append(RenderRequest(page, zoom, self._rotation))
         self.service.want(self._wanted)
+
+    def _helper_restarted(self) -> None:
+        """The helper died and a new one takes over: ask again for what was pending."""
+        self._asked_texts = set(self._texts)  # letters asked for and never received
+        self._request_pages()
+
+    def failed_pages(self) -> set[int]:
+        """Pages of this document that could not be drawn (damaged)."""
+        return set(self._failed_pages)
+
+    def _mark_failed(self, page: int, _zoom: float, _message: str) -> None:
+        """A damaged page: say so on its sheet and go on with the others."""
+        if self._document is None or not 0 <= page < self.page_count:
+            return
+        self._failed_pages.add(page)
+        self.viewport().update()
+        self._request_pages()
 
     def _store_page(self, result: RenderedPage) -> None:
         if self._document is None or result.page >= self.page_count:
@@ -596,7 +620,9 @@ class PdfView(QAbstractScrollArea):
                 painter.drawText(
                     target,
                     Qt.AlignmentFlag.AlignCenter,
-                    self.tr("Página {0}").format(page + 1),
+                    self.tr("La página {0} está dañada y no se puede mostrar").format(page + 1)
+                    if page in self._failed_pages
+                    else self.tr("Página {0}").format(page + 1),
                 )
             elif cached[0] == zoom and _same_size(cached[1], target):
                 painter.drawImage(target.topLeft(), cached[1])  # exact, pixel for pixel

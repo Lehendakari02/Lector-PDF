@@ -85,7 +85,8 @@ class ErrorReporter(QObject):
         dialog.setInformativeText(
             self.tr(
                 "El error se ha apuntado en este ordenador y no se envía a ningún sitio. "
-                "Si quieres avisar del fallo, copia el informe y pégalo donde prefieras."
+                "Si quieres avisar del fallo, copia el informe y pégalo donde prefieras. "
+                "Léelo antes de enviarlo: puede nombrar el documento que tenías abierto."
             )
         )
         dialog.setDetailedText(summary)

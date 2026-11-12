@@ -131,3 +131,20 @@ Con la versión instalada:
 Con la versión portátil:
 8. Hasta que no pulses el botón de Ajustes, Windows no sabe nada del programa.
    Púlsalo: aparece en "Abrir con". "Quitar de «Abrir con»" lo deshace.
+
+## Tarea 1.11 – PDFs con contraseña o dañados
+
+1. Abre un PDF con contraseña (por ejemplo `tests/ejemplos/con-contrasena.pdf`, su
+   contraseña es `lector`): sale una ventana que la pide.
+2. Escribe una mala: avisa y deja probar otra vez. Marca "Mostrar la contraseña"
+   para ver lo que escribes. Con la buena, el documento se abre y se puede buscar,
+   seleccionar y copiar como cualquier otro.
+3. Pulsa Cancelar en esa ventana: no se abre nada y el programa sigue igual.
+4. Con el PDF protegido abierto, cierra el programa y vuelve a abrirlo: pide la
+   contraseña otra vez (no se guarda en ningún sitio).
+5. Cambia la extensión de una foto o de un Word a `.pdf` y ábrelo: aviso de que no
+   se puede abrir; el programa sigue abierto.
+6. Corta una descarga de un PDF a la mitad (o usa uno que sepas que está roto):
+   mismo aviso, sin pestaña vacía.
+7. Si tienes algún PDF con una página estropeada: esa hoja dice que está dañada y
+   las demás se leen bien.

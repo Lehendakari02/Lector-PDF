@@ -105,3 +105,33 @@ def test_pdf_document_can_be_closed_twice(sample):
     document = PdfDocument(sample("boe.pdf"))
     document.close()
     document.close()
+
+
+def test_the_right_password_opens_a_protected_document(sample):
+    with PdfDocument(sample("con-contrasena.pdf"), "lector") as document:
+        assert not document.needs_password
+        assert document.password == "lector"
+        assert document.page_count >= 1
+
+
+@pytest.mark.parametrize("password", ["mala", "", None])
+def test_a_wrong_password_leaves_it_locked(sample, password):
+    with PdfDocument(sample("con-contrasena.pdf"), password) as document:
+        assert document.needs_password
+        assert document.password is None
+        assert document.page_count == 0
+
+
+def test_a_password_given_to_an_open_document_is_not_kept(sample):
+    with PdfDocument(sample("boe.pdf"), "sobra") as document:
+        assert document.password is None
+        assert document.page_count == 39
+
+
+def test_a_file_cut_short_is_damaged_not_empty(sample, tmp_path):
+    # Half a download: the engine "repairs" it into a document without pages.
+    whole = sample("boe.pdf").read_bytes()
+    cut = tmp_path / "cortado.pdf"
+    cut.write_bytes(whole[: len(whole) // 2])
+    with pytest.raises(PdfOpenError):
+        PdfDocument(cut)

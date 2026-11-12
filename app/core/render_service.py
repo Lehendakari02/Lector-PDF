@@ -16,6 +16,8 @@ A new list replaces the old one, so pages scrolled past are never drawn.
 import contextlib
 import multiprocessing
 import multiprocessing.connection
+import os
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -40,6 +42,8 @@ MAX_PIXELS_PER_PAGE = 60_000_000
 # If the helper dies this many times with the same document, the document is
 # the cause: stop restarting it and report the document as unreadable.
 MAX_CRASHES_PER_DOCUMENT = 3
+GOOD_PAGES_TO_FORGET_CRASHES = 3
+TEST_CRASH_PAGES = "LECTOR_PDF_TEST_CRASH_PAGES"
 # A search stops after this many results ("a" in a long book has 100 000).
 MAX_SEARCH_HITS = 5000
 # Pages whose letters are kept ready, so the next search is much faster.
@@ -163,6 +167,8 @@ def _worker_main(connection: Connection) -> None:
     token = 0
     search: _SearchJob | None = None
     page_texts: dict[int, PageText] = {}  # letters of pages already read
+    # Only for the automatic tests: pages that "kill" the helper when drawn.
+    crash_pages = {int(n) for n in os.environ.get(TEST_CRASH_PAGES, "").split(",") if n.strip()}
     while True:
         # Read every waiting message before doing anything, so a newer list of
         # wanted pages (or a newer search) always wins over an older one.
@@ -185,6 +191,8 @@ def _worker_main(connection: Connection) -> None:
                     doc = pymupdf.open(path, filetype="pdf")
                     if doc.needs_pass and not (password and doc.authenticate(password)):
                         raise ValueError("password required")
+                    if doc.page_count == 0:
+                        raise ValueError("the document has no pages")
                     connection.send(("opened", token, doc.page_count))
                     connection.send(("outline", token, read_outline(doc)))
                 except Exception as exc:
@@ -237,6 +245,10 @@ def _worker_main(connection: Connection) -> None:
         # The pages being read go before the small pictures of the side panel.
         kind = "page" if wanted else "thumbnail"
         page_index, zoom, rotation = (wanted or thumbnails).pop(0)
+        # Said first: if drawing this page kills the helper, the program knows which.
+        connection.send(("drawing", token, page_index))
+        if page_index in crash_pages:
+            os._exit(13)
         try:
             result = render_page(doc, page_index, zoom, rotation)
             connection.send(
@@ -254,8 +266,7 @@ def _worker_main(connection: Connection) -> None:
             )
             connection.send_bytes(result.samples)
         except Exception as exc:
-            if kind == "page":
-                connection.send(("page_failed", token, page_index, zoom, str(exc)))
+            connection.send(("page_failed", token, page_index, zoom, str(exc)))
 
 
 class RenderService:
@@ -300,6 +311,9 @@ class RenderService:
         self._password: str | None = None
         self._closing = False
         self._crashes = 0  # with the current document
+        self._drawing: int | None = None  # the page the helper is drawing now
+        self._bad_pages: set[int] = set()  # pages that killed the helper
+        self._drawn_since_crash = 0
         self.restarts = 0
 
     # ---- public API -----------------------------------------------------
@@ -310,6 +324,8 @@ class RenderService:
             self._path, self._password = Path(path), password
             self._token += 1
             self._crashes = 0
+            self._drawing = None
+            self._bad_pages = set()
             self._ensure_started()
             self._send(("open", self._token, str(self._path), password))
 
@@ -326,7 +342,7 @@ class RenderService:
             if self._ensure_started():
                 # A new helper knows nothing yet: give it the document again.
                 self._send(("open", self._token, str(self._path), self._password))
-            self._send(("want", self._token, [(r.page, r.zoom, r.rotation) for r in requests]))
+            self._send(("want", self._token, self._drawable(requests)))
 
     def want_thumbnails(self, requests: list[RenderRequest]) -> None:
         """Replace the list of small pictures to draw. They wait for the pages."""
@@ -335,9 +351,7 @@ class RenderService:
                 return
             if self._ensure_started():
                 self._send(("open", self._token, str(self._path), self._password))
-            self._send(
-                ("thumbnails", self._token, [(r.page, r.zoom, r.rotation) for r in requests])
-            )
+            self._send(("thumbnails", self._token, self._drawable(requests)))
 
     def search(self, query: str, options: SearchOptions = DEFAULT_OPTIONS) -> int:
         """Start looking for ``query`` in the whole document.
@@ -438,6 +452,12 @@ class RenderService:
         """Start the helper if needed. Returns True if a new one was started."""
         if self.is_running() or self._closing or self._crashes >= MAX_CRASHES_PER_DOCUMENT:
             return False
+        if self._process is not None:
+            # The helper has just died and the thread that reads its results has
+            # not dealt with it yet. Starting another one here would hide the
+            # crash from that thread: which page was to blame, and the notice
+            # that makes the window ask for its pages again.
+            return False
         # "spawn" everywhere: it is the only way on Windows, and using it on
         # every system means the tests exercise the same path.
         context = multiprocessing.get_context("spawn")
@@ -456,6 +476,21 @@ class RenderService:
         )
         self._reader.start()
         return True
+
+    def _drawable(self, requests: list[RenderRequest]) -> list[tuple[int, float, int]]:
+        """The requests as the helper wants them, without the pages that killed it."""
+        return [(r.page, r.zoom, r.rotation) for r in requests if r.page not in self._bad_pages]
+
+    @staticmethod
+    def _tell(callback: Callable, *values: object) -> None:
+        """Call a callback of the program. Its own errors must not stop the results.
+
+        The error is handed to the program's error log like any unexpected one.
+        """
+        try:
+            callback(*values)
+        except Exception:
+            sys.excepthook(*sys.exc_info())
 
     def _send(self, message: tuple) -> None:
         if self._connection is None:
@@ -479,26 +514,33 @@ class RenderService:
                 break
             if message[1] != self._token:
                 continue  # belongs to a document that is no longer open
-            if kind in ("page", "thumbnail"):
+            if kind == "drawing":
+                self._drawing = message[2]
+            elif kind in ("page", "thumbnail"):
                 _, _, page, zoom, width, height, stride, seconds, rotation = message
+                self._drawing = None
+                self._drawn_since_crash += 1
+                if self._drawn_since_crash >= GOOD_PAGES_TO_FORGET_CRASHES:
+                    self._crashes = 0  # the document is fine: the crash was a one-off
                 drawn = RenderedPage(page, zoom, width, height, stride, samples, seconds, rotation)
-                (self._on_page if kind == "page" else self._on_thumbnail)(drawn)
+                self._tell(self._on_page if kind == "page" else self._on_thumbnail, drawn)
             elif kind == "outline":
-                self._on_outline(message[2])
+                self._tell(self._on_outline, message[2])
             elif kind == "text":
-                self._on_text(message[2], message[3])
+                self._tell(self._on_text, message[2], message[3])
             elif kind == "copied":
-                self._on_copied(message[2], message[3])
+                self._tell(self._on_copied, message[2], message[3])
             elif kind == "page_failed":
-                self._on_page_failed(message[2], message[3], message[4])
+                self._drawing = None
+                self._tell(self._on_page_failed, message[2], message[3], message[4])
             elif kind == "open_failed":
-                self._on_open_failed(message[2])
+                self._tell(self._on_open_failed, message[2])
             elif kind == "hits" and message[2] == self._search_id:
-                self._on_hits(message[2], message[3])
+                self._tell(self._on_hits, message[2], message[3])
             elif kind == "search_done" and message[2] == self._search_id:
                 self._searching = False
-                self._on_search_done(message[2], message[3])
-        lost_search = None
+                self._tell(self._on_search_done, message[2], message[3])
+        lost_search = bad_page = None
         with self._lock:
             crashed = not self._closing and connection is self._connection
             if crashed:
@@ -506,13 +548,21 @@ class RenderService:
                     connection.close()
                 self._process = self._connection = None
                 self.restarts += 1
-                self._crashes += 1
+                self._drawn_since_crash = 0
+                bad_page, self._drawing = self._drawing, None
+                if bad_page is not None:
+                    # One page is to blame: it is not drawn again, the rest go on.
+                    self._bad_pages.add(bad_page)
+                else:
+                    self._crashes += 1
                 gave_up = self._crashes >= MAX_CRASHES_PER_DOCUMENT
                 lost_search = self._search_id if self._searching else None
                 self._searching = False
+        if crashed and bad_page is not None:
+            self._tell(self._on_page_failed, bad_page, 0.0, "the helper ended while drawing it")
         if crashed and lost_search is not None:
-            self._on_search_done(lost_search, False)  # ends early, with what was found
+            self._tell(self._on_search_done, lost_search, False)  # ends early, with what was found
         if crashed and gave_up:
-            self._on_open_failed("the helper process keeps crashing with this document")
+            self._tell(self._on_open_failed, "the helper process keeps crashing with this document")
         elif crashed:
-            self._on_crashed()
+            self._tell(self._on_crashed)

@@ -152,7 +152,7 @@ y no un único `.exe`: la carpeta abre en menos de 1 segundo y el `.exe` único 
 | 1.8 | Reabrir la sesión anterior, recordar página, archivos recientes | Cierro y reabro: vuelven mis pestañas, cada una en su página | ✅ |
 | 1.9 | Modo oscuro, modo lectura (sepia), tamaño de interfaz | Cambio de modo y se ve bien | ✅ |
 | 1.10 | Abrir con doble clic / "Abrir con" / arrastrar / programa predeterminado | Doble clic en un PDF lo abre en Lector-PDF | ✅ |
-| 1.11 | PDFs con contraseña o dañados | Pide la contraseña; un PDF roto da un aviso y no cierra el programa | ⬜ |
+| 1.11 | PDFs con contraseña o dañados | Pide la contraseña; un PDF roto da un aviso y no cierra el programa | ✅ |
 | 1.12 | Imprimir | Imprimo unas páginas concretas | ⬜ |
 | 1.13 | Aviso de nuevas versiones y **actualizar con un clic** (desactivable) | Si hay versión nueva en GitHub, me avisa; pulso "Actualizar ahora", se descarga, se instala y el programa se reinicia ya actualizado, sin perder ajustes ni pestañas (necesita el repositorio público) | ⬜ |
 | 1.14 | Versión 0.1 (instalador y portátil) y repositorio público | Lo instalo, o lo abro sin instalar, y funciona todo lo anterior | ⬜ |
@@ -245,12 +245,25 @@ Notas de la Fase 1:
   - La creación automática del programa comprueba ya, con el programa de verdad,
     que un segundo arranque se une a la ventana abierta, y limpia la carpeta
     `datos` de las pruebas antes de publicar (B4).
+- 1.11: un PDF **con contraseña** la pide en una ventana propia (con "Mostrar la
+  contraseña"); si no es correcta lo dice y deja probar otra vez. La contraseña no
+  se guarda nunca: al volver las pestañas de la última vez, se pide de nuevo. Un PDF
+  **dañado o a medio descargar** da un aviso claro y no abre pestaña (antes un
+  archivo cortado se abría vacío, A3). Si solo está dañada **una página**, esa hoja
+  lo dice y el resto del documento se lee con normalidad (antes, tres fallos daban
+  el documento entero por perdido, M2). Si un documento ya abierto deja de poder
+  mostrarse, se cierra su pestaña y se avisa (B5). Un fallo de la ventana al recibir
+  una página ya no deja las demás sin dibujar; se apunta en el registro de errores
+  (M3). M11 quedó resuelto con el cambio de la 1.7.
+  - Pendiente para sus fases: reconocer texto (2B) y firmar (4) en PDFs con
+    contraseña siguen sin poder hacerse; lo dicen con un aviso.
 - Revisión del código de la Fase 0 (`docs/revision-codigo-fase-0.md`): sus puntos
   se arreglan dentro de la tarea a la que pertenecen:
   - 1.4 buscador: A1, A2, A4, B7 (hechos).
   - 1.7 pestañas: M1, B8 (hechos).
-  - 1.11 dañados: A3 (PDF cortado sin páginas), M2, M3, M11, B5.
-  - En cualquier tarea de la fase: B1 (M4 y B3 hechos).
+  - 1.11 dañados: A3, M2, M3, M11, B5 (hechos).
+  - B1 hecho en la 1.11: el aviso de error dice que el informe puede nombrar el
+    documento abierto, para leerlo antes de enviarlo (M4 y B3 también hechos).
   - 1.14 versión 0.1: M8 (licencias incluidas), M9 (versiones fijadas). B2 y B4
     hechos en la 1.10.
   - Una decisión se consulta cuando llegue su tarea: en la 1.14, una ventana
