@@ -73,6 +73,13 @@ FEATURES: list[Feature] = [
         "Girar las páginas para leerlas del derecho (no cambia el archivo)",
         "rotar voltear tumbado",
     ),
+    _f(
+        "reading_mode",
+        READ,
+        "Modo lectura",
+        "Papel en tono cálido (sepia) para leer muchas horas; no cambia el archivo",
+        "sepia noche descanso vista ojos papel color fondo",
+    ),
     _f("fullscreen", READ, "Pantalla completa", "Ver solo el documento (F11)", "completa entera"),
     _f("go_to_page", READ, "Ir a página", "Saltar a un número de página", "número saltar"),
     _f("outline", READ, "Índice", "Ver los apartados del documento y saltar a ellos", "esquema"),
@@ -190,7 +197,7 @@ FEATURES: list[Feature] = [
 GROUP_STARTS = frozenset(
     {
         "zoom_in",
-        "fullscreen",
+        "reading_mode",
         "outline",
         "print",
         "note",

@@ -93,3 +93,21 @@ Lista para probarlo todo junto al final de la fase, con el programa de prueba
 7. Cambia de nombre o mueve un PDF que estaba abierto y arranca el programa: no
    falla, abre los demás y avisa abajo de que no ha encontrado uno.
 8. Archivo → Abrir recientes → Vaciar esta lista: la lista queda vacía.
+
+## Tarea 1.9 – Modo lectura, tamaño de la interfaz y Ajustes
+
+1. Con un PDF abierto, pulsa "Modo lectura" (modo Leer): el papel pasa a un tono
+   cálido. Pulsa otra vez: vuelve al blanco.
+2. Ver → Papel de las páginas → Noche: papel oscuro y letra clara. Combínalo con
+   Ver → Tema → Oscuro para leer de noche.
+3. Cierra y abre el programa: el papel elegido se mantiene.
+4. Archivo → Ajustes (o Ctrl+,): cambia el tema y el papel; se ven al momento, sin
+   aceptar nada.
+5. En Ajustes, elige tamaño de la interfaz 125 %: aparece el aviso y "Reiniciar
+   ahora". Púlsalo: el programa se cierra y vuelve solo, con botones y letras más
+   grandes y las mismas pestañas. Las páginas se siguen viendo nítidas.
+6. Vuelve a ponerlo al 100 % y reinicia.
+7. En Ajustes, quita "Volver a las pestañas de la última vez", cierra y abre: el
+   programa empieza vacío. Vuelve a marcarlo.
+8. Imprime (cuando exista) o abre el PDF en otro lector: el papel sepia o noche no
+   ha cambiado el archivo.

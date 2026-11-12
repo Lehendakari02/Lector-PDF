@@ -1,11 +1,15 @@
 """Program entry point: creates the Qt application and shows the main window."""
 
+import os
 import sys
 
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
 from app import APP_NAME, __version__
+from app.core.interface_size import NORMAL_SIZE, apply_before_start
+from app.core.restart import relaunch
+from app.core.settings import Settings
 from app.ui.icons import logo_icon
 from app.ui.main_window import MainWindow
 from app.ui.theme import prepare_application
@@ -90,13 +94,19 @@ def main(argv: list[str] | None = None) -> int:
     if autoclose:
         args.remove(AUTOCLOSE_FLAG)
 
+    # The size of the interface must be known before the application exists.
+    settings = Settings()
+    interface_size = NORMAL_SIZE
+    if QApplication.instance() is None:
+        interface_size = apply_before_start(settings, os.environ)
     qt_app = QApplication.instance() or QApplication(args)
     qt_app.setApplicationName(APP_NAME)
     qt_app.setApplicationVersion(__version__)
     prepare_application(qt_app)
     qt_app.setWindowIcon(logo_icon())
 
-    window = MainWindow()
+    window = MainWindow(settings)
+    window.interface_size = interface_size
     window.reporter.install(window)
     window.show()
 
@@ -119,10 +129,13 @@ def main(argv: list[str] | None = None) -> int:
         code = EXIT_PAGE_NOT_SHOWN if files else 0
         QTimer.singleShot(0, lambda: qt_app.exit(code))
     try:
-        return qt_app.exec()
+        code = qt_app.exec()
     finally:
         window.shutdown_documents()
         window.reporter.uninstall()
+    if window.restart_wanted:
+        relaunch()  # everything is saved and the helpers are stopped
+    return code
 
 
 if __name__ == "__main__":
