@@ -6,6 +6,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
 from app import APP_NAME, __version__
+from app.ui.icons import logo_icon
 from app.ui.main_window import MainWindow
 from app.ui.theme import prepare_application
 
@@ -93,6 +94,7 @@ def main(argv: list[str] | None = None) -> int:
     qt_app.setApplicationName(APP_NAME)
     qt_app.setApplicationVersion(__version__)
     prepare_application(qt_app)
+    qt_app.setWindowIcon(logo_icon())
 
     window = MainWindow()
     window.reporter.install(window)

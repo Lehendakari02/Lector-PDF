@@ -2,11 +2,13 @@
 
 from pathlib import Path
 
-from PySide6.QtCore import QSize, Qt, QTimer, qVersion
+from PySide6.QtCore import QEvent, QSize, Qt, QTimer, qVersion
 from PySide6.QtGui import QAction, QActionGroup, QGuiApplication, QKeySequence
 from PySide6.QtWidgets import (
     QDockWidget,
     QFileDialog,
+    QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -16,6 +18,7 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QTabBar,
     QToolBar,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -28,9 +31,18 @@ from app.core.paths import data_dir, is_portable
 from app.core.settings import Settings
 from app.core.signing import PasswordProtected, SigningError, sign_pdf
 from app.core.windows_store import SigningCancelled
+from app.ui import icons
 from app.ui.command_palette import CommandPalette
 from app.ui.error_reporting import ErrorReporter, ProvokedError
-from app.ui.features import FEATURES, MODES, Feature, Mode, features_of, translate
+from app.ui.features import (
+    FEATURES,
+    GROUP_STARTS,
+    MODES,
+    Feature,
+    Mode,
+    features_of,
+    translate,
+)
 from app.ui.ocr_dialog import OcrResultDialog
 from app.ui.pdf_view import PdfView
 from app.ui.search_panel import SearchPanel
@@ -55,7 +67,8 @@ class MainWindow(QMainWindow):
         # Tests turn this off so that message boxes do not block them.
         self.show_problem_dialogs = True
         self.setWindowTitle(APP_NAME)
-        self.resize(1100, 750)
+        self.resize(1240, 800)
+        self.setAcceptDrops(True)  # a PDF dropped on the window is opened
 
         self.feature_actions: dict[str, QAction] = {}
         self.mode_toolbars: dict[Mode, QToolBar] = {}
@@ -76,6 +89,7 @@ class MainWindow(QMainWindow):
         self.search_dock = QDockWidget(self.tr("Buscar"), self)
         self.search_dock.setObjectName("searchDock")
         self.search_dock.setWidget(self.search_panel)
+        self.search_dock.setTitleBarWidget(QWidget())  # the panel has its own heading
         self.search_dock.setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
         self.search_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea)
         self.search_dock.setMinimumWidth(320)
@@ -132,8 +146,13 @@ class MainWindow(QMainWindow):
             action.setObjectName(f"feature_{feature.id}")
             action.setToolTip(translate(feature.description))
             action.setStatusTip(translate(feature.description))
+            if icons.has_icon(feature.id):
+                action.setIcon(icons.icon(feature.id))
             action.triggered.connect(lambda _checked=False, f=feature: self.run_feature(f))
             self.feature_actions[feature.id] = action
+        open_action = self.feature_actions["open"]
+        open_action.setShortcut(QKeySequence(QKeySequence.StandardKey.Open))
+        open_action.setToolTip(f"{open_action.toolTip()} (Ctrl+O)")
 
     def _build_mode_bar(self) -> None:
         self.mode_tabs = QTabBar()
@@ -142,18 +161,22 @@ class MainWindow(QMainWindow):
         self.mode_tabs.setExpanding(False)
         self.mode_tabs.setDrawBase(False)
         self.mode_tabs.setMinimumHeight(MIN_BUTTON_HEIGHT)
-        tab_font = self.mode_tabs.font()
-        tab_font.setPointSize(tab_font.pointSize() + 2)
-        self.mode_tabs.setFont(tab_font)
+        self.mode_tabs.setIconSize(QSize(20, 20))
+        self.mode_tabs.setCursor(Qt.CursorShape.PointingHandCursor)
         for number, mode in enumerate(MODES, start=1):
-            index = self.mode_tabs.addTab(translate(mode.value))
+            index = self.mode_tabs.addTab(
+                icons.icon(f"mode_{mode.name.lower()}", icons.MUTED), translate(mode.value)
+            )
             self.mode_tabs.setTabToolTip(
                 index, self.tr("Modo {0} (Ctrl+{1})").format(translate(mode.value), number)
             )
         self.mode_tabs.currentChanged.connect(lambda index: self.set_mode(MODES[index]))
 
-        self.finder_button = QPushButton(self.tr("Buscar función  (Ctrl+K)"))
+        self.finder_button = QPushButton(self.tr("Buscar una función…   Ctrl+K"))
         self.finder_button.setObjectName("finderButton")
+        self.finder_button.setIcon(icons.icon("search", icons.MUTED))
+        self.finder_button.setIconSize(QSize(18, 18))
+        self.finder_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.finder_button.setToolTip(
             self.tr("Escribe lo que quieres hacer y te lleva a la función, esté donde esté")
         )
@@ -162,7 +185,7 @@ class MainWindow(QMainWindow):
 
         bar = QWidget()
         layout = QHBoxLayout(bar)
-        layout.setContentsMargins(8, 4, 8, 0)
+        layout.setContentsMargins(4, 0, 4, 0)
         layout.addWidget(self.mode_tabs)
         layout.addStretch()
         layout.addWidget(self.finder_button)
@@ -184,16 +207,36 @@ class MainWindow(QMainWindow):
             toolbar.setMovable(False)
             toolbar.setFloatable(False)
             toolbar.toggleViewAction().setEnabled(False)
-            toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
-            toolbar.setIconSize(QSize(24, 24))
+            toolbar.setProperty("tools", True)  # the style sheet looks for this
+            toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+            toolbar.setIconSize(QSize(22, 22))
             for feature in features_of(mode):
+                if feature.id in GROUP_STARTS:
+                    toolbar.addSeparator()
                 action = self.feature_actions[feature.id]
                 toolbar.addAction(action)
                 toolbar.widgetForAction(action).setMinimumHeight(MIN_BUTTON_HEIGHT)
+            # The button that appears when the window is too narrow for every tool.
+            more = toolbar.findChild(QToolButton, "qt_toolbar_ext_button")
+            if more is not None:
+                more.setIcon(icons.icon("more"))
+                more.setToolTip(self.tr("Más herramientas"))
             self.addToolBar(Qt.ToolBarArea.TopToolBarArea, toolbar)
             self.mode_toolbars[mode] = toolbar
 
     def _build_menus(self) -> None:
+        file_menu = self.menuBar().addMenu(self.tr("&Archivo"))
+        self.open_menu_action = QAction(self.tr("&Abrir…"), self)
+        self.open_menu_action.setShortcut(self.feature_actions["open"].shortcut())
+        self.open_menu_action.triggered.connect(self.choose_and_open)
+        # The shortcut lives here: a tool bar button only answers while its mode is shown.
+        self.feature_actions["open"].setShortcut(QKeySequence())
+        file_menu.addAction(self.open_menu_action)
+        file_menu.addSeparator()
+        self.quit_action = QAction(self.tr("&Salir"), self)
+        self.quit_action.triggered.connect(self.close)
+        file_menu.addAction(self.quit_action)
+
         view_menu = self.menuBar().addMenu(self.tr("&Ver"))
         self.mode_actions: dict[Mode, QAction] = {}
         mode_group = QActionGroup(self)
@@ -247,42 +290,98 @@ class MainWindow(QMainWindow):
         help_menu.addAction(self.test_error_action)
 
     def _build_welcome(self) -> QWidget:
-        title = QLabel(f"{APP_NAME} {__version__}")
-        title.setObjectName("placeholderTitle")
-        title_font = title.font()
-        title_font.setPointSize(title_font.pointSize() + 10)
-        title_font.setBold(True)
-        title.setFont(title_font)
+        """The page shown while no document is open."""
+        self.welcome_logo = QLabel()
+        self.welcome_logo.setFixedSize(84, 84)
+        self.welcome_logo.setPixmap(icons.logo_pixmap(84, self.devicePixelRatioF()))
 
-        message = QLabel(self.tr("En construcción. Todavía no se pueden abrir documentos."))
-        message.setObjectName("placeholderMessage")
-
-        # Shown on purpose: when testing a build it proves the PDF engine and Qt
-        # were packaged correctly.
-        versions = QLabel(
-            self.tr("Motor PDF (PyMuPDF) {0} · Qt {1}").format(engine_version(), qVersion())
+        title = QLabel(APP_NAME)
+        title.setObjectName("welcomeTitle")
+        tagline = QLabel(
+            self.tr("Lee, estudia, rellena y firma tus PDF.\nTodo se queda en tu ordenador.")
         )
-        versions.setObjectName("placeholderVersions")
+        tagline.setObjectName("welcomeTagline")
+        tagline.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.open_button = QPushButton(self.tr("Abrir un PDF"))
+        self.open_button.setObjectName("primaryButton")
+        self.open_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.open_button.setMinimumHeight(48)
+        self.open_button.setToolTip(self.tr("Abrir un PDF del ordenador (Ctrl+O)"))
+        self.open_button.clicked.connect(self.choose_and_open)
+        drop = QLabel(self.tr("o arrastra un PDF hasta esta ventana"))
+        drop.setObjectName("welcomeDrop")
+
+        hints = QGridLayout()
+        hints.setHorizontalSpacing(10)
+        hints.setVerticalSpacing(8)
+        for row, (keys, what) in enumerate(
+            (
+                ("Ctrl+K", self.tr("Buscar cualquier función por su nombre")),
+                ("Ctrl+F", self.tr("Buscar palabras dentro del documento")),
+                ("Ctrl+1 … 4", self.tr("Cambiar de modo: leer, estudiar, firmar, organizar")),
+            )
+        ):
+            key = QLabel(keys)
+            key.setObjectName("keyCap")
+            key.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            text = QLabel(what)
+            text.setObjectName("keyHint")
+            hints.addWidget(key, row, 0, Qt.AlignmentFlag.AlignRight)
+            hints.addWidget(text, row, 1, Qt.AlignmentFlag.AlignLeft)
+
+        self.welcome_card = QFrame()
+        self.welcome_card.setObjectName("welcomeCard")
+        self.welcome_card.setFixedWidth(560)
+        card = QVBoxLayout(self.welcome_card)
+        card.setContentsMargins(48, 40, 48, 36)
+        card.setSpacing(0)
+        centre = Qt.AlignmentFlag.AlignHCenter
+        card.addWidget(self.welcome_logo, 0, centre)
+        card.addSpacing(14)
+        card.addWidget(title, 0, centre)
+        card.addSpacing(4)
+        card.addWidget(tagline, 0, centre)
+        card.addSpacing(26)
+        card.addWidget(self.open_button, 0, centre)
+        card.addSpacing(8)
+        card.addWidget(drop, 0, centre)
+        card.addSpacing(28)
+        card.addLayout(hints)
+        card.setAlignment(hints, centre)
 
         build = QLabel(BUILD_LABEL)
-        build.setObjectName("placeholderBuild")
+        build.setObjectName("welcomeBuild")
         build.setVisible(bool(BUILD_LABEL))
 
+        # Shown on purpose: when testing a build it proves the PDF engine and Qt
+        # were packaged correctly, and where the data is kept.
         if is_portable():
             data_text = self.tr("Versión portátil. Los datos se guardan junto al programa: {0}")
         else:
             data_text = self.tr("Carpeta de datos del programa: {0}")
-        data = QLabel(data_text.format(data_dir()))
-        data.setObjectName("placeholderData")
+        details = QLabel(
+            self.tr("Versión {0} · Motor PDF (PyMuPDF) {1} · Qt {2}").format(
+                __version__, engine_version(), qVersion()
+            )
+            + "\n"
+            + data_text.format(data_dir())
+        )
+        details.setObjectName("welcomeDetails")
+        details.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        details.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
         central = QWidget()
+        central.setObjectName("welcome")
+        central.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         layout = QVBoxLayout(central)
-        layout.addStretch()
-        for label in (title, build, message, versions, data):
-            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            layout.addWidget(label)
-        layout.addStretch()
+        layout.addStretch(3)
+        layout.addWidget(self.welcome_card, 0, centre)
+        layout.addSpacing(16)
+        layout.addWidget(build, 0, centre)
+        layout.addSpacing(6)
+        layout.addWidget(details, 0, centre)
+        layout.addStretch(4)
         return central
 
     # ---- behaviour ----------------------------------------------------
@@ -549,6 +648,41 @@ class MainWindow(QMainWindow):
                 round(seconds * 1000), round(self._slowest_page * 1000)
             )
         )
+
+    # ---- dropping a file on the window ----------------------------------
+
+    @staticmethod
+    def _dropped_pdf(event) -> str | None:
+        for url in event.mimeData().urls():
+            if url.isLocalFile() and url.toLocalFile().lower().endswith(".pdf"):
+                return url.toLocalFile()
+        return None
+
+    def _show_dropping(self, dropping: bool) -> None:
+        self.welcome_card.setProperty("dropping", dropping)
+        self.welcome_card.style().unpolish(self.welcome_card)
+        self.welcome_card.style().polish(self.welcome_card)
+
+    def dragEnterEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        if self._dropped_pdf(event) is not None:
+            self._show_dropping(True)
+            event.acceptProposedAction()
+
+    def dragLeaveEvent(self, event) -> None:  # noqa: N802
+        self._show_dropping(False)
+
+    def dropEvent(self, event) -> None:  # noqa: N802
+        self._show_dropping(False)
+        path = self._dropped_pdf(event)
+        if path is not None:
+            event.acceptProposedAction()
+            self.open_document(path)
+
+    def changeEvent(self, event) -> None:  # noqa: N802
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.DevicePixelRatioChange and hasattr(self, "welcome_logo"):
+            # Moved to a screen with another scale: draw the logo sharp again.
+            self.welcome_logo.setPixmap(icons.logo_pixmap(84, self.devicePixelRatioF()))
 
     def closeEvent(self, event) -> None:  # noqa: N802 (Qt naming)
         if self._ocr_job is not None:

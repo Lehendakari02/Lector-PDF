@@ -15,11 +15,12 @@ from pathlib import Path
 
 from PySide6.QtCore import QEvent, QRect, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPalette
-from PySide6.QtWidgets import QAbstractScrollArea, QWidget
+from PySide6.QtWidgets import QAbstractScrollArea, QFrame, QWidget
 
 from app.core.document import PageSize, PdfDocument
 from app.core.render_service import RenderedPage, RenderRequest, RenderService
 from app.core.search import SearchHit
+from app.ui import theme
 
 PAGE_GAP = 12  # space between pages, in Qt units
 SIDE_MARGIN = 16
@@ -74,6 +75,7 @@ class PdfView(QAbstractScrollArea):
         self.setAccessibleName(self.tr("Documento"))
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.viewport().setBackgroundRole(QPalette.ColorRole.Dark)
+        self.setFrameShape(QFrame.Shape.NoFrame)
         self.viewport().setAutoFillBackground(False)
 
         self._document: PdfDocument | None = None
@@ -360,8 +362,7 @@ class PdfView(QAbstractScrollArea):
 
     def paintEvent(self, _event) -> None:  # noqa: N802 (Qt naming)
         painter = QPainter(self.viewport())
-        palette = self.palette()
-        painter.fillRect(self.viewport().rect(), palette.color(QPalette.ColorRole.Dark))
+        painter.fillRect(self.viewport().rect(), QColor(theme.colours().canvas))
         if not self._tops:
             return
         scale = self._scale()
@@ -378,6 +379,13 @@ class PdfView(QAbstractScrollArea):
                 self._widths[page],
                 self._heights[page],
             )
+            # A soft shadow, so the page looks like a sheet lying on the desk.
+            edge = max(1, round(scale))
+            for step, alpha in ((3, 7), (2, 12), (1, 20)):
+                grow = step * edge
+                painter.fillRect(
+                    target.adjusted(-grow, -grow + edge, grow, grow + edge), QColor(0, 0, 0, alpha)
+                )
             cached = self._cache.get(page)
             if cached is None:
                 painter.fillRect(target, QColor("white"))

@@ -93,3 +93,13 @@ Con un PDF escaneado tuyo (un tema fotocopiado y escaneado, por ejemplo):
 
 De momento el texto solo se enseña; guardarlo dentro del PDF para poder buscar y
 subrayar llega con la fase de documentos escaneados.
+
+## Aspecto del programa
+- [ ] Al abrirlo se ve la pantalla de bienvenida con el logotipo y el botón "Abrir un PDF".
+- [ ] El icono del programa aparece en la barra de tareas y en el archivo `Lector-PDF.exe`.
+- [ ] Arrastra un PDF desde una carpeta hasta la ventana: se abre.
+- [ ] Cambia entre claro y oscuro (Ver → Aspecto): todo se lee bien, iconos incluidos.
+- [ ] En el modo Estudiar caben todas las herramientas a lo ancho. Si la ventana es
+      estrecha, aparece al final un botón "»" con las que no caben.
+- [ ] Las letras de los botones no se cortan y nada se ve borroso con tu escala de pantalla.
+- [ ] ¿Te gusta? Apunta lo que cambiarías (colores, tamaños, lo que sea).

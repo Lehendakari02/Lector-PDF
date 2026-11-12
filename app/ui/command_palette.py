@@ -11,7 +11,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.ui import icons
 from app.ui.features import Feature, search_features, translate
+from app.ui.item_delegates import FeatureDelegate
 
 
 class CommandPalette(QDialog):
@@ -20,8 +22,12 @@ class CommandPalette(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle(self.tr("Buscar una función"))
+        self.setObjectName("commandPalette")
         self.setModal(True)
-        self.resize(560, 420)
+        # No title bar: it is a quick box that appears over the window, like the
+        # finders of other programs. Esc closes it.
+        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
+        self.resize(620, 470)
         self.chosen: Feature | None = None
 
         self.query = QLineEdit()
@@ -29,22 +35,28 @@ class CommandPalette(QDialog):
         self.query.setPlaceholderText(self.tr("Escribe lo que quieres hacer: firmar, unir, rotar…"))
         self.query.setAccessibleName(self.tr("Qué quieres hacer"))
         self.query.setClearButtonEnabled(True)
-        self.query.setMinimumHeight(40)
+        self.query.setMinimumHeight(48)
+        self.query.addAction(
+            icons.icon("search", icons.MUTED), QLineEdit.ActionPosition.LeadingPosition
+        )
 
         self.results = QListWidget()
         self.results.setObjectName("paletteResults")
         self.results.setAccessibleName(self.tr("Funciones encontradas"))
-        self.results.setSpacing(3)
-        self.results.setAlternatingRowColors(True)
+        self.results.setMouseTracking(True)
+        self.results.setItemDelegate(FeatureDelegate(self.results))
 
         self.empty = QLabel(self.tr("No hay ninguna función con esas palabras."))
         self.empty.setObjectName("paletteEmpty")
         self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         hint = QLabel(self.tr("↑ ↓ para moverte · Intro para elegir · Esc para cerrar"))
+        hint.setObjectName("paletteHint")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 6, 10, 10)
+        layout.setSpacing(6)
         layout.addWidget(self.query)
         layout.addWidget(self.results, 1)
         layout.addWidget(self.empty)
@@ -56,6 +68,17 @@ class CommandPalette(QDialog):
         self.results.itemClicked.connect(lambda _item: self._accept_current())
         self.query.installEventFilter(self)
         self._refresh("")
+
+    def showEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        """Appear in the upper part of the window, centred."""
+        super().showEvent(event)
+        parent = self.parentWidget()
+        if parent is not None:
+            area = parent.frameGeometry()
+            self.move(
+                area.center().x() - self.width() // 2,
+                area.top() + max(60, (area.height() - self.height()) // 4),
+            )
 
     def _refresh(self, text: str) -> None:
         self.results.clear()

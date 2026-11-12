@@ -69,7 +69,7 @@ FEATURES: list[Feature] = [
     _f(
         "shapes",
         STUDY,
-        "Formas y flechas",
+        "Formas",
         "Añadir flechas, líneas y recuadros",
         "rectángulo círculo",
     ),
@@ -164,6 +164,26 @@ FEATURES: list[Feature] = [
     ),
     _f("compare", ORGANIZE, "Comparar", "Ver qué ha cambiado entre dos versiones", "diferencias"),
 ]
+
+
+# Functions that begin a new group in the tool bar of their mode (a thin line
+# is drawn before them), so related tools stay together.
+GROUP_STARTS = frozenset(
+    {
+        "zoom_in",
+        "outline",
+        "print",
+        "note",
+        "bookmark",
+        "annotations",
+        "margins",
+        "sign_drawn",
+        "merge",
+        "photo_to_pdf",
+        "redact",
+        "compare",
+    }
+)
 
 
 def features_of(mode: Mode) -> list[Feature]:
