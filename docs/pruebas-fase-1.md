@@ -111,3 +111,23 @@ Lista para probarlo todo junto al final de la fase, con el programa de prueba
    programa empieza vacío. Vuelve a marcarlo.
 8. Imprime (cuando exista) o abre el PDF en otro lector: el papel sepia o noche no
    ha cambiado el archivo.
+
+## Tarea 1.10 – Doble clic, "Abrir con" y programa predeterminado
+
+Con la versión instalada:
+1. Clic derecho en un PDF → Abrir con: aparece Lector-PDF. Elígelo: se abre.
+2. Archivo → Ajustes → "Usar Lector-PDF para abrir los PDF…": se abre la ventana
+   de Windows. Elige Lector-PDF para los .pdf.
+3. Doble clic en un PDF: se abre en Lector-PDF. Los PDF muestran su icono.
+4. Con el programa ya abierto, doble clic en otro PDF: no sale otra ventana; entra
+   como pestaña nueva en la que ya había, y esa ventana pasa al frente (también si
+   estaba minimizada).
+5. Arranca el programa otra vez desde el menú Inicio estando abierto: solo pasa al
+   frente la ventana que ya había.
+6. Selecciona tres PDFs en el Explorador y pulsa Intro: los tres acaban como
+   pestañas de la misma ventana.
+7. Desinstala el programa: deja de aparecer en "Abrir con".
+
+Con la versión portátil:
+8. Hasta que no pulses el botón de Ajustes, Windows no sabe nada del programa.
+   Púlsalo: aparece en "Abrir con". "Quitar de «Abrir con»" lo deshace.

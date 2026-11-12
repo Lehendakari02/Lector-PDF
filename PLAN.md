@@ -151,7 +151,7 @@ y no un único `.exe`: la carpeta abre en menos de 1 segundo y el `.exe` único 
 | 1.7 | Pestañas (varios PDFs a la vez) | Tengo 3 temas abiertos y cambio entre ellos | ✅ |
 | 1.8 | Reabrir la sesión anterior, recordar página, archivos recientes | Cierro y reabro: vuelven mis pestañas, cada una en su página | ✅ |
 | 1.9 | Modo oscuro, modo lectura (sepia), tamaño de interfaz | Cambio de modo y se ve bien | ✅ |
-| 1.10 | Abrir con doble clic / "Abrir con" / arrastrar / programa predeterminado | Doble clic en un PDF lo abre en Lector-PDF | ⬜ |
+| 1.10 | Abrir con doble clic / "Abrir con" / arrastrar / programa predeterminado | Doble clic en un PDF lo abre en Lector-PDF | ✅ |
 | 1.11 | PDFs con contraseña o dañados | Pide la contraseña; un PDF roto da un aviso y no cierra el programa | ⬜ |
 | 1.12 | Imprimir | Imprimo unas páginas concretas | ⬜ |
 | 1.13 | Aviso de nuevas versiones y **actualizar con un clic** (desactivable) | Si hay versión nueva en GitHub, me avisa; pulso "Actualizar ahora", se descarga, se instala y el programa se reinicia ya actualizado, sin perder ajustes ni pestañas (necesita el repositorio público) | ⬜ |
@@ -229,16 +229,32 @@ Notas de la Fase 1:
     siga viéndose amarillo.
   - Las pruebas de la interfaz tardaban cada vez más porque las ventanas de cada
     prueba no se destruían; ahora sí, y vuelven a tardar la mitad.
+- 1.10: **una sola ventana**. Decidido por Julen el 13/11/2026: si el programa ya
+  está abierto, un segundo PDF (doble clic, "Abrir con", arrastrado al icono) entra
+  como pestaña nueva en esa ventana, que pasa al frente. La copia nueva le pasa el
+  archivo a la que ya está abierta y termina; se hablan por un canal privado del
+  propio ordenador y del propio usuario, nada pasa por la red
+  (`app/core/single_instance.py`). Resuelve B2 de la revisión.
+  - El instalador ofrece el programa a Windows para los PDF (sale en "Abrir con" y
+    en la lista de programas predeterminados), solo para el usuario y sin permisos
+    de administrador. Windows no deja que un programa se ponga él mismo como
+    predeterminado: en Ajustes hay un botón "Usar Lector-PDF para abrir los PDF…"
+    que abre la ventana de Windows donde se elige. En la versión portátil ese botón
+    apunta el programa en Windows solo si se pulsa, y "Quitar de «Abrir con»" lo
+    deshace.
+  - La creación automática del programa comprueba ya, con el programa de verdad,
+    que un segundo arranque se une a la ventana abierta, y limpia la carpeta
+    `datos` de las pruebas antes de publicar (B4).
 - Revisión del código de la Fase 0 (`docs/revision-codigo-fase-0.md`): sus puntos
   se arreglan dentro de la tarea a la que pertenecen:
   - 1.4 buscador: A1, A2, A4, B7 (hechos).
   - 1.7 pestañas: M1, B8 (hechos).
   - 1.11 dañados: A3 (PDF cortado sin páginas), M2, M3, M11, B5.
   - En cualquier tarea de la fase: B1 (M4 y B3 hechos).
-  - 1.14 versión 0.1: M8 (licencias incluidas), M9 (versiones fijadas), B2, B4.
-  - Dos decisiones se consultan cuando llegue su tarea: en la 1.10, si un segundo
-    PDF abierto con doble clic entra como pestaña en la ventana que ya hay (B2); en
-    la 1.14, una ventana "Acerca de" con la licencia y los avisos de terceros (M8).
+  - 1.14 versión 0.1: M8 (licencias incluidas), M9 (versiones fijadas). B2 y B4
+    hechos en la 1.10.
+  - Una decisión se consulta cuando llegue su tarea: en la 1.14, una ventana
+    "Acerca de" con la licencia y los avisos de terceros (M8).
   - Fase 2B: M10, B6. Fase 4: M5, M6, M7.
 
 ## Fase 2A – Anotar y guardado

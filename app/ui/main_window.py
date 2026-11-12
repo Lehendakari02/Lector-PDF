@@ -822,6 +822,16 @@ class MainWindow(QMainWindow):
         self.history.forget_recent()
         self._refresh_welcome_recent()
 
+    def open_from_another_copy(self, files: list[str]) -> None:
+        """The program was started again while open: show its files here, in front."""
+        for file in files:
+            self.open_document(file)
+        if self.isMinimized():
+            self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
     def close_document(self, index: int | None = None) -> None:
         """Close a tab (the one in front if none is given)."""
         if index is None:

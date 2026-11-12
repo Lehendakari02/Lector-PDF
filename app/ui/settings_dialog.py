@@ -19,8 +19,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.core import file_association
 from app.core.history import RESTORE_SETTING
 from app.core.interface_size import NORMAL_SIZE, SIZE_SETTING, SIZES, wanted_size
+from app.core.paths import is_portable
 from app.ui.theme import Paper, Theme
 
 
@@ -108,6 +110,12 @@ class SettingsDialog(QDialog):
         self.restore_box.toggled.connect(lambda on: self.settings.set(RESTORE_SETTING, on))
         layout.addWidget(self.restore_box)
 
+        # ---- the program Windows uses for PDFs ----
+        self.default_button: QPushButton | None = None
+        self.forget_button: QPushButton | None = None
+        if file_association.available():
+            self._build_default_program(layout)
+
         layout.addStretch(1)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.button(QDialogButtonBox.StandardButton.Close).setText(self.tr("Cerrar"))
@@ -119,6 +127,61 @@ class SettingsDialog(QDialog):
         label = QLabel(text)
         label.setObjectName("settingsHeading")
         return label
+
+    def _build_default_program(self, layout: QVBoxLayout) -> None:
+        layout.addWidget(self._heading(self.tr("Abrir los PDF con Lector-PDF")))
+        note = QLabel(
+            self.tr(
+                "Windows no deja que un programa se elija solo: se abrirá la ventana de "
+                "Windows y allí eliges Lector-PDF para los archivos .pdf."
+            )
+        )
+        note.setObjectName("dialogNote")
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        row = QHBoxLayout()
+        self.default_button = QPushButton(self.tr("Usar Lector-PDF para abrir los PDF…"))
+        self.default_button.clicked.connect(self._make_default)
+        row.addWidget(self.default_button)
+        # The portable version leaves nothing behind unless asked: it can undo it.
+        self.forget_button = QPushButton(self.tr("Quitar de «Abrir con»"))
+        self.forget_button.setToolTip(
+            self.tr("Windows deja de ofrecer este programa para abrir los PDF")
+        )
+        self.forget_button.clicked.connect(self._forget_default)
+        row.addWidget(self.forget_button)
+        row.addStretch(1)
+        layout.addLayout(row)
+        self.default_status = QLabel()
+        self.default_status.setObjectName("dialogNote")
+        self.default_status.setWordWrap(True)
+        layout.addWidget(self.default_status)
+        self._refresh_default_program()
+
+    def _refresh_default_program(self) -> None:
+        self.forget_button.setVisible(is_portable() and file_association.is_registered())
+
+    def _make_default(self) -> None:
+        if not file_association.register():
+            self.default_status.setText(
+                self.tr("No se ha podido avisar a Windows. Prueba desde «Abrir con» en un PDF.")
+            )
+            return
+        opened = file_association.open_windows_default_programs()
+        self.default_status.setText(
+            self.tr("Hecho. En la ventana de Windows, busca Lector-PDF y elígelo para .pdf.")
+            if opened
+            else self.tr(
+                "Hecho. Ahora, clic derecho en un PDF → Abrir con → Elegir otra aplicación "
+                "→ Lector-PDF → Siempre."
+            )
+        )
+        self._refresh_default_program()
+
+    def _forget_default(self) -> None:
+        file_association.unregister()
+        self.default_status.setText(self.tr("Windows ya no ofrece Lector-PDF para los PDF."))
+        self._refresh_default_program()
 
     def _size_chosen(self, _index: int) -> None:
         self.settings.set(SIZE_SETTING, self.size_box.currentData())

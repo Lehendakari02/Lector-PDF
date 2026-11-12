@@ -141,3 +141,62 @@ def test_restart_now_closes_the_window_and_asks_for_a_restart(window, settings):
 def test_settings_have_a_menu_entry_and_a_shortcut(window):
     assert window.settings_action.shortcut().toString() == "Ctrl+,"
     assert "justes" in window.settings_action.text()
+
+
+# ---- the program Windows uses for PDFs ----
+
+
+def test_default_program_section_is_only_shown_where_it_works(window):
+    dialog = window.open_settings()
+    assert dialog.default_button is None  # tests do not run the built Windows program
+    dialog.close()
+
+
+def _fake_windows(monkeypatch, portable: bool, opens_settings: bool = True) -> dict:
+    from app.core import file_association
+    from app.ui import settings_dialog
+
+    state = {"registered": False, "settings_opened": 0}
+
+    def register():
+        state["registered"] = True
+        return True
+
+    def unregister():
+        state["registered"] = False
+        return True
+
+    def open_settings():
+        state["settings_opened"] += 1
+        return opens_settings
+
+    monkeypatch.setattr(file_association, "available", lambda: True)
+    monkeypatch.setattr(file_association, "register", register)
+    monkeypatch.setattr(file_association, "unregister", unregister)
+    monkeypatch.setattr(file_association, "is_registered", lambda: state["registered"])
+    monkeypatch.setattr(file_association, "open_windows_default_programs", open_settings)
+    monkeypatch.setattr(settings_dialog, "is_portable", lambda: portable)
+    return state
+
+
+def test_the_button_offers_the_program_to_windows_and_opens_its_settings(window, monkeypatch):
+    state = _fake_windows(monkeypatch, portable=False)
+    dialog = window.open_settings()
+    assert not dialog.forget_button.isVisibleTo(dialog)
+    dialog.default_button.click()
+    assert state == {"registered": True, "settings_opened": 1}
+    assert "Lector-PDF" in dialog.default_status.text()
+    assert not dialog.forget_button.isVisibleTo(dialog)  # the installer removes it itself
+    dialog.close()
+
+
+def test_the_portable_version_can_undo_it(window, monkeypatch):
+    state = _fake_windows(monkeypatch, portable=True, opens_settings=False)
+    dialog = window.open_settings()
+    dialog.default_button.click()
+    assert "Abrir con" in dialog.default_status.text()  # explains the other way
+    assert dialog.forget_button.isVisibleTo(dialog)
+    dialog.forget_button.click()
+    assert state["registered"] is False
+    assert not dialog.forget_button.isVisibleTo(dialog)
+    dialog.close()
