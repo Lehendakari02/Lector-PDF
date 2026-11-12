@@ -1,6 +1,7 @@
 # Instrucciones del proyecto: Lector-PDF
 
-> Versión 0.5 (11/11/2026). Todas las decisiones principales están tomadas.
+> Versión 0.6 (12/11/2026). Todas las decisiones principales están tomadas.
+> Cambios de la 0.6: actualización con un clic ("Actualizar ahora" y se reinicia).
 > Cambios de la 0.5: guardado y recuperación redefinidos, OCR como fase fija,
 > pruebas de concepto en la Fase 0 y decisiones de la revisión del plan.
 
@@ -22,7 +23,8 @@ Sin ánimo de lucro: se podrá compartir con familia, amigos o publicarse.
 ## 2. Principios (no negociables)
 1. **Todo en local.** Ningún documento sale del ordenador. Sin cuentas, sin nube, sin
    telemetría. Solo dos excepciones, ambas desactivables: el sello de tiempo de la
-   firma con certificado y la comprobación de nuevas versiones en GitHub.
+   firma con certificado y la comprobación (y descarga, si se pide) de nuevas
+   versiones en GitHub.
    Para informar de fallos hay un registro de errores local y un botón "Copiar
    informe de error" que el usuario pega donde quiera; nunca se envía nada solo.
 2. **Sin muros de pago ni marcas de agua.**
@@ -135,8 +137,15 @@ contesta "sí" sin leer).
   junto al programa (carpeta `datos`), nunca en `%APPDATA%`. Formato: una carpeta
   en `.zip`, porque abre en menos de 1 segundo y un único `.exe` tarda casi 3.
 - Páginas nítidas en pantallas con escala 125 %/150 %.
-- **Aviso de nuevas versiones** (consulta GitHub Releases; desactivable). Requiere
-  que el repositorio sea público: se hará público al publicar la versión 0.1.
+- **Aviso de nuevas versiones y actualización con un clic** (consulta GitHub
+  Releases; desactivable). Al abrir, si hay versión nueva, avisa sin molestar y
+  ofrece "Actualizar ahora": descarga la versión nueva, comprueba que la descarga
+  está completa y es la publicada, la instala y reinicia el programa, que vuelve
+  con las mismas pestañas. Nunca se actualiza sin que el usuario lo pida, y antes
+  guarda lo pendiente. Funciona en la versión instalada y en la portátil (que
+  conserva su carpeta `datos`). Si algo falla, sigue funcionando la versión que
+  había. Requiere que el repositorio sea público: se hará público al publicar la
+  versión 0.1.
 
 ### Fase 2 – Estudiar y anotar (prioridad principal)
 Básico:
