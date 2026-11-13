@@ -390,6 +390,11 @@ class PdfView(QAbstractScrollArea):
             return (y0, size.width - x1, y1, size.width - x0)
         return rect
 
+    def fit_comfortable(self) -> None:
+        """Back to the size a document has when it is opened."""
+        self._fit = Fit.COMFORTABLE
+        self._apply_zoom(self._zoom_for_fit())
+
     def fit_width(self) -> None:
         """Make the page as wide as the window."""
         self._fit = Fit.WIDTH

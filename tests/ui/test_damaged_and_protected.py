@@ -179,3 +179,39 @@ def test_when_the_only_document_fails_the_welcome_page_comes_back(quiet, sample)
     assert quiet.documents == []
     assert quiet.pages.currentWidget() is quiet.welcome
     assert "boe.pdf" not in quiet.windowTitle()
+
+
+def test_the_window_comes_forward_before_the_password_is_asked(quiet, sample):
+    """Double click on a protected PDF with the program minimised."""
+    seen = []
+
+    def answer(path):
+        seen.append(quiet.isMinimized())
+        return None
+
+    quiet.ask_password = answer
+    quiet.showMinimized()
+    quiet.open_from_another_copy([str(sample("con-contrasena.pdf"))])
+    assert seen == [False]
+    assert not quiet.isMinimized()
+
+
+def test_opening_the_same_protected_pdf_again_asks_only_once(quiet, sample, monkeypatch):
+    """Several double clicks while the password window is open: one window, not many."""
+    shown = []
+
+    def open_it_again_meanwhile(dialog):
+        shown.append(dialog)
+        if len(shown) == 1:
+            assert not quiet.open_document(sample("con-contrasena.pdf"))
+            assert not quiet.open_document(sample("con-contrasena.pdf"))
+        return PasswordDialog.DialogCode.Rejected
+
+    monkeypatch.setattr(PasswordDialog, "exec", open_it_again_meanwhile)
+    quiet._password_dialogs = True
+    assert not quiet.open_document(sample("con-contrasena.pdf"))
+    assert len(shown) == 1
+    assert quiet._password_questions == {}
+    # Once answered, it can be asked again.
+    assert not quiet.open_document(sample("con-contrasena.pdf"))
+    assert len(shown) == 2

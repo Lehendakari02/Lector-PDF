@@ -6,6 +6,8 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QSizePolicy, QWidg
 
 from app.ui.pdf_view import PdfView
 
+MAX_TYPED_PAGE = 9_999_999
+
 
 class PageBox(QWidget):
     """«Página [ 12 ] de 39». Type a number and press Enter to go there."""
@@ -22,8 +24,9 @@ class PageBox(QWidget):
         self.edit.setFixedWidth(56)
         self.edit.setAccessibleName(self.tr("Número de página"))
         self.edit.setToolTip(self.tr("Escribe un número de página y pulsa Intro (Ctrl+G)"))
-        self.validator = QIntValidator(1, 1, self.edit)
-        self.edit.setValidator(self.validator)
+        # Any number can be typed: one past the end goes to the last page. (A
+        # limit at the number of pages made Enter do nothing with a bigger one.)
+        self.edit.setValidator(QIntValidator(0, MAX_TYPED_PAGE, self.edit))
         self.total = QLabel()
 
         layout = QHBoxLayout(self)
@@ -68,7 +71,6 @@ class PageBox(QWidget):
         self.setVisible(count > 0)
         if not count:
             return
-        self.validator.setTop(count)
         if not self.edit.hasFocus():
             self.edit.setText(str(self.view.current_page + 1))
         self.total.setText(self.tr("de {0}").format(count))

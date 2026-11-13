@@ -325,6 +325,19 @@ Notas de la Fase 1:
     solo el instalador, la portátil y `SHA256SUMS.txt`.
   - Después de publicar: pedir la firma de código gratuita a SignPath (quita el
     aviso de Windows al instalar) y probar la actualización de verdad con una 0.1.1.
+- **Arreglos tras las pruebas de Julen (13/11/2026):**
+  - Ir a una página mayor que el total lleva a la última (antes Intro no hacía nada).
+  - Buscar una frase copiada del documento que pasa de una página a la siguiente
+    funciona aunque lleve en medio el pie y la cabecera de página, y aunque sea
+    larga. Una palabra pegada con el guion de fin de línea ("artícu- lo") se
+    encuentra junta. Los títulos que caen a la misma altura en dos páginas seguidas
+    ("Artículo 21", "Artículo 27") ya no se confunden con cabeceras.
+  - PDF con contraseña abierto con doble clic: primero viene la ventana al frente
+    y luego pregunta; si se abre varias veces el mismo archivo, pregunta una sola vez.
+  - Nuevo **"Tamaño inicial"** (botón del modo Leer, menú del % y Ctrl+0): vuelve al
+    tamaño con el que se abrió el documento.
+  - Prueba nueva con 16 PDFs rotos de formas distintas (cortados, con trozos
+    cambiados, quitados o metidos): la ventana aguanta todos.
 
 ## Fase 2A – Anotar y guardado
 | # | Tarea | Terminado cuando… | Estado |

@@ -87,6 +87,7 @@ class MainWindow(QMainWindow):
         # How a protected PDF gets its password. Tests put their own answer here.
         self.ask_password = self._ask_password
         self._password_dialogs: bool | None = None  # None: as show_problem_dialogs
+        self._password_questions: dict[str, PasswordDialog] = {}  # open ones, by file
         self._print_run: PrintRun | None = None
         # Set when a new version is ready: run after this program has closed.
         self.after_exit_command: list[str] | None = None
@@ -181,6 +182,7 @@ class MainWindow(QMainWindow):
             "ocr": self.recognize_current_page,
             "zoom_in": lambda: self.pdf_view.zoom_in(),
             "zoom_out": lambda: self.pdf_view.zoom_out(),
+            "fit_comfortable": lambda: self.pdf_view.fit_comfortable(),
             "fit_width": lambda: self.pdf_view.fit_width(),
             "fit_page": lambda: self.pdf_view.fit_page(),
             "rotate_view": lambda: self.pdf_view.rotate_view(),
@@ -303,6 +305,12 @@ class MainWindow(QMainWindow):
             self.mode_toolbars[mode] = toolbar
 
     def _build_menus(self) -> None:
+        # Works in every mode, like the other shortcuts of the window.
+        self.initial_size_action = QAction(self.tr("Tamaño inicial"), self)
+        self.initial_size_action.setShortcut(QKeySequence("Ctrl+0"))
+        self.initial_size_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        self.initial_size_action.triggered.connect(lambda _c=False: self.pdf_view.fit_comfortable())
+        self.addAction(self.initial_size_action)
         file_menu = self.menuBar().addMenu(self.tr("&Archivo"))
         self.open_menu_action = QAction(self.tr("&Abrir…"), self)
         self.open_menu_action.setShortcut(self.feature_actions["open"].shortcut())
@@ -1055,17 +1063,32 @@ class MainWindow(QMainWindow):
             unlocked.append(document)
             return True
 
+        # Asked to open the same file again while its password is being asked
+        # (several double clicks): one question is enough, bring it to the front.
+        key = str(path.absolute())
+        waiting = self._password_questions.get(key)
+        if waiting is not None:
+            waiting.raise_()
+            waiting.activateWindow()
+            return None
         dialog = PasswordDialog(path.name, try_password, self)
+        self._password_questions[key] = dialog
         try:
             accepted = dialog.exec() == PasswordDialog.DialogCode.Accepted
         finally:
+            self._password_questions.pop(key, None)
             dialog.deleteLater()
         return unlocked[-1] if accepted and unlocked else None
 
     def open_from_another_copy(self, files: list[str]) -> None:
         """The program was started again while open: show its files here, in front."""
+        # First the window, then the files: a file may ask something (a password)
+        # and the question must come up in front, over a window that is in view.
+        self.bring_to_front()
         for file in files:
             self.open_document(file)
+
+    def bring_to_front(self) -> None:
         if self.isMinimized():
             self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
         self.show()
