@@ -13,9 +13,11 @@ time (it unpacks itself on each start) against under 1 s for the folder.
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
+from importlib import metadata
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -66,6 +68,59 @@ def remove_unused_folders() -> None:
         shutil.rmtree(ROOT / "dist" / PROGRAM_NAME / folder, ignore_errors=True)
 
 
+# The licence of the program and of everything inside it goes in plain view,
+# next to the ``.exe`` (see app/core/about.py and the "Acerca de" window).
+LICENCE_FOLDER = "licencias"
+OWN_LICENCE_NAME = "AGPL-3.0.txt"
+DIRECT_DEPENDENCIES = ["PySide6_Essentials", "PyMuPDF", "pyHanko"]
+# Installed with PyMuPDF but left out of the program (EXCLUDED_MODULES).
+NOT_SHIPPED = {"pymupdf-layout", "pymupdf4llm", "onnxruntime", "numpy", "networkx"}
+LICENCE_WORDS = ("licen", "copying", "notice", "authors")
+
+
+def _plain_name(requirement: str) -> str:
+    return re.split(r"[\s;<>=!~\[(]", requirement.strip(), maxsplit=1)[0].lower().replace("_", "-")
+
+
+def shipped_packages() -> list[metadata.Distribution]:
+    """The direct dependencies and everything they need, except what is left out."""
+    found: dict[str, metadata.Distribution] = {}
+    waiting = [_plain_name(name) for name in DIRECT_DEPENDENCIES]
+    while waiting:
+        name = waiting.pop()
+        if name in found or name in NOT_SHIPPED:
+            continue
+        try:
+            package = metadata.distribution(name)
+        except metadata.PackageNotFoundError:
+            continue  # only needed on another system, or for an optional extra
+        found[name] = package
+        for requirement in package.requires or []:
+            if "extra ==" not in requirement:
+                waiting.append(_plain_name(requirement))
+    return [found[name] for name in sorted(found)]
+
+
+def copy_licences(target: Path) -> int:
+    """Put every licence text in ``target``. Returns how many packages gave one."""
+    shutil.rmtree(target, ignore_errors=True)
+    shutil.copytree(ROOT / "app" / "recursos" / "licencias", target)
+    shutil.copyfile(ROOT / "LICENSE", target / OWN_LICENCE_NAME)
+    with_text = 0
+    for package in shipped_packages():
+        texts = [
+            file
+            for file in package.files or []
+            if ".dist-info" in str(file) and any(w in file.name.lower() for w in LICENCE_WORDS)
+        ]
+        folder = target / "paquetes" / f"{package.name}-{package.version}"
+        for file in texts:
+            folder.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(file.locate(), folder / file.name)
+        with_text += bool(texts)
+    return with_text
+
+
 def run_pyinstaller(onefile: bool) -> None:
     command = [
         sys.executable,
@@ -108,6 +163,7 @@ def main() -> int:
         run_pyinstaller(options.onefile)
         if not options.onefile:
             remove_unused_folders()
+            copy_licences(ROOT / "dist" / PROGRAM_NAME / LICENCE_FOLDER)
     finally:
         # Never leave the generated file behind in a working copy.
         BUILD_INFO.unlink(missing_ok=True)

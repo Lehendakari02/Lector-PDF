@@ -308,6 +308,23 @@ Notas de la Fase 1:
     actualización pasa por la misma pregunta de cierre (Guardar / No guardar /
     Cancelar); si se cancela, no se instala (ya está previsto en el código).
   - Publicar una versión añade ahora el archivo `SHA256SUMS.txt` con las huellas.
+- 1.14 (preparada; falta publicar): el programa dice **versión 0.1.0**.
+  - **Acerca de** (Ayuda → Acerca de Lector-PDF): versión, que es software libre,
+    enlace al código y lista en lenguaje llano de las piezas que usa con su
+    licencia. La carpeta `licencias` del programa lleva el texto de todas (M8); la
+    compilación las recoge sola y comprueba que están.
+  - **Versiones fijadas** (M9): `packaging/versiones-fijadas.txt` fija todo lo que
+    se instala para probar y compilar, también lo que traen las dependencias. Las
+    acciones de GitHub van fijadas por commit. La versión de Inno Setup queda
+    apuntada en el resumen de cada compilación (se usa la del servidor de GitHub).
+  - El contador "Dibujo de página" y "Provocar un error de prueba" solo salen en
+    las versiones de prueba, no en la publicada.
+  - **Pasos que solo puede dar Julen:** hacer público el repositorio (Settings →
+    General → Danger Zone → Change visibility) y crear la *Release* `v0.1.0`
+    (Releases → Draft a new release → etiqueta `v0.1.0` → Publish). GitHub adjunta
+    solo el instalador, la portátil y `SHA256SUMS.txt`.
+  - Después de publicar: pedir la firma de código gratuita a SignPath (quita el
+    aviso de Windows al instalar) y probar la actualización de verdad con una 0.1.1.
 
 ## Fase 2A – Anotar y guardado
 | # | Tarea | Terminado cuando… | Estado |
