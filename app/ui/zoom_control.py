@@ -48,6 +48,9 @@ class ZoomControl(QWidget):
         self.figure.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.figure.setMinimumWidth(68)
         menu = QMenu(self.figure)
+        self.fit_comfortable_action = menu.addAction(
+            self.tr("Tamaño inicial"), lambda: self.view.fit_comfortable()
+        )
         self.fit_width_action = menu.addAction(
             self.tr("Ajustar al ancho"), lambda: self.view.fit_width()
         )
@@ -109,6 +112,7 @@ class ZoomControl(QWidget):
         self.figure.setText(f"{round(zoom * 100)} %" if has_document else "")
         fit = self.view.fit
         marks = {
+            self.fit_comfortable_action: fit is Fit.COMFORTABLE,
             self.fit_width_action: fit is Fit.WIDTH,
             self.fit_page_action: fit is Fit.PAGE,
         }

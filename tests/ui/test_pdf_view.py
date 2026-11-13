@@ -374,3 +374,45 @@ def test_huge_pages_are_not_drawn_again_and_again(view, sample, wait_until, monk
         qt_app.processEvents()
         assert view._wanted == []
     assert view.current_page in view.cached_pages()
+
+
+def test_a_page_number_past_the_end_can_be_typed_and_goes_to_the_last(window, sample, qt_app):
+    """Typed on the keyboard, as a person does: Enter must not be swallowed."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    window.show_problem_dialogs = False
+    assert window.open_document(sample("boe.pdf"))
+    window.go_to_page_action.trigger()
+    box = window.page_box
+    box.edit.selectAll()
+    QTest.keyClicks(box.edit, "500")
+    QTest.keyClick(box.edit, Qt.Key.Key_Return)
+    assert window.pdf_view.current_page == 38
+    assert box.edit.text() == "39"
+    box.edit.selectAll()
+    QTest.keyClicks(box.edit, "0")
+    QTest.keyClick(box.edit, Qt.Key.Key_Return)
+    assert window.pdf_view.current_page == 0
+
+
+def test_initial_size_brings_back_the_size_of_opening(window, sample, wait_until):
+    from app.ui.pdf_view import Fit
+
+    window.show_problem_dialogs = False
+    assert window.open_document(sample("boe.pdf"))
+    opened_at = window.pdf_view.zoom
+    assert window.zoom_control.fit_comfortable_action.isChecked()
+    window.feature_actions["zoom_in"].trigger()
+    window.feature_actions["zoom_in"].trigger()
+    assert window.pdf_view.zoom > opened_at
+    assert not window.zoom_control.fit_comfortable_action.isChecked()
+    window.feature_actions["fit_comfortable"].trigger()
+    assert window.pdf_view.zoom == opened_at and window.pdf_view.fit is Fit.COMFORTABLE
+    assert window.zoom_control.fit_comfortable_action.isChecked()
+    window.feature_actions["fit_page"].trigger()
+    window.initial_size_action.trigger()  # Ctrl+0
+    assert window.pdf_view.zoom == opened_at
+    window.feature_actions["fit_width"].trigger()
+    window.zoom_control.fit_comfortable_action.trigger()
+    assert window.pdf_view.zoom == opened_at

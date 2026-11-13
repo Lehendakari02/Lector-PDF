@@ -306,8 +306,8 @@ def test_real_law_phrase_across_pages(boe):
     for number in range(boe.page_count - 1):
         first, second = read_page_text(boe[number]), read_page_text(boe[number + 1])
         # The last reading line of a page and the first of the next, joined:
-        last = _reading_lines(first, second)[-1]
-        start = _reading_lines(second, first)[0]
+        last = _reading_lines(first, [(second, 1)])[-1]
+        start = _reading_lines(second, [(first, -1)])[0]
         words_before = first.chars[last[0] : last[1]].split()[-2:]
         words_after = second.chars[start[0] : start[1]].split()[:2]
         assert "BOLETÍN" not in words_after and "LEGISLACIÓN" not in words_after
@@ -323,3 +323,50 @@ def test_page_text_is_compact():
     assert isinstance(page.chars, str)
     assert page.size_in_bytes() < 60 * len(page)  # it used to be about 230 per letter
     assert len(page.boxes) == 4 * len(page)
+
+
+# ---- a phrase copied from the document and pasted into the search box ----
+
+
+def _copied_across(doc, number, tail_letters=260, head_letters=200):
+    """What copying the end of a page and the start of the next one gives."""
+    from app.core.selection import selected_text
+
+    first, second = read_page_text(doc[number]), read_page_text(doc[number + 1])
+    end = selected_text(first, max(0, len(first) - tail_letters), len(first))
+    start = selected_text(second, 0, head_letters)
+    return first, second, end + "\n" + start
+
+
+def test_a_phrase_copied_with_the_footer_in_the_middle_is_found(boe):
+    from app.core.search import find_across_pages
+
+    for number in range(1, boe.page_count - 1):
+        before = read_page_text(boe[number - 1])
+        first, second, copied = _copied_across(boe, number)
+        hits = find_across_pages(first, second, copied, page=number, before=before)
+        assert len(hits) == 1, f"page {number + 1}"
+        assert hits[0].rects and hits[0].next_rects
+
+
+def test_a_title_at_the_same_height_on_two_pages_is_not_a_header(boe):
+    # Pages 7, 8 and 9 of the sample all open with "Artículo N." at the same height.
+    phrase = "organizaciones profesionales. Artículo 27. 1. Todos tienen"
+    found = [hit for _page, hits in search_document(boe, phrase) for hit in hits]
+    assert len(found) == 1 and found[0].next_rects
+
+
+def test_a_long_phrase_reaches_further_than_a_few_lines(boe):
+    from app.core.search import find_across_pages
+
+    first, second, copied = _copied_across(boe, 5, tail_letters=1500, head_letters=1500)
+    assert len(copied) > 2500
+    before = read_page_text(boe[4])
+    assert len(find_across_pages(first, second, copied, page=5, before=before)) == 1
+
+
+def test_a_pasted_word_split_at_a_line_end_is_found_joined():
+    page = make_page(["El procedimiento administrativo común", "se regula por ley."])
+    assert len(find_in_page(page, "procedi- miento administrativo")) == 1
+    assert len(find_in_page(page, "procedi-\nmiento")) == 1
+    assert find_in_page(page, "procedi- xx") == []

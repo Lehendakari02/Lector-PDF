@@ -147,7 +147,8 @@ def _search_next_page(connection, token, doc, job: _SearchJob, page_texts) -> bo
         if number + 1 < doc.page_count:
             # A phrase that goes on to the next page.
             following = _page_text(doc, number + 1, page_texts)
-            hits += find_across_pages(text, following, job.query, job.options, number)
+            before = _page_text(doc, number - 1, page_texts) if number else None
+            hits += find_across_pages(text, following, job.query, job.options, number, before)
     except Exception:
         hits = []  # a page that cannot be read has no results; the search goes on
     if hits:

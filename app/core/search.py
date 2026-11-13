@@ -28,6 +28,11 @@ CONTEXT_CHARS = 45
 # A phrase that goes on to the next page is looked for in the last lines of one
 # page followed by the first lines of the next.
 BOUNDARY_LINES = 6
+# A long phrase reaches further: one more line for every so many letters, up to a limit.
+SHORT_LINE_CHARS = 20
+MAX_BOUNDARY_LINES = 60
+PASTED_PHRASE_CHARS = 40
+MAX_BOUNDARIES_KEPT = 4  # per pair of pages, to keep memory small
 # Lines at the same height of two pages in a row with the same words (numbers
 # aside) are headers, footers or page numbers, not part of the reading text.
 _SAME_HEIGHT_POINTS = 2.0
@@ -76,7 +81,7 @@ class PageText:
     _streams: dict = field(default_factory=dict, repr=False)
     _line_spans: list | None = field(default=None, repr=False)
     _line_keys: list | None = field(default=None, repr=False)
-    # The lines around the break with the next page, built once: (next page, joint, seam).
+    # The lines around the break with the next page, built once: (next page, {how: joint}).
     _boundary: tuple | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
@@ -244,6 +249,20 @@ def prepare_query(query: str, options: SearchOptions = DEFAULT_OPTIONS) -> str:
     return re.sub(r"\s+", " ", query).strip()
 
 
+# A word that was split at a line end and then copied and pasted: "artícu- lo".
+_PASTED_SPLIT = re.compile(r"(?<=[^\W\d_])[-‐] (?=[^\W\d_])")
+
+
+def _needles(query: str, options: SearchOptions) -> list[str]:
+    """What to look for: the query and, if it was pasted with a word split at a
+    line end ("artícu- lo"), also with that word joined ("artículo")."""
+    needle = prepare_query(query, options)
+    if not needle:
+        return []
+    joined = _PASTED_SPLIT.sub("", needle)
+    return [needle] if joined == needle else [needle, joined]
+
+
 def _is_word_char(char: str) -> bool:
     return char.isalnum()
 
@@ -299,14 +318,17 @@ def _find(
     text: PageText, query: str, options: SearchOptions, page: int
 ) -> list[tuple[SearchHit, list[int]]]:
     """The results of a page, each with the letters of the page it covers."""
-    needle = prepare_query(query, options)
-    if not needle:
+    needles = _needles(query, options)
+    if not needles:
         return []
     found: dict[tuple[int, int], tuple[SearchHit, list[int]]] = {}
     # A split word is tried joined ("articu-lo" as "articulo") and, for words
     # that really carry a hyphen ("físico-químico"), with the hyphen kept.
-    variants = [False] + ([True] if "-" in needle and text.split_hyphens else [])
-    for keep_split_hyphens in variants:
+    variants = [(needles[0], False)]
+    if "-" in needles[0] and text.split_hyphens:
+        variants.append((needles[0], True))
+    variants += [(needle, False) for needle in needles[1:]]
+    for needle, keep_split_hyphens in variants:
         stream, source = _stream(text, options.exact, keep_split_hyphens)
         for start, end in _find_spans(stream, needle, options.whole_word):
             letters = [letter for letter in source[start:end] if letter >= 0]
@@ -323,45 +345,81 @@ def _find(
     return [found[key] for key in sorted(found)]
 
 
-def _line_keys(text: PageText) -> list[tuple[str, float]]:
-    """For every line: what it says without numbers, and its height on the page.
+def _line_keys(text: PageText) -> list[tuple[str, float, tuple[int, ...]]]:
+    """For every line: what it says without numbers, its height on the page and
+    the numbers it carries.
 
     Without numbers, "Página 4" and "Página 5" say the same.
     """
     if text._line_keys is None:
         keys = []
         for start, stop in text.line_spans():
-            words = normalize_for_search(text.chars[start:stop])
-            words = "".join(" " if char.isdigit() else char for char in words)
-            keys.append((" ".join(words.split()), text.boxes[4 * start + 1]))
+            line = normalize_for_search(text.chars[start:stop])
+            words = "".join(" " if char.isdigit() else char for char in line)
+            numbers = tuple(int(number) for number in re.findall(r"\d{1,9}", line))
+            keys.append((" ".join(words.split()), text.boxes[4 * start + 1], numbers))
         text._line_keys = keys
     return text._line_keys
 
 
-def _reading_lines(text: PageText, other: PageText) -> list[tuple[int, int]]:
+def _reading_lines(text: PageText, others: list[tuple[PageText, int]]) -> list[tuple[int, int]]:
     """Lines of ``text`` that are not headers, footers or page numbers.
 
-    Those are recognised because the other page has the same words at the same height.
+    ``others`` are neighbouring pages, each with how many pages after ``text``
+    it comes (-1: the one before). A line is a header or footer when every
+    neighbour has the same words at the same height, and its numbers are the
+    same or count pages ("Página 4", "Página 5"). So "Artículo 21" and
+    "Artículo 27" opening two pages in a row are text, not headers.
     """
-    elsewhere: dict[str, list[float]] = {}
-    for key, top in _line_keys(other):
-        elsewhere.setdefault(key, []).append(top)
+    elsewhere = []
+    for other, distance in others:
+        places: dict[str, list[tuple[float, tuple[int, ...]]]] = {}
+        for key, top, numbers in _line_keys(other):
+            places.setdefault(key, []).append((top, numbers))
+        elsewhere.append((places, distance))
+
+    def same_line(top, numbers, there, their_numbers, distance) -> bool:
+        if abs(top - there) > _SAME_HEIGHT_POINTS or len(numbers) != len(their_numbers):
+            return False
+        return all(b - a in (0, distance) for a, b in zip(numbers, their_numbers, strict=True))
+
     kept = []
-    for span, (key, top) in zip(text.line_spans(), _line_keys(text), strict=True):
-        if not any(abs(top - there) <= _SAME_HEIGHT_POINTS for there in elsewhere.get(key, ())):
+    for span, (key, top, numbers) in zip(text.line_spans(), _line_keys(text), strict=True):
+        repeated = all(
+            any(same_line(top, numbers, *place, distance) for place in places.get(key, ()))
+            for places, distance in elsewhere
+        )
+        if not repeated:
             kept.append(span)
     return kept
 
 
-def _boundary(first: PageText, second: PageText) -> tuple[PageText, int] | None:
+def _boundary(
+    first: PageText,
+    second: PageText,
+    line_count: int,
+    reading_only: bool,
+    before: PageText | None = None,
+) -> tuple[PageText, int] | None:
     """A small page made of the last lines of ``first`` and the first of ``second``.
 
     Returns it with the position of the first letter that belongs to ``second``.
+    With ``reading_only``, headers, footers and page numbers are left out.
     """
-    if first._boundary is not None and first._boundary[0] is second:
-        return first._boundary[1]
-    tail = _reading_lines(first, second)[-BOUNDARY_LINES:]
-    head = _reading_lines(second, first)[:BOUNDARY_LINES]
+    if first._boundary is None or first._boundary[0] is not second:
+        first._boundary = (second, {})
+    made_before = first._boundary[1]
+    key = (line_count, reading_only, id(before))
+    if key in made_before:
+        return made_before[key]
+    if reading_only:
+        known = before is not None and len(before) > 0
+        tail = _reading_lines(first, [(second, 1)] + ([(before, -1)] if known else []))
+        head = _reading_lines(second, [(first, -1)] + ([(before, -2)] if known else []))
+        tail, head = tail[-line_count:], head[:line_count]
+    else:
+        tail = first.line_spans()[-line_count:]
+        head = second.line_spans()[:line_count]
     made = None
     if tail and head:
         chars: list[str] = []
@@ -376,8 +434,16 @@ def _boundary(first: PageText, second: PageText) -> tuple[PageText, int] | None:
         joint = PageText("".join(chars), boxes, lines)
         _mark_split_hyphens(joint)
         made = (joint, sum(stop - start for start, stop in tail))
-    first._boundary = (second, made)
+    if len(made_before) >= MAX_BOUNDARIES_KEPT:
+        made_before.clear()
+    made_before[key] = made
     return made
+
+
+def _boundary_lines(needle: str) -> int:
+    """How many lines of each page a phrase of this length can reach."""
+    wanted = len(needle) // SHORT_LINE_CHARS + 2
+    return max(BOUNDARY_LINES, min(wanted, MAX_BOUNDARY_LINES))
 
 
 def find_across_pages(
@@ -386,35 +452,50 @@ def find_across_pages(
     query: str,
     options: SearchOptions = DEFAULT_OPTIONS,
     page: int = 0,
+    before: PageText | None = None,
 ) -> list[SearchHit]:
     """Results that start at the end of ``first`` (page ``page``) and end on ``second``.
 
     Covers a phrase that goes on to the next page and a word split by a hyphen
-    at the very end of a page. Headers and footers in between are skipped.
+    at the very end of a page. Headers and footers in between are skipped; a
+    long phrase copied from the document with them in the middle is found too.
+    ``before`` is the page before ``first``, if there is one: it helps to tell
+    headers and footers from the text.
     """
-    if not len(first) or not len(second) or not prepare_query(query, options):
+    needle = prepare_query(query, options)
+    if not len(first) or not len(second) or not needle:
         return []
-    boundary = _boundary(first, second)
-    if boundary is None:
-        return []
-    joint, seam = boundary  # seam: first letter of the second page
-
-    hits = []
-    for hit, letters in _find(joint, query, options, page):
-        if not (letters[0] < seam <= letters[-1]):
-            continue  # entirely on one page: the search of that page already has it
-        visible = [n for n in letters if not joint.chars[n].isspace()]
-        hits.append(
-            SearchHit(
-                page=page,
-                rects=_line_rects(joint, [n for n in visible if n < seam]),
-                before=hit.before,
-                match=hit.match,
-                after=hit.after,
-                next_rects=_line_rects(joint, [n for n in visible if n >= seam]),
+    line_count = _boundary_lines(needle)
+    hits: dict[tuple, SearchHit] = {}
+    # Only a long phrase can be a copy that carries the header and footer along.
+    ways = (True, False) if len(needle) >= PASTED_PHRASE_CHARS else (True,)
+    for reading_only in ways:
+        boundary = _boundary(first, second, line_count, reading_only, before)
+        if boundary is None:
+            continue
+        joint, seam = boundary  # seam: first letter of the second page
+        for hit, letters in _find(joint, query, options, page):
+            if not (letters[0] < seam <= letters[-1]):
+                continue  # entirely on one page: the search of that page already has it
+            visible = [n for n in letters if not joint.chars[n].isspace()]
+            rects = _line_rects(joint, [n for n in visible if n < seam])
+            next_rects = _line_rects(joint, [n for n in visible if n >= seam])
+            if not rects or not next_rects:
+                continue
+            # The same place found both ways counts once.
+            where = (rects[0], next_rects[-1])
+            hits.setdefault(
+                where,
+                SearchHit(
+                    page=page,
+                    rects=rects,
+                    before=hit.before,
+                    match=hit.match,
+                    after=hit.after,
+                    next_rects=next_rects,
+                ),
             )
-        )
-    return hits
+    return list(hits.values())
 
 
 def search_document(doc, query: str, options: SearchOptions = DEFAULT_OPTIONS):
@@ -423,10 +504,11 @@ def search_document(doc, query: str, options: SearchOptions = DEFAULT_OPTIONS):
     Results that go on to the next page come with the page where they start.
     """
     following = read_page_text(doc[0]) if doc.page_count else None
+    text = None
     for number in range(doc.page_count):
-        text = following
+        before, text = text, following
         hits = find_in_page(text, query, options, number)
         if number + 1 < doc.page_count:
             following = read_page_text(doc[number + 1])
-            hits += find_across_pages(text, following, query, options, number)
+            hits += find_across_pages(text, following, query, options, number, before)
         yield number, hits
