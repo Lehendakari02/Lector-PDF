@@ -139,11 +139,12 @@ def test_a_click_or_escape_removes_the_selection(opened):
 def test_select_all_and_copy_takes_every_page(opened, wait_until):
     view = opened("texto-dificil.pdf")
     view.select_all()
-    assert view.selection() == ((0, 0), (1, END_OF_PAGE))
+    assert view.selection() == ((0, 0), (2, END_OF_PAGE))
     text = copied(view, wait_until)
     assert text.startswith("Temario de prueba")
     assert "La oficina resolverá el conflicto con eficacia." in text
-    assert text.rstrip().endswith("Página 2")
+    assert "d\u2019Hondt" in text  # copied as the document has it, not simplified
+    assert text.rstrip().endswith("Página 3")
 
 
 def test_ctrl_c_and_ctrl_a_work_on_the_document(window, opened, wait_until):

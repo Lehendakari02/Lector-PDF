@@ -19,6 +19,7 @@ import secrets
 import sys
 import tempfile
 import threading
+import time
 from collections.abc import Callable
 from multiprocessing.connection import Client, Connection, Listener
 from pathlib import Path
@@ -27,6 +28,9 @@ from app.core.paths import data_dir
 
 KEY_FILE_NAME = "instancia.clave"
 ANSWER_SECONDS = 5.0
+KEY_READ_TRIES = 50
+MAX_FAILED_ACCEPTS = 200  # in a row: the listener itself is broken
+TAKE_OVER_SECONDS = 3.0  # how long a copy insists on handing over its files
 _STOP = "stop"
 _OPEN = "open"
 
@@ -45,25 +49,40 @@ def default_address(folder: Path | None = None) -> str:
 
 
 def load_key(folder: Path | None = None) -> bytes:
-    """The secret shared by the copies of the program; created the first time."""
+    """The secret shared by the copies of the program; created the first time.
+
+    Several copies may start at the same instant the very first time: only one
+    of them creates the file, and the others read what it wrote.
+    """
     folder = folder if folder is not None else data_dir()
     file = folder / KEY_FILE_NAME
+    key = secrets.token_bytes(32)
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        handle = os.open(file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        # Another copy may be writing it right now: give it a moment.
+        for _ in range(KEY_READ_TRIES):
+            stored = _stored_key(file)
+            if stored:
+                return stored
+            time.sleep(0.02)
+        with contextlib.suppress(OSError):  # a damaged file: start again
+            file.write_bytes(key)
+    except OSError:
+        pass  # a folder that cannot be written: this copy works alone
+    else:
+        with os.fdopen(handle, "wb") as out:
+            out.write(key)
+    return _stored_key(file) or key
+
+
+def _stored_key(file: Path) -> bytes:
     with contextlib.suppress(OSError):
         key = file.read_bytes()
         if len(key) >= 16:
             return key
-    key = secrets.token_bytes(32)
-    with contextlib.suppress(OSError):
-        folder.mkdir(parents=True, exist_ok=True)
-        file.write_bytes(key)
-        with contextlib.suppress(OSError):
-            file.chmod(0o600)
-    # If the file could not be written, read back whatever another copy wrote.
-    with contextlib.suppress(OSError):
-        stored = file.read_bytes()
-        if len(stored) >= 16:
-            return stored
-    return key
+    return b""
 
 
 def _allow_to_come_forward(process_id: int) -> None:
@@ -109,6 +128,59 @@ def send_to_running_copy(
         return False
 
 
+@contextlib.contextmanager
+def _decision_lock(address: str):
+    """Only one copy at a time decides whether a socket file is abandoned."""
+    import fcntl
+
+    with open(address + ".lock", "w") as lock:  # noqa: PTH123 (a plain lock file)
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+def _somebody_listens(address: str) -> bool:
+    """True if a program accepts connections on the socket file ``address``."""
+    import socket
+
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as probe:
+        probe.settimeout(1.0)
+        try:
+            probe.connect(address)
+        except OSError:
+            return False
+    return True
+
+
+def become_main_copy(
+    server: "InstanceServer",
+    files: list[str],
+    seconds: float = TAKE_OVER_SECONDS,
+    pause: float = 0.15,
+) -> bool:
+    """Decide whether this copy is the main one. False: another one took the files.
+
+    Meant to be called before anything slow (building the window): the first
+    copy starts to listen at once, so the ones started in the same instant find
+    it. A copy that cannot listen because another one already does hands over
+    its files, trying for a moment because the other may still be starting. If
+    nobody takes them, this copy carries on as the main one, without listening.
+    """
+    if send_to_running_copy(files, server.address, server.key):
+        return False
+    deadline = time.monotonic() + seconds
+    while True:
+        if server.start():
+            return True
+        if send_to_running_copy(files, server.address, server.key):
+            return False
+        if time.monotonic() >= deadline:
+            return True
+        time.sleep(pause)
+
+
 class InstanceServer:
     """Listens for other copies of the program and passes on their files.
 
@@ -127,6 +199,15 @@ class InstanceServer:
         self._on_files = on_files
         self._listener: Listener | None = None
         self._thread: threading.Thread | None = None
+        self._stopping = False
+
+    @property
+    def key(self) -> bytes:
+        return self._key
+
+    @property
+    def listening(self) -> bool:
+        return self._thread is not None
 
     def start(self) -> bool:
         """Begin to listen. False if it was not possible (the program works anyway)."""
@@ -134,29 +215,44 @@ class InstanceServer:
             self._listener = self._listen()
         except OSError:
             return False
-        self._thread = threading.Thread(target=self._serve, name="single-instance", daemon=True)
-        self._thread.start()
+        self._start_serving()
         return True
 
+    def _start_serving(self) -> None:
+        self._stopping = False
+        self._thread = threading.Thread(target=self._serve, name="single-instance", daemon=True)
+        self._thread.start()
+
     def _listen(self) -> Listener:
-        try:
+        if sys.platform == "win32":
+            # A named pipe has one owner: a second listener is refused by Windows.
             return Listener(self.address, authkey=self._key)
-        except OSError:
-            if sys.platform == "win32" or not os.path.exists(self.address):
-                raise
-        # A socket file left behind by a copy that ended badly: nobody answers there.
-        os.unlink(self.address)
-        return Listener(self.address, authkey=self._key)
+        # A socket file can be left behind by a copy that ended badly. It is only
+        # removed when nobody answers there, and one copy at a time decides that.
+        with _decision_lock(self.address):
+            try:
+                return Listener(self.address, authkey=self._key)
+            except OSError:
+                if not os.path.exists(self.address) or _somebody_listens(self.address):
+                    raise
+            os.unlink(self.address)
+            return Listener(self.address, authkey=self._key)
 
     def _serve(self) -> None:
         listener = self._listener
+        failures = 0
         while listener is not None:
             try:
                 connection = listener.accept()
-            except OSError:
-                break  # the listener was closed
-            except Exception:  # noqa: S112 (a stranger without the secret)
+            except Exception:
+                # A stranger without the secret, or one that hung up at once, must
+                # not stop the listening; a closed or broken listener does.
+                failures += 1
+                if self._stopping or failures > MAX_FAILED_ACCEPTS:
+                    break
+                time.sleep(0.01)
                 continue
+            failures = 0
             with connection:
                 try:
                     _send(connection, {"pid": os.getpid()})
@@ -182,6 +278,7 @@ class InstanceServer:
                 _receive(connection)
                 _send(connection, {"what": _STOP})
         except Exception:
+            self._stopping = True
             with contextlib.suppress(Exception):
                 if self._listener is not None:
                     self._listener.close()

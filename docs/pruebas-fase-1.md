@@ -216,3 +216,15 @@ versiones publicadas (por ejemplo la 0.1.0 instalada y la 0.1.1 recién publicad
 5. Ctrl+0 o el botón "Tamaño inicial" devuelven el documento al tamaño con el que
    se abrió.
 6. Comprueba que el documento ocupa claramente más pantalla que antes.
+
+## Tarea 1.15 – Arreglos de la revisión
+
+1. Con el programa cerrado, selecciona tres PDFs en el Explorador y pulsa Intro
+   (o clic derecho → Abrir): tiene que quedar **una sola ventana** con los tres
+   en pestañas. Repítelo con el programa ya abierto.
+2. En un PDF que tenga comillas “así” o «así», busca la frase con las comillas
+   del teclado ("así"): la encuentra. Lo mismo con un apóstrofo (d'Hondt) y con
+   una raya o guion largo (coste-beneficio).
+3. En un portátil, pellizca con dos dedos en el panel táctil: el tamaño cambia
+   poco a poco, sin saltos, y lo que hay bajo el puntero se queda en su sitio.
+   Con ratón, Ctrl + rueda: un paso por cada muesca.

@@ -15,7 +15,7 @@ from app.core.interface_size import NORMAL_SIZE, apply_before_start
 from app.core.paths import data_dir, program_dir
 from app.core.restart import relaunch, relaunch_environment
 from app.core.settings import Settings
-from app.core.single_instance import InstanceServer, send_to_running_copy
+from app.core.single_instance import InstanceServer, become_main_copy
 from app.core.updates import (
     APPLY_FLAG,
     NO_START_FLAG,
@@ -98,11 +98,32 @@ def check_ocr(source: str, expected_word: str) -> int:
 class _OtherCopies(QObject):
     """Brings to the window the files another copy of the program was asked to open.
 
-    The listening happens in a background thread; the signal carries the files
+    The listening happens in a background thread and starts before the window
+    exists: what arrives meanwhile waits here. The signal carries the files
     safely to the thread of the interface.
     """
 
     files_arrived = Signal(list)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._lock = threading.Lock()
+        self._waiting: list[list[str]] | None = []
+
+    def deliver(self, files: list[str]) -> None:
+        """Called from the listening thread every time another copy starts."""
+        with self._lock:
+            if self._waiting is not None:
+                self._waiting.append(files)
+                return
+        self.files_arrived.emit(files)
+
+    def window_ready(self) -> None:
+        """From now on the files go straight to the window; first, the ones waiting."""
+        with self._lock:
+            waiting, self._waiting = self._waiting or [], None
+        for files in waiting:
+            self.files_arrived.emit(files)
 
 
 def check_print(source: str, output: str) -> int:
@@ -184,8 +205,14 @@ def main(argv: list[str] | None = None) -> int:
     # A file given on the command line ("Abrir con…", double click) is opened.
     files = [arg for arg in args[1:] if not arg.startswith("-")]
     # If the program is already open, its window opens the files in new tabs.
-    if not autoclose and QApplication.instance() is None and send_to_running_copy(files):
-        return 0
+    # Which copy is the main one is decided now, before anything slow, so that
+    # several copies started at once (several PDFs opened together) end in one.
+    other_copies = listening = None
+    if not autoclose and QApplication.instance() is None:
+        other_copies = _OtherCopies()
+        listening = InstanceServer(other_copies.deliver)
+        if not become_main_copy(listening, files):
+            return 0
 
     # The size of the interface must be known before the application exists.
     settings = Settings()
@@ -204,13 +231,6 @@ def main(argv: list[str] | None = None) -> int:
     window.reporter.install(window)
     window.show()
 
-    other_copies = _OtherCopies()
-    other_copies.files_arrived.connect(window.open_from_another_copy)
-    listening = None
-    if not autoclose:
-        listening = InstanceServer(other_copies.files_arrived.emit)
-        listening.start()
-
     if autoclose:
         window.show_problem_dialogs = False
     opened = False
@@ -218,6 +238,9 @@ def main(argv: list[str] | None = None) -> int:
         window.restore_session()  # the tabs of the last time, each on its page
     for file in files:  # each one in its own tab
         opened = window.open_document(file) or opened
+    if other_copies is not None:
+        other_copies.files_arrived.connect(window.open_from_another_copy)
+        other_copies.window_ready()  # what other copies brought while starting
     if not autoclose:
         window.warm_up()  # the next document will open without waiting
         threading.Thread(target=clean_leftovers, args=(data_dir(),), daemon=True).start()

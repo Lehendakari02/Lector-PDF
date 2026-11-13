@@ -32,12 +32,12 @@ def fills_the_width(view) -> bool:
     return abs(view._widths[0] - available) <= 1
 
 
-def wheel(view, steps: int) -> None:
+def wheel(view, steps: float, at: tuple[float, float] = (100, 100)) -> None:
     event = QWheelEvent(
-        QPointF(100, 100),
-        QPointF(100, 100),
+        QPointF(*at),
+        QPointF(*at),
         QPoint(0, 0),
-        QPoint(0, 120 * steps),
+        QPoint(0, round(120 * steps)),
         Qt.MouseButton.NoButton,
         Qt.KeyboardModifier.ControlModifier,
         Qt.ScrollPhase.NoScrollPhase,
@@ -131,6 +131,40 @@ def test_ctrl_wheel_zooms(view, sample, wait_until):
     assert view.zoom > before
     wheel(view, -1)
     assert view.zoom == pytest.approx(before)
+
+
+def test_ctrl_wheel_in_small_pieces_adds_up_to_one_step(view, sample, wait_until):
+    """A touchpad pinch or a fine wheel sends many small movements, not whole notches."""
+    show(view, sample("boe.pdf"), wait_until)
+    before = view.zoom
+    for _ in range(8):
+        wheel(view, 1 / 8)  # eight movements of 15: one notch in all
+    assert view.zoom == pytest.approx(before * pdf_view.ZOOM_STEP, rel=0.01)
+    for _ in range(8):
+        wheel(view, -1 / 8)
+    assert view.zoom == pytest.approx(before, rel=0.01)
+
+
+def test_ctrl_wheel_keeps_still_what_is_under_the_pointer(view, sample, wait_until):
+    show(view, sample("boe.pdf"), wait_until)
+    view.verticalScrollBar().setValue(view._to_units(view._tops[2] + view._heights[2] // 3))
+    at = (view.viewport().width() * 0.7, view.viewport().height() * 0.6)
+
+    def under_the_pointer():
+        x, y = view._to_pixels(at[0]), view._to_pixels(at[1])
+        height = view._scroll_y() + y
+        page = max(i for i, top in enumerate(view._tops) if top <= height)
+        down = (height - view._tops[page]) / view._heights[page]
+        across = (x - view._page_left(page)) / view._widths[page]
+        return page, down, across
+
+    before = under_the_pointer()
+    for steps in (1, 1, 0.3, -2):
+        wheel(view, steps, at)
+        page, down, across = under_the_pointer()
+        assert page == before[0]
+        assert down == pytest.approx(before[1], abs=0.01)
+        assert across == pytest.approx(before[2], abs=0.01)
 
 
 def test_keyboard_moves_through_the_document(view, sample, wait_until, qt_app):

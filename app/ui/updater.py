@@ -86,7 +86,7 @@ class Updater(QObject):
 
     def _check(self, by_hand: bool) -> None:
         try:
-            release = updates.newer_release(self.current_version, self._opener)
+            release = updates.newer_release(self.current_version, self._opener, self.portable)
         except UpdateError:
             if by_hand:
                 self.nothing_new.emit(False)

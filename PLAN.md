@@ -156,6 +156,7 @@ y no un único `.exe`: la carpeta abre en menos de 1 segundo y el `.exe` único 
 | 1.12 | Imprimir | Imprimo unas páginas concretas | ✅ |
 | 1.13 | Aviso de nuevas versiones y **actualizar con un clic** (desactivable) | Si hay versión nueva en GitHub, me avisa; pulso "Actualizar ahora", se descarga, se instala y el programa se reinicia ya actualizado, sin perder ajustes ni pestañas (necesita el repositorio público) | ✅ |
 | 1.14 | Versión 0.1 (instalador y portátil) y repositorio público | Lo instalo, o lo abro sin instalar, y funciona todo lo anterior | ⬜ |
+| 1.15 | Arreglos de la revisión del código de la Fase 1 | Abro tres PDFs a la vez y acaban en una sola ventana; busco con comillas y guiones del teclado; el zoom con el panel táctil va suave | ✅ |
 
 Notas de la Fase 1:
 - 1.1 quedó hecha con las pruebas de la Fase 0 (scroll continuo, páginas dibujadas
@@ -351,6 +352,35 @@ Notas de la Fase 1:
   - Letra pequeña: la fila de modos mide 34 puntos de alto, algo menos que los 40
     recomendados para el dedo; los botones de herramientas siguen en 40 o más. Se
     revisará con una pantalla táctil de verdad en la tarea 2.11.
+- **1.15, arreglos de la revisión del código de la Fase 1 (13/11/2026).** La lista
+  completa está en `revision-codigo-fase-1.md` (archivos del proyecto). Hecho:
+  - **Varios PDFs abiertos a la vez acaban en una sola ventana.** Antes, si se
+    abrían tres de golpe, podían quedar dos ventanas, cada una guardando sus
+    pestañas por su cuenta. Ahora el programa decide quién es la copia principal
+    nada más arrancar, antes de crear la ventana; las demás le pasan sus archivos
+    (insisten hasta 3 segundos) y terminan. Hay una prueba que lanza tres copias
+    de verdad a la vez. De paso: alguien que se conecta y cuelga ya no deja a la
+    copia principal sin escuchar.
+  - **Buscador con comillas, apóstrofos y guiones tipográficos.** Los documentos
+    traen “ ” « » ’ – — y el teclado escribe " ' -: ahora se encuentran igual
+    ("d'hondt" encuentra «d’Hondt», "coste-beneficio" encuentra «coste–beneficio»).
+    Con "Coincidencia exacta" se siguen distinguiendo.
+  - **Zoom con Ctrl + rueda o pellizco del panel táctil:** sigue la cantidad
+    movida (antes cada aviso pequeño era un paso entero y el zoom se disparaba) y
+    deja quieto lo que hay bajo el puntero. Falta verlo en un portátil real.
+  - **No se avisa de una versión nueva hasta que tiene su archivo** (instalador o
+    portátil, según el caso) **y su huella.** GitHub tarda unos minutos en
+    adjuntarlos después de publicar.
+  - **Queda para la Fase 2** (cada cosa en la tarea que le toca):
+    - con el diario (2.5): guardar la página por la que se va también mientras se
+      lee, no solo al cerrar; no perder pestañas si el programa se cierra mientras
+      las restaura, ni olvidar las de un USB sin enchufar; si `ajustes.json` no se
+      puede leer una vez, no pisarlo;
+    - tarea nueva de memoria: "dormir" las pestañas que llevan rato sin verse y un
+      tope común de memoria (15 o 20 temas abiertos pasan de 1 GB);
+    - **decisión de Julen pendiente:** cuándo hacer que NVDA lea el texto del
+      documento (hoy lee menús y botones, no las páginas);
+    - detalles menores B1 a B9 de la revisión.
 
 ## Fase 2A – Anotar y guardado
 | # | Tarea | Terminado cuando… | Estado |

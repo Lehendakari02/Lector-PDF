@@ -35,6 +35,7 @@ SIDE_MARGIN = 16
 MIN_ZOOM = 0.2  # screen pixels per point, before the screen scale
 MAX_ZOOM = 8.0
 ZOOM_STEP = 1.2
+WHEEL_NOTCH = 120  # what one notch of a mouse wheel sends
 # A document opens fitted to the width, but never bigger than this (1.0 = 100 %):
 # on a wide screen the full width makes the letters far too big to read at ease.
 COMFORTABLE_ZOOM = 1.25
@@ -344,6 +345,31 @@ class PdfView(QAbstractScrollArea):
 
     def zoom_out(self) -> None:
         self.set_zoom(self.zoom / ZOOM_STEP)
+
+    def zoom_around(self, factor: float, position) -> None:
+        """Multiply the zoom by ``factor`` keeping still what is under ``position``.
+
+        ``position`` is a point of the visible area (where the pointer is): the
+        spot of the page under it stays under it, like in a map.
+        """
+        x, y = self._to_pixels(position.x()), self._to_pixels(position.y())
+        anchor = None
+        if self._tops:
+            height = self._scroll_y() + y
+            page = max(0, bisect.bisect_right(self._tops, height) - 1)
+            if self._heights[page] and self._widths[page]:
+                down = (height - self._tops[page]) / self._heights[page]
+                across = (x - self._page_left(page)) / self._widths[page]
+                anchor = (page, down, across)
+        self.set_zoom(self.zoom * factor)
+        if anchor is None or anchor[0] >= len(self._tops):
+            return
+        page, down, across = anchor
+        top = self._tops[page] + down * self._heights[page] - y
+        self.verticalScrollBar().setValue(self._to_units(top))
+        width = max(self._to_pixels(self.viewport().width()), self._content_width)
+        left = (width - self._widths[page]) // 2 + across * self._widths[page] - x
+        self.horizontalScrollBar().setValue(self._to_units(left))
 
     @property
     def rotation(self) -> int:
@@ -908,10 +934,12 @@ class PdfView(QAbstractScrollArea):
 
     def wheelEvent(self, event) -> None:  # noqa: N802
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            if event.angleDelta().y() > 0:
-                self.zoom_in()
-            elif event.angleDelta().y() < 0:
-                self.zoom_out()
+            # A mouse wheel sends whole notches (120); a touchpad pinch and fine
+            # wheels send many small movements. The zoom follows the amount moved,
+            # so a notch is one step whether it arrives whole or in pieces.
+            moved = event.angleDelta().y()
+            if moved:
+                self.zoom_around(ZOOM_STEP ** (moved / WHEEL_NOTCH), event.position())
             event.accept()
             return
         super().wheelEvent(event)
