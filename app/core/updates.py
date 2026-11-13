@@ -85,6 +85,16 @@ class Release:
         suffix = PORTABLE_SUFFIX if portable else INSTALLER_SUFFIX
         return next((a for name, a in self.assets.items() if name.endswith(suffix)), None)
 
+    def ready_for(self, portable: bool) -> bool:
+        """True once the file for this kind of installation and its fingerprint exist.
+
+        A version is published first and its files are attached some minutes
+        later (or never, if building them fails): until then there is nothing
+        to update with.
+        """
+        asset = self.asset(portable)
+        return asset is not None and bool(asset.sha256 or CHECKSUMS_NAME in self.assets)
+
 
 # ---- versions ----------------------------------------------------------------
 
@@ -156,10 +166,18 @@ def fetch_latest(opener: Opener = _open) -> Release | None:
     return parse_release(data)
 
 
-def newer_release(current: str, opener: Opener = _open) -> Release | None:
-    """The latest version, if it is later than ``current``; otherwise None."""
+def newer_release(
+    current: str, opener: Opener = _open, portable: bool | None = None
+) -> Release | None:
+    """The latest version, if it is later than ``current``; otherwise None.
+
+    With ``portable`` given (the kind of installation asking), a version whose
+    files are not published yet does not count: see ``Release.ready_for``.
+    """
     release = fetch_latest(opener)
     if release is None or not is_newer(release.version, current):
+        return None
+    if portable is not None and not release.ready_for(portable):
         return None
     return release
 

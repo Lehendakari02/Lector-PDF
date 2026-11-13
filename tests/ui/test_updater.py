@@ -115,6 +115,18 @@ def test_a_newer_version_is_announced(make_updater, qt_app):
     assert updater.release is heard.found[0]
 
 
+def test_a_version_still_without_files_is_not_announced(make_updater, qt_app):
+    github = FakeGitHub()
+    github.latest["assets"] = []  # just published: the files are attached later
+    updater, heard = make_updater(github)
+    updater.check()
+    finish(updater, qt_app)
+    assert heard.found == []
+    updater.check(by_hand=True)
+    finish(updater, qt_app)
+    assert heard.found == [] and heard.nothing == [True]
+
+
 def test_nothing_is_said_when_starting_with_the_latest_version(make_updater, qt_app):
     updater, heard = make_updater(current="0.2.0")
     updater.check()

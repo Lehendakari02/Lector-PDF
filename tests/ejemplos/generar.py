@@ -285,6 +285,11 @@ def make_tricky_text() -> Path:
             "ciones en el plazo de diez días. Transcurrido el plazo, el órgano",
             "competente dictará resolución.",
         ],
+        [  # typographic quotes, apostrophes and dashes: the keyboard writes ' " -
+            "Dijo \u201cbuenos días\u201d y \u00abhasta luego\u00bb al salir.",
+            "El análisis coste\u2013beneficio usa el método d\u2019Hondt.",
+            "Un coche semi\u2010nuevo con auto\u2011corrección \u2014dicen\u2014 de rumbo.",
+        ],
     ]
     for number, lines in enumerate(pages, start=1):
         page = doc.new_page(width=A4.width, height=A4.height)

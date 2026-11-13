@@ -161,6 +161,26 @@ def test_asking_github_for_the_latest_version():
     assert newer_release("0.3.0", github) is None
 
 
+def test_a_version_without_its_files_yet_is_not_announced():
+    """GitHub publishes the version first and attaches the files minutes later."""
+
+    def latest(assets):
+        data = json.dumps(github_release(assets=assets)).encode()
+        return FakeGitHub({updates.LATEST_URL: data})
+
+    installer = github_asset("Lector-PDF-0.2.0-instalador.exe")
+    portable = github_asset("Lector-PDF-0.2.0-portatil.zip", digest=False)
+    sums = github_asset(updates.CHECKSUMS_NAME, digest=False)
+    assert newer_release("0.1.0", latest([]), portable=False) is None
+    assert newer_release("0.1.0", latest([]), portable=True) is None
+    # Only the installer is there: the installed program is told, the portable not yet.
+    assert newer_release("0.1.0", latest([installer]), portable=False).version == "0.2.0"
+    assert newer_release("0.1.0", latest([installer]), portable=True) is None
+    # The file without a fingerprint to check it against is not enough.
+    assert newer_release("0.1.0", latest([portable]), portable=True) is None
+    assert newer_release("0.1.0", latest([portable, sums]), portable=True).version == "0.2.0"
+
+
 def test_no_published_version_yet_is_not_an_error():
     assert fetch_latest(FakeGitHub({})) is None  # 404: none yet, or the project is private
 

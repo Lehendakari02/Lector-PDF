@@ -247,10 +247,33 @@ def test_accents_written_in_two_pieces(tricky):
     assert matches(tricky[0], "canada") == []
 
 
+def test_keyboard_quotes_and_dashes_find_the_typographic_ones(tricky):
+    """The document says “buenos días”, d’Hondt, coste–beneficio; the keyboard ' " -."""
+    page = tricky[2]
+    assert "\u201c" in page.chars and "\u2019" in page.chars and "\u2013" in page.chars
+    assert "\u2010" in page.chars and "\u2011" in page.chars  # the sample keeps its traps
+    assert matches(page, '"buenos dias"') == ["\u201cbuenos días\u201d"]
+    assert matches(page, '"hasta luego"') == ["\u00abhasta luego\u00bb"]
+    assert matches(page, "coste-beneficio") == ["coste\u2013beneficio"]
+    assert matches(page, "d'hondt") == ["d\u2019Hondt"]
+    assert matches(page, "semi-nuevo") == ["semi\u2010nuevo"]
+    assert matches(page, "auto-correccion") == ["auto\u2011corrección"]
+    assert matches(page, "-dicen-") == ["\u2014dicen\u2014"]
+    # Typed (or pasted) with the typographic signs, it is found as well.
+    assert matches(page, "d\u2019Hondt") == ["d\u2019Hondt"]
+    assert matches(page, "coste\u2013beneficio", WHOLE) == ["coste\u2013beneficio"]
+
+
+def test_exact_match_tells_typographic_signs_apart(tricky):
+    page = tricky[2]
+    assert matches(page, "d'Hondt", EXACT) == []
+    assert matches(page, "d\u2019Hondt", EXACT) == ["d\u2019Hondt"]
+
+
 def test_a_phrase_that_goes_on_to_the_next_page(tricky):
     from app.core.search import find_across_pages
 
-    first, second = tricky
+    first, second = tricky[:2]
     # Not on either page alone: the footer and the header are in between.
     assert matches(first, "presentar alegaciones") == []
     assert matches(second, "presentar alegaciones") == []
