@@ -113,6 +113,11 @@ class PdfView(QAbstractScrollArea):
     _text_ready = Signal(int, object)
     _copied = Signal(int, str)
     _crashed = Signal()
+    # A page asked with want_print_pages is ready (RenderedPage), cannot be drawn
+    # (its number) or was lost when the helper restarted (its number: ask again).
+    print_page_ready = Signal(object)
+    print_page_failed = Signal(int)
+    print_page_lost = Signal(int)
     _page_failed = Signal(int, float, str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -174,6 +179,9 @@ class PdfView(QAbstractScrollArea):
             on_thumbnail=self.thumbnail_drawn.emit,
             on_text=self._text_ready.emit,
             on_copied=self._copied.emit,
+            on_print=self.print_page_ready.emit,
+            on_print_failed=self.print_page_failed.emit,
+            on_print_lost=self.print_page_lost.emit,
         )
         self.verticalScrollBar().valueChanged.connect(self._scrolled)
         self.horizontalScrollBar().valueChanged.connect(self._scrolled)
@@ -226,6 +234,20 @@ class PdfView(QAbstractScrollArea):
             return
         self._outline = entries
         self.outline_changed.emit()
+
+    def page_sizes(self) -> list[PageSize]:
+        """Sizes of the pages as the document has them (the view's turn not applied)."""
+        return list(self._sizes)
+
+    def want_print_pages(self, pages: list[int], zoom: float) -> None:
+        """Ask for ``pages`` drawn for a printer (an empty list cancels).
+
+        They are drawn as the document is: the turn of the view and the tone of
+        the paper are only for the screen.
+        """
+        if self._document is None:
+            return
+        self.service.want_prints([RenderRequest(page, zoom, 0) for page in pages])
 
     def want_thumbnails(self, pages: list[int], width: int, height: int) -> None:
         """Ask for small pictures of ``pages`` that fit in ``width`` x ``height`` pixels.

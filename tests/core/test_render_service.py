@@ -469,3 +469,77 @@ def test_an_error_in_the_program_does_not_stop_the_pages(sample, monkeypatch):
         assert service.restarts == 0
     finally:
         service.shutdown()
+
+
+# ---- pages for the printer (task 1.12) ----
+
+
+class PrintCollector:
+    def __init__(self):
+        self.printed: list[RenderedPage] = []
+        self.failed: list[int] = []
+        self.lost: list[int] = []
+        self.pages: list[RenderedPage] = []
+        self._changed = threading.Condition()
+        self.service = RenderService(
+            on_page=lambda page: self._add(self.pages, page),
+            on_print=lambda page: self._add(self.printed, page),
+            on_print_failed=lambda page: self._add(self.failed, page),
+            on_print_lost=lambda page: self._add(self.lost, page),
+        )
+
+    def _add(self, where, item):
+        with self._changed:
+            where.append(item)
+            self._changed.notify_all()
+
+    def wait(self, condition):
+        with self._changed:
+            assert self._changed.wait_for(condition, WAIT_SECONDS), "timed out"
+
+
+@pytest.fixture
+def printer():
+    made = PrintCollector()
+    yield made
+    made.service.shutdown()
+
+
+def test_pages_for_the_printer_arrive_apart_from_the_ones_on_screen(printer, sample):
+    printer.service.open(sample("boe.pdf"))
+    printer.service.want([RenderRequest(0, 0.5)])
+    printer.service.want_prints([RenderRequest(3, 2.0), RenderRequest(4, 2.0)])
+    printer.wait(lambda: len(printer.printed) == 2 and printer.pages)
+    assert [page.page for page in printer.printed] == [3, 4]
+    assert [page.page for page in printer.pages] == [0]
+    assert printer.printed[0].zoom == 2.0
+    assert len(printer.printed[0].samples) == printer.printed[0].stride * printer.printed[0].height
+
+
+def test_a_page_the_printer_cannot_get_is_reported(printer, sample):
+    printer.service.open(sample("boe.pdf"))
+    printer.service.want_prints([RenderRequest(999, 1.0), RenderRequest(0, 1.0)])
+    printer.wait(lambda: printer.failed and printer.printed)
+    assert printer.failed == [999]
+
+
+def test_printing_survives_a_page_that_kills_the_helper(printer, sample, monkeypatch):
+    monkeypatch.setenv(render_service.TEST_CRASH_PAGES, "1")
+    printer.service.open(sample("boe.pdf"))
+    wanted = [RenderRequest(page, 1.0) for page in range(3)]
+    printer.service.want_prints(wanted)
+    printer.wait(lambda: printer.failed == [1])
+    printer.wait(lambda: printer.lost == [2])  # asked for, never drawn: ask again
+    printer.service.want_prints([RenderRequest(1, 1.0), RenderRequest(2, 1.0)])
+    printer.wait(lambda: {page.page for page in printer.printed} == {0, 2})
+    assert printer.failed == [1, 1]  # the bad page is refused at once the second time
+    assert printer.service.restarts == 1
+
+
+def test_an_empty_list_cancels_the_printing(printer, sample):
+    printer.service.open(sample("largo.pdf"))
+    printer.service.want_prints([RenderRequest(page, 3.0) for page in range(200)])
+    printer.service.want_prints([])
+    printer.service.want([RenderRequest(0, 0.5)])
+    printer.wait(lambda: printer.pages)
+    assert len(printer.printed) < 200

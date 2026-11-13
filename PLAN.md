@@ -153,7 +153,7 @@ y no un único `.exe`: la carpeta abre en menos de 1 segundo y el `.exe` único 
 | 1.9 | Modo oscuro, modo lectura (sepia), tamaño de interfaz | Cambio de modo y se ve bien | ✅ |
 | 1.10 | Abrir con doble clic / "Abrir con" / arrastrar / programa predeterminado | Doble clic en un PDF lo abre en Lector-PDF | ✅ |
 | 1.11 | PDFs con contraseña o dañados | Pide la contraseña; un PDF roto da un aviso y no cierra el programa | ✅ |
-| 1.12 | Imprimir | Imprimo unas páginas concretas | ⬜ |
+| 1.12 | Imprimir | Imprimo unas páginas concretas | ✅ |
 | 1.13 | Aviso de nuevas versiones y **actualizar con un clic** (desactivable) | Si hay versión nueva en GitHub, me avisa; pulso "Actualizar ahora", se descarga, se instala y el programa se reinicia ya actualizado, sin perder ajustes ni pestañas (necesita el repositorio público) | ⬜ |
 | 1.14 | Versión 0.1 (instalador y portátil) y repositorio público | Lo instalo, o lo abro sin instalar, y funciona todo lo anterior | ⬜ |
 
@@ -257,6 +257,21 @@ Notas de la Fase 1:
   (M3). M11 quedó resuelto con el cambio de la 1.7.
   - Pendiente para sus fases: reconocer texto (2B) y firmar (4) en PDFs con
     contraseña siguen sin poder hacerse; lo dicen con un aviso.
+- 1.12: **Imprimir** (botón del modo Leer, Archivo → Imprimir, Ctrl+P) con una
+  ventana propia y sencilla: impresora, páginas (todas, la que se está viendo o
+  las que se escriban, como "1-5, 8, 12-"), copias, tamaño (ajustar al papel o
+  tamaño real), dos caras y blanco y negro. Dice cuántas páginas saldrán y explica
+  qué está mal si las páginas escritas no tienen sentido. Recuerda la impresora y
+  la forma de imprimir; las páginas y las copias no. Cada hoja sale de pie o
+  tumbada según su página. Se imprime en segundo plano, con progreso y "Cancelar",
+  y se puede seguir leyendo. Una página dañada se salta y se avisa al final de
+  cuáles faltan. Se imprime el documento tal cual: ni el giro de la vista ni el
+  papel sepia o noche salen en el papel.
+  - Usa la parte de impresión que ya trae Qt (QtPrintSupport); no añade ninguna
+    dependencia. Las pruebas imprimen de verdad a un archivo PDF y lo comprueban;
+    la creación del programa también lo comprueba con el programa empaquetado.
+  - No comprobado con una impresora real (queda para la sesión de pruebas).
+  - Para la Fase 2: al imprimir, opción de sacar o no las anotaciones.
 - Revisión del código de la Fase 0 (`docs/revision-codigo-fase-0.md`): sus puntos
   se arreglan dentro de la tarea a la que pertenecen:
   - 1.4 buscador: A1, A2, A4, B7 (hechos).

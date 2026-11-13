@@ -87,12 +87,14 @@ jobs:
           "" >> $env:GITHUB_STEP_SUMMARY
           ("Instalador: {0:N0} MB" -f $installer) >> $env:GITHUB_STEP_SUMMARY
 
-      - name: Check the packaged program can sign and recognise text
+      - name: Check the packaged program can sign, recognise text and print
         run: |
           python packaging/run_check.py dist\Lector-PDF\Lector-PDF.exe --check-signing tests\ejemplos\formulario.pdf tests\ejemplos\certificado-prueba.p12 prueba
           if ($LASTEXITCODE -ne 0) { throw "The packaged program cannot sign." }
           python packaging/run_check.py dist\Lector-PDF\Lector-PDF.exe --check-ocr tests\ejemplos\escaneado.pdf Artículo
           if ($LASTEXITCODE -ne 0) { throw "The packaged program cannot recognise text." }
+          python packaging/run_check.py dist\Lector-PDF\Lector-PDF.exe --check-print tests\ejemplos\boe.pdf "$env:RUNNER_TEMP\impreso.pdf"
+          if ($LASTEXITCODE -ne 0) { throw "The packaged program cannot print." }
 
       - name: Check a second start joins the window already open
         run: |

@@ -278,6 +278,13 @@ QCheckBox::indicator:checked {{
     background: {c.accent}; border-color: {c.accent}; image: url("{tick}");
 }}
 
+QSpinBox {{ min-height: 30px; padding: 0 6px; }}
+QRadioButton {{ spacing: 8px; padding: 3px 0; }}
+QProgressBar {{
+    background: {c.hover}; border: none; border-radius: 5px; height: 10px; text-align: center;
+    color: transparent;
+}}
+QProgressBar::chunk {{ background: {c.accent}; border-radius: 5px; }}
 QComboBox {{
     background: {c.surface}; color: {c.text};
     border: 1px solid {c.border}; border-radius: 8px; padding: 6px 10px; min-height: 22px;

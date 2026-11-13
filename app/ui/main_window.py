@@ -4,6 +4,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QEvent, QSize, Qt, QTimer, qVersion
 from PySide6.QtGui import QAction, QActionGroup, QGuiApplication, QKeyEvent, QKeySequence
+from PySide6.QtPrintSupport import QPrinter, QPrinterInfo
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -12,6 +13,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QMessageBox,
+    QProgressDialog,
     QPushButton,
     QSizePolicy,
     QStackedWidget,
@@ -50,6 +52,8 @@ from app.ui.ocr_dialog import OcrResultDialog
 from app.ui.page_box import PageBox
 from app.ui.password_dialog import PasswordDialog
 from app.ui.pdf_view import PdfView
+from app.ui.print_dialog import PrintChoices, PrintDialog
+from app.ui.print_run import PrintRun
 from app.ui.search_panel import SearchPanel
 from app.ui.settings_dialog import SettingsDialog
 from app.ui.side_panel import SidePanel, Tab
@@ -80,6 +84,8 @@ class MainWindow(QMainWindow):
         # How a protected PDF gets its password. Tests put their own answer here.
         self.ask_password = self._ask_password
         self._password_dialogs: bool | None = None  # None: as show_problem_dialogs
+        self._print_run: PrintRun | None = None
+        self._printer: QPrinter | None = None  # kept alive while it prints
         self.setWindowTitle(APP_NAME)
         self.resize(1240, 800)
         self.setAcceptDrops(True)  # a PDF dropped on the window is opened
@@ -168,6 +174,7 @@ class MainWindow(QMainWindow):
             "thumbnails": lambda: self.toggle_side_panel(Tab.THUMBNAILS),
             "outline": lambda: self.toggle_side_panel(Tab.OUTLINE),
             "reading_mode": self.toggle_reading_mode,
+            "print": self.print_document,
         }
         self._mark_pending_features()
 
@@ -302,6 +309,13 @@ class MainWindow(QMainWindow):
             action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
             self.addAction(action)
             file_menu.addAction(action)
+        file_menu.addSeparator()
+        self.print_action = QAction(self.tr("&Imprimir…"), self)
+        self.print_action.setShortcut(QKeySequence(QKeySequence.StandardKey.Print))
+        self.print_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        self.print_action.triggered.connect(lambda _checked=False: self.print_document())
+        self.addAction(self.print_action)
+        file_menu.addAction(self.print_action)
         file_menu.addSeparator()
         self.settings_action = QAction(self.tr("A&justes…"), self)
         self.settings_action.setShortcut(QKeySequence("Ctrl+,"))
@@ -607,6 +621,117 @@ class MainWindow(QMainWindow):
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         dialog.open()
         return dialog
+
+    # ---- printing -------------------------------------------------------
+
+    def print_document(self) -> None:
+        """Ask what to print of the document in front, and print it."""
+        if self.pdf_view.page_count == 0:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return
+        if self._print_run is not None:
+            self.statusBar().showMessage(
+                self.tr("Espera a que termine lo que se está imprimiendo."), STATUS_MESSAGE_MS
+            )
+            return
+        printers = QPrinterInfo.availablePrinterNames()
+        if not printers:
+            self._show_problem(
+                self.tr("No hay ninguna impresora"),
+                self.tr("Windows no tiene ninguna impresora instalada. Añade una y vuelve aquí."),
+            )
+            return
+        dialog = PrintDialog(
+            printers,
+            QPrinterInfo.defaultPrinterName(),
+            self.pdf_view.page_count,
+            max(0, self.pdf_view.current_page),
+            self.settings,
+            self,
+        )
+        try:
+            if dialog.exec() != PrintDialog.DialogCode.Accepted or dialog.choices is None:
+                return
+            choices = dialog.choices
+        finally:
+            dialog.deleteLater()
+        printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+        printer.setPrinterName(choices.printer)
+        self.start_printing(printer, choices)
+
+    def start_printing(self, printer: QPrinter, choices: PrintChoices) -> bool:
+        """Send the chosen pages of the document in front to ``printer``."""
+        page = self.current_document
+        printer.setDocName(page.title)
+        printer.setCopyCount(choices.copies)
+        printer.setDuplex(
+            QPrinter.DuplexMode.DuplexAuto if choices.both_sides else QPrinter.DuplexMode.DuplexNone
+        )
+        printer.setColorMode(
+            QPrinter.ColorMode.GrayScale if choices.grey else QPrinter.ColorMode.Color
+        )
+        run = PrintRun(page.view, printer, choices.pages, choices.scaling, self)
+        progress = QProgressDialog(self)
+        progress.setWindowTitle(self.tr("Imprimiendo"))
+        progress.setLabelText(self.tr("Preparando «{0}»…").format(page.title))
+        progress.setCancelButtonText(self.tr("Cancelar"))
+        progress.setRange(0, run.total)
+        progress.setMinimumDuration(400)  # a short job does not flash a window
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setAutoClose(False)
+        progress.setAutoReset(False)
+        progress.canceled.connect(run.cancel)
+
+        def step(done: int, total: int) -> None:
+            progress.setLabelText(self.tr("Imprimiendo página {0} de {1}…").format(done, total))
+            progress.setValue(done)
+
+        run.progress.connect(step)
+        run.finished.connect(
+            lambda failed, cancelled: self._printing_finished(run, progress, failed, cancelled)
+        )
+        self._print_run, self._printer = run, printer
+        if not run.start():
+            self._print_run = self._printer = None
+            progress.deleteLater()
+            run.deleteLater()
+            self._show_problem(
+                self.tr("No se puede imprimir"),
+                self.tr("La impresora «{0}» no responde. Comprueba que está encendida.").format(
+                    printer.printerName()
+                ),
+            )
+            return False
+        return True
+
+    def _printing_finished(
+        self, run: PrintRun, progress: QProgressDialog, failed: list, cancelled: bool
+    ) -> None:
+        self._print_run = self._printer = None
+        progress.canceled.disconnect(run.cancel)
+        progress.close()
+        progress.deleteLater()
+        run.deleteLater()
+        sent = run.total - len(failed)
+        if cancelled:
+            self.statusBar().showMessage(self.tr("Impresión cancelada."), STATUS_MESSAGE_MS)
+        elif failed:
+            numbers = ", ".join(str(page + 1) for page in failed)
+            self._show_problem(
+                self.tr("Algunas páginas no se han impreso"),
+                self.tr(
+                    "Están dañadas y no se han podido imprimir: {0}. "
+                    "Las demás ({1}) se han enviado a la impresora."
+                ).format(numbers, sent),
+            )
+        elif sent == 1:
+            self.statusBar().showMessage(
+                self.tr("1 página enviada a la impresora."), STATUS_MESSAGE_MS
+            )
+        else:
+            self.statusBar().showMessage(
+                self.tr("{0} páginas enviadas a la impresora.").format(sent), STATUS_MESSAGE_MS
+            )
 
     def restart_program(self) -> None:
         """Close the program and start it again (``main`` starts the new copy)."""
@@ -1224,6 +1349,8 @@ class MainWindow(QMainWindow):
         if self._ocr_job is not None:
             self._ocr_job.cancel()
             self._ocr_job = None
+        if self._print_run is not None:
+            self._print_run.cancel()
         for page in self.documents:
             self._remember_place(page)
         self._save_session()

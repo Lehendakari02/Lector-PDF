@@ -27,6 +27,9 @@ EXIT_SIGNING_FAILED = 4
 # Hidden option of the automatic builds: --check-ocr PDF WORD_IT_MUST_READ
 CHECK_OCR_FLAG = "--check-ocr"
 EXIT_OCR_FAILED = 5
+# Hidden option of the automatic builds: --check-print PDF PDF_FILE_TO_WRITE
+CHECK_PRINT_FLAG = "--check-print"
+EXIT_PRINT_FAILED = 6
 
 
 def check_signing(source: str, certificate_file: str, password: str) -> int:
@@ -88,6 +91,51 @@ class _OtherCopies(QObject):
     files_arrived = Signal(list)
 
 
+def check_print(source: str, output: str) -> int:
+    """Print the first two pages of ``source`` into the PDF file ``output``; 0 if it worked.
+
+    Used by the automatic builds to check that printing works inside the
+    packaged program (no real printer is needed).
+    """
+    from PySide6.QtPrintSupport import QPrinter
+
+    from app.core.document import PdfDocument, read_document_info
+    from app.ui.pdf_view import PdfView
+    from app.ui.print_run import PrintRun
+
+    qt_app = QApplication.instance() or QApplication([])
+    view = PdfView()
+    run = printer = None
+    give_up = QTimer()
+    give_up.setSingleShot(True)
+    give_up.timeout.connect(qt_app.quit)
+    try:
+        view.set_document(PdfDocument(source))
+        printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+        printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
+        printer.setOutputFileName(output)
+        run = PrintRun(view, printer, list(range(min(2, view.page_count))))
+        run.finished.connect(lambda failed, cancelled: qt_app.quit())
+        give_up.start(AUTOCLOSE_TIMEOUT_MS)
+        if not run.start():
+            return EXIT_PRINT_FAILED
+        qt_app.exec()
+        printed_well = not run.running and not run.failed
+        wanted = run.total
+    finally:
+        # Everything that belongs to Qt goes before the application does.
+        give_up.stop()
+        view.service.shutdown()
+        if run is not None:
+            run.cancel()
+        del run, printer, give_up
+        view.close()
+        del view
+    if not printed_well:
+        return EXIT_PRINT_FAILED
+    return 0 if read_document_info(output).page_count == wanted else EXIT_PRINT_FAILED
+
+
 def main(argv: list[str] | None = None) -> int:
     """Start the program and return its exit code."""
     args = list(sys.argv if argv is None else argv)
@@ -96,6 +144,11 @@ def main(argv: list[str] | None = None) -> int:
         if len(values) < 2:
             return EXIT_OCR_FAILED
         return _run_check(lambda: check_ocr(*values[:2]), EXIT_OCR_FAILED)
+    if CHECK_PRINT_FLAG in args:
+        values = args[args.index(CHECK_PRINT_FLAG) + 1 :]
+        if len(values) < 2:
+            return EXIT_PRINT_FAILED
+        return _run_check(lambda: check_print(*values[:2]), EXIT_PRINT_FAILED)
     if CHECK_SIGNING_FLAG in args:
         values = args[args.index(CHECK_SIGNING_FLAG) + 1 :]
         if len(values) < 3:

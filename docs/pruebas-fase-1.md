@@ -148,3 +148,21 @@ Con la versión portátil:
    mismo aviso, sin pestaña vacía.
 7. Si tienes algún PDF con una página estropeada: esa hoja dice que está dañada y
    las demás se leen bien.
+
+## Tarea 1.12 – Imprimir
+
+1. Con un PDF abierto, pulsa Imprimir (modo Leer) o Ctrl+P: sale la ventana con tu
+   impresora de siempre ya elegida.
+2. Elige "La página que estoy viendo" e imprime: sale esa hoja, entera y centrada.
+3. Elige "Estas páginas" y escribe `1-3, 7`: dice "Se imprimirán 4 páginas" y salen
+   esas, en ese orden.
+4. Escribe una página que no existe (por ejemplo 9999) o letras: lo explica y no
+   deja imprimir.
+5. Imprime un documento largo: sale el progreso y puedes seguir leyendo. Pulsa
+   Cancelar a medias: se para.
+6. Prueba "Tamaño real", "Por las dos caras" y "En blanco y negro". Abre Imprimir
+   otra vez: recuerda la impresora y esas opciones.
+7. Un PDF con alguna página apaisada: esa hoja sale tumbada y las demás de pie.
+8. Con el papel en sepia o noche, o la vista girada: en el papel sale el documento
+   normal.
+9. Sin impresora a mano, elige "Microsoft Print to PDF": el PDF que crea se ve bien.
