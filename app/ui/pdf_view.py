@@ -120,6 +120,13 @@ class PdfView(QAbstractScrollArea):
     print_page_failed = Signal(int)
     print_page_lost = Signal(int)
     _page_failed = Signal(int, float, str)
+    # Saving: there are changes not saved yet (or no longer); the document was
+    # saved (the number of the save and the file it lives in now); it could not
+    # be saved (number, one of the kinds of ``app.core.saving``, details).
+    modified_changed = Signal(bool)
+    saved = Signal(int, object)
+    save_failed = Signal(int, str, str)
+    _saved = Signal(int, object)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -183,7 +190,14 @@ class PdfView(QAbstractScrollArea):
             on_print=self.print_page_ready.emit,
             on_print_failed=self.print_page_failed.emit,
             on_print_lost=self.print_page_lost.emit,
+            on_saved=self._saved.emit,
+            on_save_failed=self.save_failed.emit,
         )
+        self._saved.connect(self._document_saved)
+        self.save_failed.connect(self._save_did_not_work)
+        self._changes = 0  # changes made to the document since it was opened
+        self._saved_changes = 0  # how many of them are in the file
+        self._saves: dict[int, int] = {}  # save number -> changes it carries
         self.verticalScrollBar().valueChanged.connect(self._scrolled)
         self.horizontalScrollBar().valueChanged.connect(self._scrolled)
 
@@ -202,10 +216,57 @@ class PdfView(QAbstractScrollArea):
         self.verticalScrollBar().setValue(0)
         self._scrolled()
 
+    # ---- saving ---------------------------------------------------------
+
+    @property
+    def modified(self) -> bool:
+        """True while the document has changes that are not in its file."""
+        return self._changes != self._saved_changes
+
+    @property
+    def saving(self) -> bool:
+        return bool(self._saves)
+
+    def mark_modified(self) -> None:
+        """Called after every change made to the document."""
+        was = self.modified
+        self._changes += 1
+        if not was:
+            self.modified_changed.emit(True)
+
+    def save(self, target: str | Path | None = None) -> int:
+        """Save the document in its file, or in ``target`` ("Save as").
+
+        The answer comes through ``saved`` or ``save_failed`` with the number
+        returned here. After "Save as" the document lives in the new file.
+        """
+        number = self.service.save(target)
+        self._saves[number] = self._changes
+        return number
+
+    def _document_saved(self, number: int, path: object) -> None:
+        was = self.modified
+        carried = self._saves.pop(number, None)
+        if carried is not None:
+            self._saved_changes = max(self._saved_changes, carried)
+        if self._document is not None:
+            self._document.path = Path(path)
+        if was and not self.modified:
+            self.modified_changed.emit(False)
+        self.saved.emit(number, path)
+
+    def _save_did_not_work(self, number: int, _kind: str, _details: str) -> None:
+        self._saves.pop(number, None)
+
     def close_document(self) -> None:
         if self._document is not None:
             self._document.close()
             self.service.close_document()
+        was_modified = self.modified
+        self._changes = self._saved_changes = 0
+        self._saves.clear()
+        if was_modified:
+            self.modified_changed.emit(False)
         self._document = None
         self._sizes = []
         self._cache.clear()
