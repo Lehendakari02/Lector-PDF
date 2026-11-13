@@ -194,37 +194,45 @@ QMenu::separator {{ height: 1px; background: {c.border}; margin: 5px 8px; }}
 
 /* ---- the bar with the modes ---- */
 QToolBar {{ border: none; }}
-QToolBar#modeBar {{ background: {c.window}; padding: 4px 6px 8px 6px; }}
+QToolBar#modeBar {{ background: {c.window}; padding: 3px 6px 4px 6px; }}
 QTabBar#modeTabs {{ background: transparent; }}
 QTabBar#modeTabs::tab {{
     background: transparent; color: {c.muted}; font-weight: 600;
     border: none; border-radius: 9px;
-    padding: 8px 16px 8px 12px; margin: 0 3px 0 0; min-height: 22px;
+    padding: 5px 14px 5px 10px; margin: 0 3px 0 0; min-height: 20px;
 }}
 QTabBar#modeTabs::tab:hover {{ background: {c.hover}; color: {c.text}; }}
 QTabBar#modeTabs::tab:selected {{ background: {c.accent}; color: {c.on_accent}; }}
 QPushButton#finderButton {{
     background: {c.surface}; color: {c.muted};
     border: 1px solid {c.border}; border-radius: 9px;
-    padding: 0 14px 0 12px; text-align: left; min-width: 250px;
+    padding: 0 12px 0 10px; text-align: left;
 }}
+QToolButton#menuButton {{
+    background: transparent; color: {c.text}; font-weight: 600;
+    border: 1px solid transparent; border-radius: 9px; padding: 0 10px 0 8px;
+}}
+QToolButton#menuButton:hover {{ background: {c.hover}; }}
+QToolButton#menuButton:focus {{ border-color: {c.accent}; }}
+QToolButton#menuButton::menu-indicator {{ image: none; }}
+QLineEdit#topSearch {{ border-radius: 9px; padding: 0 8px; min-height: 30px; }}
 QPushButton#finderButton:hover {{ border-color: {c.accent}; color: {c.text}; }}
 
 /* ---- the tools of each mode ---- */
 QToolBar[tools="true"] {{
     background: {c.surface};
     border-top: 1px solid {c.border}; border-bottom: 1px solid {c.border};
-    padding: 4px 8px; spacing: 1px;
+    padding: 1px 8px; spacing: 1px;
 }}
 QToolBar[tools="true"] QToolButton {{
     background: transparent; color: {c.text}; font-size: 9pt;
-    border: 2px solid transparent; border-radius: 8px; padding: 4px 3px 3px 3px;
+    border: 2px solid transparent; border-radius: 8px; padding: 2px 3px 1px 3px;
 }}
 QToolBar[tools="true"] QToolButton[pending="true"] {{ color: {c.muted}; }}
 QToolBar[tools="true"] QToolButton:hover {{ background: {c.hover}; }}
 QToolBar[tools="true"] QToolButton:pressed {{ background: {c.accent_soft}; }}
 QToolBar[tools="true"] QToolButton:focus {{ border-color: {c.accent}; }}
-QToolBar[tools="true"]::separator {{ background: {c.border}; width: 1px; margin: 10px 5px; }}
+QToolBar[tools="true"]::separator {{ background: {c.border}; width: 1px; margin: 8px 5px; }}
 
 /* ---- buttons ---- */
 QPushButton {{
@@ -332,7 +340,8 @@ QToolButton#zoomFigure::menu-indicator {{ image: none; }}
 /* ---- status bar ---- */
 QStatusBar {{ background: {c.window}; color: {c.muted}; border-top: 1px solid {c.border}; }}
 QStatusBar::item {{ border: none; }}
-QStatusBar QLabel {{ color: {c.muted}; padding: 2px 8px; }}
+QStatusBar QLabel {{ color: {c.muted}; padding: 0 8px; }}
+QStatusBar QToolButton#iconButton {{ padding: 2px; }}
 
 /* ---- welcome page ---- */
 QWidget#welcome {{ background: {c.canvas}; }}
@@ -386,7 +395,7 @@ QTabBar#documentTabs::tab {{
     background: transparent; color: {c.muted};
     border: 1px solid transparent; border-bottom: none;
     border-top-left-radius: 8px; border-top-right-radius: 8px;
-    padding: 8px 10px 8px 14px; margin: 4px 2px 0 2px; min-width: 90px; max-width: 260px;
+    padding: 5px 10px 5px 14px; margin: 3px 2px 0 2px; min-width: 90px; max-width: 260px;
 }}
 QTabBar#documentTabs::tab:hover {{ background: {c.hover}; color: {c.text}; }}
 QTabBar#documentTabs::tab:selected {{
@@ -406,7 +415,7 @@ QWidget#searchPanel QListWidget {{ border: none; padding: 0; }}
 QDialog#commandPalette {{
     background: {c.surface}; border: 1px solid {c.border}; border-radius: 0;
 }}
-QLineEdit#pageEdit {{ padding: 2px 4px; margin: 0 6px; border-radius: 6px; }}
+QLineEdit#pageEdit {{ padding: 1px 4px; margin: 0 6px; border-radius: 6px; min-height: 18px; }}
 QLineEdit#paletteQuery {{
     border: none; border-bottom: 1px solid {c.border}; border-radius: 0;
     font-size: 12pt; padding: 12px 8px;

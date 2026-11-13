@@ -327,14 +327,15 @@ def test_full_screen_shows_only_the_document(window, sample, qt_app):
     qt_app.processEvents()
     assert window.full_screen
     assert window.isFullScreen()
-    assert not window.menuBar().isVisible()
+    assert not window.menu_button.isVisible()
     assert not window.statusBar().isVisible()
     assert not window.mode_bar.isVisible()
     assert not any(bar.isVisible() for bar in window.mode_toolbars.values())
     QTest.keyClick(window.pdf_view, Qt.Key.Key_Escape)
     qt_app.processEvents()
     assert not window.full_screen
-    assert window.menuBar().isVisible()
+    assert window.menu_button.isVisible()
+    assert not window.menuBar().isVisible()  # its menus live behind the button
     assert window.statusBar().isVisible()
     assert window.mode_toolbars[window.mode].isVisible()
 

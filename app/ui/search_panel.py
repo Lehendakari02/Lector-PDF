@@ -111,7 +111,7 @@ class SearchPanel(QWidget):
         self._pause.timeout.connect(self.search_now)
 
         self.box.textChanged.connect(lambda _text: self._pause.start())
-        self.box.returnPressed.connect(self._enter_pressed)
+        self.box.returnPressed.connect(self.enter_pressed)
         self.whole_word.toggled.connect(lambda _on: self.search_now())
         self.exact.toggled.connect(lambda _on: self.search_now())
         self.next_button.clicked.connect(self.go_next)
@@ -210,7 +210,7 @@ class SearchPanel(QWidget):
         if self.hits:
             self._select((self.current + step) % len(self.hits))
 
-    def _enter_pressed(self) -> None:
+    def enter_pressed(self) -> None:
         if self._pause.isActive():
             self.search_now()  # Enter right after typing: search at once
         else:

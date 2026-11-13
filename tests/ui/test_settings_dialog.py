@@ -200,3 +200,15 @@ def test_the_portable_version_can_undo_it(window, monkeypatch):
     assert state["registered"] is False
     assert not dialog.forget_button.isVisibleTo(dialog)
     dialog.close()
+
+
+def test_the_toolbar_style_is_chosen_in_the_settings(window, settings):
+    from app.ui.settings_dialog import SettingsDialog
+
+    dialog = SettingsDialog(window)
+    assert dialog.toolbar_box.currentData() is False  # with names unless chosen
+    _choose(dialog.toolbar_box, True)
+    assert window.toolbar_icons_only
+    _choose(dialog.toolbar_box, False)
+    assert not window.toolbar_icons_only
+    dialog.close()

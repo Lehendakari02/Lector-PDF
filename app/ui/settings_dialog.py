@@ -87,6 +87,22 @@ class SettingsDialog(QDialog):
             self.size_box.addItem(name, size)
         self.size_box.setCurrentIndex(self.size_box.findData(wanted_size(self.settings)))
         self.size_box.activated.connect(self._size_chosen)
+        self.toolbar_box = QComboBox()
+        self.toolbar_box.setAccessibleName(self.tr("Barra de herramientas"))
+        self.toolbar_box.setToolTip(
+            self.tr(
+                "Sin nombres la barra ocupa menos y el documento se ve más grande. "
+                "El nombre de cada botón sale al dejar el ratón encima."
+            )
+        )
+        self.toolbar_box.addItem(self.tr("Botones con nombre"), False)
+        self.toolbar_box.addItem(self.tr("Solo iconos (más sitio para el documento)"), True)
+        self.toolbar_box.setCurrentIndex(self.toolbar_box.findData(window.toolbar_icons_only))
+        self.toolbar_box.activated.connect(
+            lambda _index: window.set_toolbar_icons_only(self.toolbar_box.currentData())
+        )
+        form.addRow(self.tr("&Barra de herramientas:"), self.toolbar_box)
+
         form.addRow(self.tr("Tamaño de la &interfaz:"), self.size_box)
         layout.addLayout(form)
 

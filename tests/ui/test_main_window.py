@@ -152,3 +152,114 @@ def test_text_contrast_is_good_in_both_themes(dark):
 
 def test_just_opening_the_program_writes_no_settings_file(window, settings):
     assert not settings.path.exists()
+
+
+# ---- compact bars: the menu button, the search box at the top, icons only ----
+
+
+def test_the_menus_live_behind_the_menu_button(window):
+    assert not window.menuBar().isVisible()
+    assert window.menu_button.isVisible()
+    names = [action.text().replace("&", "") for action in window.main_menu.actions()]
+    assert names == ["Archivo", "Editar", "Ver", "Ayuda"]
+    assert all(action.menu() is not None for action in window.main_menu.actions())
+    assert window.menu_button.accessibleName() and window.menu_button.toolTip()
+
+
+def test_shortcuts_of_the_hidden_menus_still_work(window, sample, qt_app):
+    """An action of a hidden menu bar loses its shortcut unless the window holds it too."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    for action in (window.print_action, window.settings_action, window.full_screen_action):
+        assert action in window.actions()
+    window.show_problem_dialogs = False
+    assert window.open_document(sample("boe.pdf"))
+    window.activateWindow()
+    qt_app.processEvents()
+    QTest.keyClick(window.pdf_view, Qt.Key.Key_F11)
+    qt_app.processEvents()
+    assert window.full_screen
+    window.set_full_screen(False)
+
+
+def test_typing_in_the_top_box_searches_the_document(window, sample, wait_until):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    window.show_problem_dialogs = False
+    assert window.open_document(sample("boe.pdf"))
+    assert not window.search_panel.isVisible()
+    QTest.keyClicks(window.search_box, "articulo 14")
+    panel = window.search_panel
+    assert panel.isVisible() and panel.box.text() == "articulo 14"
+    wait_until(lambda: panel.hits and not panel._searching)
+    QTest.keyClick(window.search_box, Qt.Key.Key_Return)
+    first = panel.current
+    assert first >= 0
+    QTest.keyClick(window.search_box, Qt.Key.Key_Down)
+    assert panel.current == (first + 1) % len(panel.hits)
+    QTest.keyClick(window.search_box, Qt.Key.Key_Up)
+    assert panel.current == first
+    QTest.keyClick(window.search_box, Qt.Key.Key_Return, Qt.KeyboardModifier.ShiftModifier)
+    assert panel.current == (first - 1) % len(panel.hits)
+    QTest.keyClick(window.search_box, Qt.Key.Key_Escape)
+    assert not panel.isVisible() and window.search_box.text() == ""
+
+
+def test_the_top_box_and_the_panel_say_the_same(window, sample):
+    window.show_problem_dialogs = False
+    assert window.open_document(sample("boe.pdf"))
+    window.show_search()
+    window.search_panel.box.setText("corona")
+    assert window.search_box.text() == "corona"
+    # Another document has its own search: the box follows the tab in front.
+    assert window.open_document(sample("largo.pdf"))
+    assert window.search_box.text() == ""
+    window.document_tabs.setCurrentIndex(0)
+    assert window.search_box.text() == "corona"
+
+
+def test_the_top_box_without_a_document_explains_itself(window):
+    from PySide6.QtTest import QTest
+
+    QTest.keyClicks(window.search_box, "ley")
+    assert "Abre un documento" in window.statusBar().currentMessage()
+
+
+def test_tools_can_be_shown_as_icons_only(window, settings):
+    from PySide6.QtCore import Qt
+
+    from app.ui.main_window import TOOLBAR_SETTING
+
+    bar = window.mode_toolbars[window.mode]
+    assert bar.toolButtonStyle() == Qt.ToolButtonStyle.ToolButtonTextUnderIcon
+    with_names = bar.sizeHint().height()
+    window.set_toolbar_icons_only(True)
+    assert all(
+        b.toolButtonStyle() == Qt.ToolButtonStyle.ToolButtonIconOnly
+        for b in window.mode_toolbars.values()
+    )
+    assert bar.sizeHint().height() < with_names
+    assert settings.get(TOOLBAR_SETTING) == "iconos"
+    for action in bar.actions():
+        if not action.isSeparator():
+            button = bar.widgetForAction(action)
+            assert button.minimumHeight() >= MIN_BUTTON_HEIGHT  # still easy to press
+            assert button.minimumWidth() >= MIN_BUTTON_HEIGHT
+            assert action.toolTip()  # the name is still there for whoever asks
+    again = MainWindow(settings)
+    assert again.toolbar_icons_only
+    again.deleteLater()
+    window.set_toolbar_icons_only(False)
+    assert settings.get(TOOLBAR_SETTING) == "nombres"
+
+
+def test_the_bars_leave_most_of_a_laptop_screen_to_the_document(window, sample, qt_app):
+    window.show_problem_dialogs = False
+    window.setMinimumHeight(0)
+    window.resize(1366, 728)
+    assert window.open_document(sample("boe.pdf"))
+    qt_app.processEvents()
+    taken = window.height() - window.pdf_view.viewport().height()
+    assert taken <= 200, f"the bars take {taken} px"
