@@ -154,7 +154,7 @@ y no un único `.exe`: la carpeta abre en menos de 1 segundo y el `.exe` único 
 | 1.10 | Abrir con doble clic / "Abrir con" / arrastrar / programa predeterminado | Doble clic en un PDF lo abre en Lector-PDF | ✅ |
 | 1.11 | PDFs con contraseña o dañados | Pide la contraseña; un PDF roto da un aviso y no cierra el programa | ✅ |
 | 1.12 | Imprimir | Imprimo unas páginas concretas | ✅ |
-| 1.13 | Aviso de nuevas versiones y **actualizar con un clic** (desactivable) | Si hay versión nueva en GitHub, me avisa; pulso "Actualizar ahora", se descarga, se instala y el programa se reinicia ya actualizado, sin perder ajustes ni pestañas (necesita el repositorio público) | ⬜ |
+| 1.13 | Aviso de nuevas versiones y **actualizar con un clic** (desactivable) | Si hay versión nueva en GitHub, me avisa; pulso "Actualizar ahora", se descarga, se instala y el programa se reinicia ya actualizado, sin perder ajustes ni pestañas (necesita el repositorio público) | ✅ |
 | 1.14 | Versión 0.1 (instalador y portátil) y repositorio público | Lo instalo, o lo abro sin instalar, y funciona todo lo anterior | ⬜ |
 
 Notas de la Fase 1:
@@ -284,6 +284,30 @@ Notas de la Fase 1:
   - Una decisión se consulta cuando llegue su tarea: en la 1.14, una ventana
     "Acerca de" con la licencia y los avisos de terceros (M8).
   - Fase 2B: M10, B6. Fase 4: M5, M6, M7.
+- 1.13: **aviso de versiones nuevas y actualizar con un clic.** A los pocos segundos
+  de abrir, el programa pregunta a GitHub cuál es la última versión publicada (no
+  envía ningún dato). Si hay una más nueva sale una franja discreta encima de las
+  pestañas: "Actualizar ahora", "Ver novedades", "Ahora no" (lo recuerda la próxima
+  vez) y "Omitir esta versión" (no vuelve a avisar de esa). "Actualizar ahora"
+  descarga con progreso y Cancelar, comprueba que la descarga es exactamente la
+  publicada (huella SHA-256; si no coincide o no se puede comprobar, no se instala),
+  cierra el programa, instala y lo abre de nuevo con sus pestañas. En la versión
+  instalada lo hace el instalador en silencio; en la portátil, la versión nueva
+  sustituye la carpeta conservando `datos` y, si algo falla, vuelve a poner la que
+  había. "Ayuda → Buscar versiones nuevas…" lo consulta a mano. En Ajustes,
+  "Avisarme cuando haya una versión nueva" (activado por defecto).
+  - **No funcionará hasta que el repositorio sea público y exista una versión
+    publicada (1.14).** Mientras tanto no dice nada. La prueba real con dos
+    versiones publicadas queda para la sesión final de pruebas.
+  - Las pruebas automáticas usan un GitHub simulado; además, en cada compilación se
+    comprueba con el programa real que la portátil se sustituye a sí misma y
+    conserva los ajustes (`packaging/check_update.py`).
+  - En la portátil, durante los segundos que dura el cambio no hay ventana a la
+    vista. Si se echa en falta, se puede añadir un aviso pequeño.
+  - "Antes guarda lo pendiente": hoy no hay nada que guardar. En la Fase 2 la
+    actualización pasa por la misma pregunta de cierre (Guardar / No guardar /
+    Cancelar); si se cancela, no se instala (ya está previsto en el código).
+  - Publicar una versión añade ahora el archivo `SHA256SUMS.txt` con las huellas.
 
 ## Fase 2A – Anotar y guardado
 | # | Tarea | Terminado cuando… | Estado |

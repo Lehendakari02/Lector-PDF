@@ -101,6 +101,11 @@ jobs:
           python packaging/check_single_copy.py dist\Lector-PDF\Lector-PDF.exe tests\ejemplos\boe.pdf tests\ejemplos\largo.pdf
           if ($LASTEXITCODE -ne 0) { throw "A second start does not join the first window." }
 
+      - name: Check the portable version can update itself
+        run: |
+          python packaging/check_update.py dist\Lector-PDF
+          if ($LASTEXITCODE -ne 0) { throw "The portable version cannot update itself." }
+
       - name: Check the portable version left nothing outside its folder
         run: |
           if (Test-Path "$env:LOCALAPPDATA\Lector-PDF") {
@@ -151,5 +156,9 @@ jobs:
           zip -qr "Lector-PDF-$version-portatil.zip" Lector-PDF
           mv "descargas/Lector-PDF-instalador-$version/Lector-PDF-instalador.exe" \
             "Lector-PDF-$version-instalador.exe"
+          # The program checks every download against these before installing it.
+          sha256sum "Lector-PDF-$version-portatil.zip" "Lector-PDF-$version-instalador.exe" \
+            > SHA256SUMS.txt
           gh release upload "$RELEASE_TAG" \
-            "Lector-PDF-$version-portatil.zip" "Lector-PDF-$version-instalador.exe" --clobber
+            "Lector-PDF-$version-portatil.zip" "Lector-PDF-$version-instalador.exe" \
+            SHA256SUMS.txt --clobber
