@@ -48,6 +48,7 @@ from app.ui.features import (
 )
 from app.ui.ocr_dialog import OcrResultDialog
 from app.ui.page_box import PageBox
+from app.ui.password_dialog import PasswordDialog
 from app.ui.pdf_view import PdfView
 from app.ui.search_panel import SearchPanel
 from app.ui.settings_dialog import SettingsDialog
@@ -76,6 +77,9 @@ class MainWindow(QMainWindow):
         # Tests turn this off so that message boxes do not block them.
         self.show_problem_dialogs = True
         self.history = History(self.settings)
+        # How a protected PDF gets its password. Tests put their own answer here.
+        self.ask_password = self._ask_password
+        self._password_dialogs: bool | None = None  # None: as show_problem_dialogs
         self.setWindowTitle(APP_NAME)
         self.resize(1240, 800)
         self.setAcceptDrops(True)  # a PDF dropped on the window is opened
@@ -727,18 +731,16 @@ class MainWindow(QMainWindow):
         try:
             document = PdfDocument(path)
             if document.needs_password:
-                self._show_problem(
-                    self.tr("Este PDF tiene contraseña"),
-                    self.tr("Todavía no se pueden abrir documentos con contraseña."),
-                )
-                return False
+                document = self.ask_password(Path(path))
+                if document is None:
+                    return False  # the user gave up
             page.view.set_document(document)
         except PdfOpenError:
             self._show_problem(
                 self.tr("No se puede abrir el documento"),
-                self.tr("El archivo «{0}» no existe, está dañado o no es un PDF.").format(
-                    Path(path).name
-                ),
+                self.tr(
+                    "El archivo «{0}» no existe, está dañado o incompleto, o no es un PDF."
+                ).format(Path(path).name),
             )
             return False
         page.path = Path(path).absolute()
@@ -777,10 +779,12 @@ class MainWindow(QMainWindow):
         paths, current = self.history.session()
         asking = self.show_problem_dialogs
         self.show_problem_dialogs = False  # a file that is gone is not worth a dialog
+        self._password_dialogs = asking  # but a protected one still asks for its password
         try:
             opened = [path for path in paths if path.is_file() and self.open_document(path)]
         finally:
             self.show_problem_dialogs = asking
+            self._password_dialogs = None
         if 0 <= current < len(paths) and paths[current] in opened:
             self.document_tabs.setCurrentIndex(self.index_of_document(paths[current]))
         missing = len(paths) - len(opened)
@@ -821,6 +825,31 @@ class MainWindow(QMainWindow):
     def forget_recent(self) -> None:
         self.history.forget_recent()
         self._refresh_welcome_recent()
+
+    def _ask_password(self, path: Path) -> PdfDocument | None:
+        """Ask for the password of a protected PDF. None if the user gives up."""
+        asking = self._password_dialogs
+        if not (self.show_problem_dialogs if asking is None else asking):
+            self.statusBar().showMessage(
+                self.tr("«{0}» tiene contraseña y no se ha abierto.").format(path.name),
+                STATUS_MESSAGE_MS,
+            )
+            return None
+        unlocked: list[PdfDocument] = []
+
+        def try_password(password: str) -> bool:
+            document = PdfDocument(path, password)
+            if document.needs_password:
+                return False
+            unlocked.append(document)
+            return True
+
+        dialog = PasswordDialog(path.name, try_password, self)
+        try:
+            accepted = dialog.exec() == PasswordDialog.DialogCode.Accepted
+        finally:
+            dialog.deleteLater()
+        return unlocked[-1] if accepted and unlocked else None
 
     def open_from_another_copy(self, files: list[str]) -> None:
         """The program was started again while open: show its files here, in front."""
@@ -1041,9 +1070,17 @@ class MainWindow(QMainWindow):
         return True
 
     def _document_failed(self, _message: str) -> None:
+        """A document that was open cannot be shown after all: close its tab and say so."""
+        view = self.sender()
+        index = next((i for i, page in enumerate(self.documents) if page.view is view), -1)
+        name = self.documents[index].title if index >= 0 else ""
+        if index >= 0:
+            self.close_document(index)  # back to the other tabs, or to the welcome page
         self._show_problem(
             self.tr("No se puede mostrar el documento"),
-            self.tr("El archivo está dañado o no es un PDF."),
+            self.tr("El archivo «{0}» está dañado o no es un PDF.").format(name)
+            if name
+            else self.tr("El archivo está dañado o no es un PDF."),
         )
 
     def _show_problem(self, title: str, text: str) -> None:

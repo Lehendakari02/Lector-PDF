@@ -407,6 +407,7 @@ QLineEdit#paletteQuery {{
 QListWidget#paletteResults {{ border: none; }}
 QLabel#paletteHint, QLabel#paletteEmpty {{ color: {c.muted}; font-size: 9pt; }}
 QLabel#dialogNote {{ color: {c.muted}; }}
+QLabel#dialogError {{ color: {c.danger}; font-weight: 600; }}
 """
 
 

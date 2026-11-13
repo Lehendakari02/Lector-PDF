@@ -50,24 +50,35 @@ class PageSize:
 class PdfDocument:
     """The facts of a PDF the interface needs to lay out its pages.
 
+    A protected file needs its ``password``; without the right one the document
+    says ``needs_password`` and shows no pages.
+
     The file is read and closed at once: it is not kept open here. Drawing the
     pages is done elsewhere (``app.core.render_service``), in a separate
     process, so this object stays cheap and never blocks the window, and the
     program does not hold the file while other programs want to change it.
     """
 
-    def __init__(self, path: str | Path) -> None:
+    def __init__(self, path: str | Path, password: str | None = None) -> None:
         self.path = Path(path)
         if not self.path.is_file():
             raise PdfOpenError(f"File not found: {self.path}")
         self._sizes: list[PageSize] = []
+        # The password that opened the file, kept only in memory while it is open.
+        self.password: str | None = None
         try:
             with pymupdf.open(self.path, filetype="pdf") as doc:
                 self.needs_password = bool(doc.needs_pass)
+                if self.needs_password and password and doc.authenticate(password):
+                    self.needs_password = False
+                    self.password = password
                 if not self.needs_password:  # a locked file does not show its pages
                     self._sizes = [PageSize(page.rect.width, page.rect.height) for page in doc]
         except Exception as exc:  # PyMuPDF raises several unrelated error types
             raise PdfOpenError(f"Cannot open {self.path.name}: {exc}") from exc
+        if not self.needs_password and not self._sizes:
+            # A file cut short "opens" after being repaired, but with nothing inside.
+            raise PdfOpenError(f"{self.path.name} has no pages: it is damaged or incomplete")
 
     @property
     def page_count(self) -> int:

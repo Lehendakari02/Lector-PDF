@@ -153,7 +153,8 @@ def test_helper_is_started_again_after_a_crash(collector, sample):
 def test_gives_up_when_a_document_keeps_crashing_the_helper(collector, sample):
     collector.service.open(sample("boe.pdf"))
     for crash in range(1, render_service.MAX_CRASHES_PER_DOCUMENT + 1):
-        collector.service.want([RenderRequest(0, 1.0)])
+        # Nothing is being drawn, so no single page can be blamed for the crash.
+        collector.service.want([])
         assert collector.service.is_running()
         collector.service._process.kill()
         collector.wait(lambda crash=crash: collector.service.restarts == crash)
@@ -381,5 +382,90 @@ def test_helper_copies_text_across_pages(sample):
         assert "La oficina resolverá el conflicto con eficacia." in text
         assert "El año pasado el camión cruzó la cañada." in text
         assert text.count("Temario de prueba") == 2
+    finally:
+        service.shutdown()
+
+
+# ---- damaged documents and pages (task 1.11) ----
+
+
+def test_a_file_cut_short_is_reported_as_failed(collector, sample, tmp_path):
+    whole = sample("boe.pdf").read_bytes()
+    cut = tmp_path / "cortado.pdf"
+    cut.write_bytes(whole[: len(whole) // 2])
+    collector.service.open(cut)
+    collector.wait(lambda: collector.open_failures)
+    assert not collector.pages
+
+
+def test_one_page_that_kills_the_helper_does_not_spoil_the_document(collector, sample, monkeypatch):
+    monkeypatch.setenv(render_service.TEST_CRASH_PAGES, "2")
+    service = collector.service
+    service.open(sample("largo.pdf"))
+    wanted = [RenderRequest(page, 0.5) for page in range(6)]
+    service.want(wanted)
+    collector.wait(lambda: collector.page_failures)
+    assert collector.page_failures[0][0] == 2
+    assert service.restarts == 1
+    assert not collector.open_failures
+
+    # The view asks again for what is missing: everything but the bad page arrives.
+    for _attempt in range(3):
+        service.want(wanted)
+        collector.wait(lambda: {page.page for page in collector.pages} >= {0, 1, 3, 4, 5})
+    assert service.restarts == 1, "the bad page must not be drawn again"
+    assert 2 not in {page.page for page in collector.pages}
+    assert service.is_running()
+
+
+def test_many_bad_pages_do_not_make_it_give_up(collector, sample, monkeypatch):
+    bad = {1, 3, 5, 7}
+    monkeypatch.setenv(render_service.TEST_CRASH_PAGES, ",".join(map(str, sorted(bad))))
+    service = collector.service
+    service.open(sample("largo.pdf"))
+    wanted = [RenderRequest(page, 0.5) for page in range(9)]
+    good = set(range(9)) - bad
+    deadline = time.monotonic() + WAIT_SECONDS
+    while {page.page for page in collector.pages} < good:
+        assert time.monotonic() < deadline, "timed out"
+        service.want(wanted)
+        time.sleep(0.05)
+    assert {failure[0] for failure in collector.page_failures} == bad
+    assert service.restarts == len(bad)
+    assert not collector.open_failures
+
+
+def test_another_document_forgets_the_bad_pages(collector, sample, monkeypatch):
+    monkeypatch.setenv(render_service.TEST_CRASH_PAGES, "0")
+    service = collector.service
+    service.open(sample("boe.pdf"))
+    service.want([RenderRequest(0, 0.5)])
+    collector.wait(lambda: collector.page_failures)
+    monkeypatch.delenv(render_service.TEST_CRASH_PAGES)
+    service.open(sample("escaneado.pdf"))
+    service.want([RenderRequest(0, 0.5)])
+    collector.wait(lambda: collector.pages)
+
+
+def test_an_error_in_the_program_does_not_stop_the_pages(sample, monkeypatch):
+    seen = []
+    monkeypatch.setattr(render_service.sys, "excepthook", lambda *error: seen.append(error[0]))
+    pages = []
+    arrived = threading.Event()
+
+    def on_page(page):
+        pages.append(page.page)
+        if page.page == 0:
+            raise RuntimeError("the window tripped over this page")
+        arrived.set()
+
+    service = RenderService(on_page=on_page)
+    try:
+        service.open(sample("boe.pdf"))
+        service.want([RenderRequest(0, 0.5), RenderRequest(1, 0.5)])
+        assert arrived.wait(WAIT_SECONDS)
+        assert pages == [0, 1]
+        assert seen == [RuntimeError]  # written down like any unexpected error
+        assert service.restarts == 0
     finally:
         service.shutdown()
