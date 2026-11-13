@@ -1,5 +1,7 @@
 """Tests for the "Acerca de" window."""
 
+from pathlib import Path
+
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import QDesktopServices
 
@@ -26,7 +28,7 @@ def test_its_buttons_open_the_source_page_and_the_licences(qt_app, monkeypatch):
     dialog.source_button.click()
     dialog.licences_button.click()
     assert opened[0].toString() == about.SOURCE_URL
-    assert opened[1].toLocalFile() == str(about.licence_folder())
+    assert Path(opened[1].toLocalFile()) == about.licence_folder()
     assert dialog.source_button.toolTip() and dialog.licences_button.toolTip()
 
 
