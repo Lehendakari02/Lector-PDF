@@ -155,7 +155,7 @@ y no un único `.exe`: la carpeta abre en menos de 1 segundo y el `.exe` único 
 | 1.11 | PDFs con contraseña o dañados | Pide la contraseña; un PDF roto da un aviso y no cierra el programa | ✅ |
 | 1.12 | Imprimir | Imprimo unas páginas concretas | ✅ |
 | 1.13 | Aviso de nuevas versiones y **actualizar con un clic** (desactivable) | Si hay versión nueva en GitHub, me avisa; pulso "Actualizar ahora", se descarga, se instala y el programa se reinicia ya actualizado, sin perder ajustes ni pestañas (necesita el repositorio público) | ✅ |
-| 1.14 | Versión 0.1 (instalador y portátil) y repositorio público | Lo instalo, o lo abro sin instalar, y funciona todo lo anterior | ⬜ |
+| 1.14 | Versión 0.1 (instalador y portátil) y repositorio público | Lo instalo, o lo abro sin instalar, y funciona todo lo anterior | ✅ |
 | 1.15 | Arreglos de la revisión del código de la Fase 1 | Abro tres PDFs a la vez y acaban en una sola ventana; busco con comillas y guiones del teclado; el zoom con el panel táctil va suave | ✅ |
 
 Notas de la Fase 1:
@@ -309,7 +309,9 @@ Notas de la Fase 1:
     actualización pasa por la misma pregunta de cierre (Guardar / No guardar /
     Cancelar); si se cancela, no se instala (ya está previsto en el código).
   - Publicar una versión añade ahora el archivo `SHA256SUMS.txt` con las huellas.
-- 1.14 (preparada; falta publicar): el programa dice **versión 0.1.0**.
+- 1.14: **versión 0.1.0 publicada el 13/11/2026** y repositorio público. El código
+  pasa a decir 0.1.1, que se publicará solo para probar de verdad la actualización
+  con un clic desde la 0.1.0.
   - **Acerca de** (Ayuda → Acerca de Lector-PDF): versión, que es software libre,
     enlace al código y lista en lenguaje llano de las piezas que usa con su
     licencia. La carpeta `licencias` del programa lleva el texto de todas (M8); la
