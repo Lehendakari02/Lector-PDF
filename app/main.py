@@ -1,16 +1,28 @@
 """Program entry point: creates the Qt application and shows the main window."""
 
+import contextlib
 import os
+import subprocess
 import sys
+import threading
+from pathlib import Path
 
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
 from app import APP_NAME, __version__
 from app.core.interface_size import NORMAL_SIZE, apply_before_start
-from app.core.restart import relaunch
+from app.core.paths import data_dir, program_dir
+from app.core.restart import relaunch, relaunch_environment
 from app.core.settings import Settings
 from app.core.single_instance import InstanceServer, send_to_running_copy
+from app.core.updates import (
+    APPLY_FLAG,
+    NO_START_FLAG,
+    apply_portable_update,
+    clean_leftovers,
+    hold_instance_mutex,
+)
 from app.ui.icons import logo_icon
 from app.ui.main_window import MainWindow
 from app.ui.theme import prepare_application
@@ -30,6 +42,8 @@ EXIT_OCR_FAILED = 5
 # Hidden option of the automatic builds: --check-print PDF PDF_FILE_TO_WRITE
 CHECK_PRINT_FLAG = "--check-print"
 EXIT_PRINT_FAILED = 6
+EXIT_UPDATE_FAILED = 7
+UPDATE_CHECK_DELAY_MS = 4000  # after starting: first let the user see their documents
 
 
 def check_signing(source: str, certificate_file: str, password: str) -> int:
@@ -144,6 +158,15 @@ def main(argv: list[str] | None = None) -> int:
         if len(values) < 2:
             return EXIT_OCR_FAILED
         return _run_check(lambda: check_ocr(*values[:2]), EXIT_OCR_FAILED)
+    if APPLY_FLAG in args:
+        # Run by a NEW version just unpacked: take the place of the old one.
+        values = [arg for arg in args[args.index(APPLY_FLAG) + 1 :] if arg != NO_START_FLAG]
+        if len(values) < 2 or not values[1].lstrip("-").isdigit():
+            return EXIT_UPDATE_FAILED
+        updated = apply_portable_update(
+            program_dir(), Path(values[0]), int(values[1]), start=NO_START_FLAG not in args
+        )
+        return 0 if updated else EXIT_UPDATE_FAILED
     if CHECK_PRINT_FLAG in args:
         values = args[args.index(CHECK_PRINT_FLAG) + 1 :]
         if len(values) < 2:
@@ -175,6 +198,7 @@ def main(argv: list[str] | None = None) -> int:
     prepare_application(qt_app)
     qt_app.setWindowIcon(logo_icon())
 
+    running = hold_instance_mutex()  # the installer waits for this to disappear
     window = MainWindow(settings)
     window.interface_size = interface_size
     window.reporter.install(window)
@@ -196,6 +220,8 @@ def main(argv: list[str] | None = None) -> int:
         opened = window.open_document(file) or opened
     if not autoclose:
         window.warm_up()  # the next document will open without waiting
+        threading.Thread(target=clean_leftovers, args=(data_dir(),), daemon=True).start()
+        QTimer.singleShot(UPDATE_CHECK_DELAY_MS, window.updater.check)
 
     if autoclose and opened:
         window.pdf_view.first_page_shown.connect(qt_app.quit)
@@ -210,7 +236,14 @@ def main(argv: list[str] | None = None) -> int:
             listening.close()  # from now on, a new copy is the main one
         window.shutdown_documents()
         window.reporter.uninstall()
-    if window.restart_wanted:
+    del running
+    if window.after_exit_command:
+        # A new version is ready: it is installed now that everything is closed.
+        with contextlib.suppress(OSError):
+            subprocess.Popen(  # noqa: S603 (the installer or the new version, checked)
+                window.after_exit_command, env=relaunch_environment(os.environ)
+            )
+    elif window.restart_wanted:
         relaunch()  # everything is saved and the helpers are stopped
     return code
 

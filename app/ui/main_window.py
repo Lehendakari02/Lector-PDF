@@ -33,6 +33,7 @@ from app.core.ocr import OcrError, OcrJob, OcrPage
 from app.core.paths import data_dir, is_portable
 from app.core.settings import Settings
 from app.core.signing import PasswordProtected, SigningError, sign_pdf
+from app.core.updates import Release
 from app.core.windows_store import SigningCancelled
 from app.ui import icons
 from app.ui import theme as theme_module
@@ -59,6 +60,7 @@ from app.ui.settings_dialog import SettingsDialog
 from app.ui.side_panel import SidePanel, Tab
 from app.ui.sign_dialog import CertificateDialog
 from app.ui.theme import PAPER_SETTING, THEME_SETTING, Paper, Theme, apply_theme
+from app.ui.updater import UpdateBanner, Updater
 from app.ui.zoom_control import ZoomControl
 
 # Big enough to press comfortably with a finger on a touch screen.
@@ -85,6 +87,14 @@ class MainWindow(QMainWindow):
         self.ask_password = self._ask_password
         self._password_dialogs: bool | None = None  # None: as show_problem_dialogs
         self._print_run: PrintRun | None = None
+        # Set when a new version is ready: run after this program has closed.
+        self.after_exit_command: list[str] | None = None
+        self.updater = Updater(self.settings, self)
+        self.updater.found.connect(self._new_version_found)
+        self.updater.nothing_new.connect(self._no_new_version)
+        self.updater.progress.connect(self._update_progress)
+        self.updater.ready.connect(self._update_ready)
+        self.updater.failed.connect(self._update_failed)
         self._printer: QPrinter | None = None  # kept alive while it prints
         self.setWindowTitle(APP_NAME)
         self.resize(1240, 800)
@@ -124,6 +134,8 @@ class MainWindow(QMainWindow):
         central_layout = QVBoxLayout(central)
         central_layout.setContentsMargins(0, 0, 0, 0)
         central_layout.setSpacing(0)
+        self.update_banner = UpdateBanner()
+        central_layout.addWidget(self.update_banner)
         central_layout.addWidget(self.document_tabs)
         central_layout.addWidget(self.pages, 1)
         self.setCentralWidget(central)
@@ -131,6 +143,9 @@ class MainWindow(QMainWindow):
         # is open it also stands in as "the current document" (an empty one).
         self._spare = self._new_page()
         self._warm_spares = False
+        self.update_banner.update_wanted.connect(self.update_now)
+        self.update_banner.cancel_wanted.connect(self.updater.cancel)
+        self.update_banner.skip_wanted.connect(self._skip_new_version)
         self.document_tabs.currentChanged.connect(self._tab_changed)
         self.document_tabs.tabCloseRequested.connect(self.close_document)
         self.document_tabs.tabMoved.connect(self._tab_moved)
@@ -417,6 +432,10 @@ class MainWindow(QMainWindow):
         self.finder_action.triggered.connect(self.open_command_palette)
         help_menu.addAction(self.finder_action)
 
+        self.check_updates_action = QAction(self.tr("Buscar &versiones nuevas…"), self)
+        self.check_updates_action.triggered.connect(lambda _checked=False: self.check_for_updates())
+        help_menu.addAction(self.check_updates_action)
+
         help_menu.addSeparator()
         self.copy_report_action = QAction(self.tr("Copiar informe de error"), self)
         self.copy_report_action.setStatusTip(
@@ -621,6 +640,59 @@ class MainWindow(QMainWindow):
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         dialog.open()
         return dialog
+
+    # ---- new versions --------------------------------------------------
+
+    def check_for_updates(self) -> None:
+        """Asked by hand: look for a new version now and say what was found."""
+        self.statusBar().showMessage(self.tr("Buscando versiones nuevas…"), STATUS_MESSAGE_MS)
+        self.updater.check(by_hand=True)
+
+    def _new_version_found(self, release: Release) -> None:
+        self.update_banner.offer(release, self.updater.can_install)
+
+    def _no_new_version(self, answered: bool) -> None:
+        if answered:
+            text = self.tr("Tienes la última versión ({0}).").format(self.updater.current_version)
+        else:
+            text = self.tr("No se ha podido consultar. Comprueba tu conexión a internet.")
+        self.statusBar().showMessage(text, STATUS_MESSAGE_MS)
+
+    def _skip_new_version(self) -> None:
+        if self.updater.release is not None:
+            self.updater.skip(self.updater.release)
+
+    def update_now(self) -> None:
+        """Download the new version; when it is ready the program restarts with it."""
+        release = self.updater.release
+        if release is None:
+            return
+        if not self.updater.start_update(release):
+            self.update_banner.open_page()  # from the source code: nothing to replace
+            return
+        self.update_banner.downloading(0)
+
+    def _update_progress(self, percent: int) -> None:
+        self.update_banner.downloading(percent)
+
+    def _update_failed(self, cancelled: bool) -> None:
+        if cancelled:
+            if self.updater.release is not None:
+                self.update_banner.offer(self.updater.release, self.updater.can_install)
+            return
+        self.update_banner.problem(
+            self.tr("No se ha podido descargar la versión nueva. Sigues con la de siempre.")
+        )
+
+    def _update_ready(self, command: list) -> None:
+        """Everything is downloaded and checked: close, and let the new version in."""
+        self.update_banner.installing()
+        self.after_exit_command = [str(part) for part in command]
+        self.close()
+        if self.isVisible():  # closing was refused (something pending): do not install
+            self.after_exit_command = None
+            if self.updater.release is not None:
+                self.update_banner.offer(self.updater.release, self.updater.can_install)
 
     # ---- printing -------------------------------------------------------
 
@@ -1351,6 +1423,7 @@ class MainWindow(QMainWindow):
             self._ocr_job = None
         if self._print_run is not None:
             self._print_run.cancel()
+        self.updater.cancel()
         for page in self.documents:
             self._remember_place(page)
         self._save_session()

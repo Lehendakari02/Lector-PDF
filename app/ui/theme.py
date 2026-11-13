@@ -413,6 +413,15 @@ QLineEdit#paletteQuery {{
 }}
 QListWidget#paletteResults {{ border: none; }}
 QLabel#paletteHint, QLabel#paletteEmpty {{ color: {c.muted}; font-size: 9pt; }}
+QFrame#updateBanner {{
+    background: {c.accent_soft}; border-bottom: 1px solid {c.border};
+}}
+QLabel#updateMessage {{ color: {c.text}; font-weight: 600; }}
+QFrame#updateBanner QPushButton {{ padding: 4px 12px; }}
+QPushButton#bannerMainButton {{
+    background: {c.accent}; color: {c.on_accent}; border-color: {c.accent}; font-weight: 600;
+}}
+QPushButton#bannerMainButton:hover {{ background: {c.accent_hover}; }}
 QLabel#dialogNote {{ color: {c.muted}; }}
 QLabel#dialogError {{ color: {c.danger}; font-weight: 600; }}
 """

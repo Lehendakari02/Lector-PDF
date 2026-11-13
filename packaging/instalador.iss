@@ -61,4 +61,28 @@ Root: HKA; Subkey: "Software\Lector-PDF\Capabilities\FileAssociations"; ValueTyp
 Root: HKA; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueName: "Lector-PDF"; ValueData: "Software\Lector-PDF\Capabilities"; Flags: uninsdeletevalue
 
 [Run]
+; After a one-click update (the program runs the installer with /RELAUNCH=1).
+Filename: "{app}\Lector-PDF.exe"; Flags: nowait; Check: RelaunchWanted
 Filename: "{app}\Lector-PDF.exe"; Description: "{cm:LaunchProgram,Lector-PDF}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+// The program holds this mutex while it runs (app/core/updates.py). During a
+// one-click update the installer is started just before the program closes:
+// wait for it to be gone (30 seconds at most) so that no file is in use.
+function InitializeSetup(): Boolean;
+var
+  Waited: Integer;
+begin
+  Waited := 0;
+  while CheckForMutexes('LectorPDF-6F6C2C0B-en-marcha') and (Waited < 150) do
+  begin
+    Sleep(200);
+    Waited := Waited + 1;
+  end;
+  Result := True;
+end;
+
+function RelaunchWanted(): Boolean;
+begin
+  Result := ExpandConstant('{param:RELAUNCH|0}') = '1';
+end;

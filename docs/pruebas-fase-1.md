@@ -166,3 +166,26 @@ Con la versión portátil:
 8. Con el papel en sepia o noche, o la vista girada: en el papel sale el documento
    normal.
 9. Sin impresora a mano, elige "Microsoft Print to PDF": el PDF que crea se ve bien.
+
+## Tarea 1.13 – Aviso de versiones nuevas y actualizar con un clic
+
+Solo se puede probar de verdad cuando el repositorio sea público y haya dos
+versiones publicadas (por ejemplo la 0.1.0 instalada y la 0.1.1 recién publicada).
+
+1. Con la versión antigua instalada, abre el programa y espera unos segundos: sale
+   una franja arriba que dice que hay una versión nueva.
+2. Pulsa "Ver novedades": se abre la página de esa versión en el navegador.
+3. Pulsa "Ahora no": la franja se va. Cierra y abre: vuelve a avisar.
+4. Pulsa "Actualizar ahora" con dos o tres PDFs abiertos: se ve la descarga, el
+   programa se cierra y al momento se abre solo, ya con la versión nueva (míralo en
+   Archivo → Ajustes, "Versión actual") y con las mismas pestañas.
+5. Repite el paso 4 y pulsa Cancelar a media descarga: no pasa nada y sigue la
+   versión de siempre.
+6. Lo mismo con la versión portátil: tras actualizar, la carpeta `datos` sigue ahí
+   con tus ajustes y tus archivos recientes.
+7. "Omitir esta versión": no vuelve a avisar de esa al abrir. "Ayuda → Buscar
+   versiones nuevas…" sí la enseña.
+8. Con la última versión, "Ayuda → Buscar versiones nuevas…" dice abajo que ya la
+   tienes. Sin internet, dice que no se ha podido consultar.
+9. En Ajustes, desmarca "Avisarme cuando haya una versión nueva": al abrir ya no
+   pregunta nada a internet.

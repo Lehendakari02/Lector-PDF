@@ -23,6 +23,7 @@ from app.core import file_association
 from app.core.history import RESTORE_SETTING
 from app.core.interface_size import NORMAL_SIZE, SIZE_SETTING, SIZES, wanted_size
 from app.core.paths import is_portable
+from app.core.updates import CHECK_SETTING
 from app.ui.theme import Paper, Theme
 
 
@@ -109,6 +110,27 @@ class SettingsDialog(QDialog):
         self.restore_box.setChecked(window.history.restore_wanted)
         self.restore_box.toggled.connect(lambda on: self.settings.set(RESTORE_SETTING, on))
         layout.addWidget(self.restore_box)
+
+        # ---- new versions ----
+        layout.addWidget(self._heading(self.tr("Versiones nuevas")))
+        self.updates_box = QCheckBox(self.tr("&Avisarme cuando haya una versión nueva"))
+        self.updates_box.setToolTip(
+            self.tr(
+                "Al abrir el programa pregunta a GitHub si hay versión nueva. "
+                "No envía ningún dato tuyo ni de tus documentos."
+            )
+        )
+        self.updates_box.setChecked(window.updater.check_wanted)
+        self.updates_box.toggled.connect(lambda on: self.settings.set(CHECK_SETTING, on))
+        layout.addWidget(self.updates_box)
+        updates_note = QLabel(
+            self.tr(
+                "Nunca se actualiza solo: siempre te pregunta antes. Versión actual: {0}."
+            ).format(window.updater.current_version)
+        )
+        updates_note.setObjectName("dialogNote")
+        updates_note.setWordWrap(True)
+        layout.addWidget(updates_note)
 
         # ---- the program Windows uses for PDFs ----
         self.default_button: QPushButton | None = None
