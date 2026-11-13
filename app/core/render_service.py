@@ -26,6 +26,8 @@ from multiprocessing.connection import Connection
 from pathlib import Path
 
 from app.core.outline import OutlineEntry, read_outline
+from app.core.saving import FAILED as SAVE_FAILED
+from app.core.saving import SaveError, put_in_place, write_copy
 from app.core.search import (
     DEFAULT_OPTIONS,
     PageText,
@@ -158,11 +160,87 @@ def _search_next_page(connection, token, doc, job: _SearchJob, page_texts) -> bo
     return True
 
 
+class _SaveFailed(Exception):
+    """Saving did not work; ``doc`` is the document to go on with."""
+
+    def __init__(self, doc, error: SaveError) -> None:
+        super().__init__(str(error))
+        self.doc = doc
+        self.error = error
+
+
+def _same_file(first: str, second: str) -> bool:
+    try:
+        return os.path.samefile(first, second)
+    except OSError:  # the target does not exist yet
+        return os.path.normcase(os.path.abspath(first)) == os.path.normcase(os.path.abspath(second))
+
+
+def _open_checked(source, password: str | None):
+    """Open a PDF from a file name or from its bytes, with its password."""
+    import pymupdf
+
+    if isinstance(source, bytes):
+        doc = pymupdf.open(stream=source, filetype="pdf")
+    else:
+        doc = pymupdf.open(source, filetype="pdf")
+    if doc.needs_pass and not (password and doc.authenticate(password)):
+        doc.close()
+        raise ValueError("password required")
+    return doc
+
+
+def _save_document(doc, path: str, password: str | None, target: str):
+    """Save the open ``doc`` (which lives in ``path``) into ``target``.
+
+    Returns the document to go on with, opened from ``target``. Raises
+    ``_SaveFailed`` with the document to go on with when it could not be saved:
+    in both cases every change is still there.
+
+    The whole document is first written next to ``target`` and checked. To
+    save over its own file the document has to let go of it (Windows does not
+    replace a file in use). If the file then cannot be replaced, because another
+    program holds it for example, the document goes on from the written copy,
+    kept in memory, so nothing is lost and the file on disk is the old one.
+    """
+    try:
+        temp = write_copy(doc, target, password)
+    except SaveError as error:
+        raise _SaveFailed(doc, error) from error
+    if not _same_file(path, target):
+        # "Save as": the document being read is not touched if this fails.
+        try:
+            put_in_place(temp, target)
+            new = _open_checked(target, password)
+        except SaveError as error:
+            with contextlib.suppress(OSError):
+                temp.unlink()
+            raise _SaveFailed(doc, error) from error
+        except Exception as error:
+            raise _SaveFailed(doc, SaveError(SAVE_FAILED, str(error))) from error
+        doc.close()
+        return new
+    doc.close()
+    try:
+        put_in_place(temp, target)
+    except SaveError as error:
+        try:
+            kept = _open_checked(temp.read_bytes(), password)
+        except Exception:
+            # Not even the copy can be read back: go on from the file as it was.
+            kept = _open_checked(path, password)
+        with contextlib.suppress(OSError):
+            temp.unlink()
+        raise _SaveFailed(kept, error) from error
+    return _open_checked(target, password)
+
+
 def _worker_main(connection: Connection) -> None:
     """The helper process: open documents and draw the pages asked for."""
     import pymupdf
 
     doc = None
+    doc_path = doc_password = None  # where the open document lives, to save it
     wanted: list[tuple[int, float, int]] = []
     thumbnails: list[tuple[int, float, int]] = []  # small pictures, drawn when idle
     prints: list[tuple[int, float, int]] = []  # pages for the printer
@@ -195,6 +273,7 @@ def _worker_main(connection: Connection) -> None:
                         raise ValueError("password required")
                     if doc.page_count == 0:
                         raise ValueError("the document has no pages")
+                    doc_path, doc_password = path, password
                     connection.send(("opened", token, doc.page_count))
                     connection.send(("outline", token, read_outline(doc)))
                 except Exception as exc:
@@ -232,6 +311,18 @@ def _worker_main(connection: Connection) -> None:
                     except Exception:
                         copied = ""
                     connection.send(("copied", token, copy_id, copied))
+            elif kind == "save":
+                _, save_token, save_id, target = message
+                if save_token == token and doc is not None:
+                    try:
+                        doc = _save_document(doc, doc_path, doc_password, target)
+                    except _SaveFailed as failed:
+                        doc = failed.doc  # still open, with every change in it
+                        error = failed.error
+                        connection.send(("save_failed", token, save_id, error.kind, error.details))
+                    else:
+                        doc_path = target
+                        connection.send(("saved", token, save_id, target))
             elif kind == "close":
                 wanted, prints, thumbnails, search = [], [], [], None
                 page_texts.clear()
@@ -298,7 +389,13 @@ class RenderService:
         on_print: Callable[[RenderedPage], None] | None = None,
         on_print_failed: Callable[[int], None] | None = None,
         on_print_lost: Callable[[int], None] | None = None,
+        on_saved: Callable[[int, Path], None] | None = None,
+        on_save_failed: Callable[[int, str, str], None] | None = None,
     ) -> None:
+        self._on_saved = on_saved or (lambda save_id, path: None)
+        self._on_save_failed = on_save_failed or (lambda save_id, kind, details: None)
+        self._save_id = 0
+        self._saving: set[int] = set()  # saves asked for, not yet answered
         self._on_print = on_print or (lambda page: None)
         self._on_print_failed = on_print_failed or (lambda page: None)
         self._on_print_lost = on_print_lost or (lambda page: None)
@@ -432,6 +529,28 @@ class RenderService:
                 self._send(("open", self._token, str(self._path), self._password))
             self._send(("copy", self._token, self._copy_id, start, stop))
             return self._copy_id
+
+    def save(self, target: str | Path | None = None) -> int:
+        """Save the open document, in its own file or (``target``) in another one.
+
+        Returns a number; the answer comes with it through ``on_saved`` (with the
+        file the document lives in from then on) or ``on_save_failed`` (with
+        one of the kinds of ``app.core.saving`` and the details). Saving never
+        leaves a file half written, and a failure loses nothing.
+        """
+        with self._lock:
+            self._save_id += 1
+            number = self._save_id
+            if self._path is None or not (self.is_running() or self._ensure_started()):
+                failed = True
+            else:
+                failed = False
+                self._saving.add(number)
+                where = os.path.abspath(target if target is not None else self._path)
+                self._send(("save", self._token, number, where))
+        if failed:
+            self._tell(self._on_save_failed, number, SAVE_FAILED, "no document is open")
+        return number
 
     def cancel_search(self) -> None:
         with self._lock:
@@ -575,6 +694,14 @@ class RenderService:
             elif kind == "page_failed":
                 self._drawing = None
                 self._tell(self._on_page_failed, message[2], message[3], message[4])
+            elif kind == "saved":
+                with self._lock:
+                    self._saving.discard(message[2])
+                    self._path = Path(message[3])  # after "Save as", the new file
+                self._tell(self._on_saved, message[2], Path(message[3]))
+            elif kind == "save_failed":
+                self._saving.discard(message[2])
+                self._tell(self._on_save_failed, message[2], message[3], message[4])
             elif kind == "open_failed":
                 self._tell(self._on_open_failed, message[2])
             elif kind == "hits" and message[2] == self._search_id:
@@ -584,6 +711,7 @@ class RenderService:
                 self._tell(self._on_search_done, message[2], message[3])
         lost_search = bad_page = None
         lost_prints: set[int] = set()
+        lost_saves: set[int] = set()
         with self._lock:
             crashed = not self._closing and connection is self._connection
             if crashed:
@@ -602,10 +730,13 @@ class RenderService:
                 lost_search = self._search_id if self._searching else None
                 self._searching = False
                 lost_prints, self._printing = self._printing, set()
+                lost_saves, self._saving = self._saving, set()
         # The printer is told about every page it was waiting for: it asks again
         # for the good ones and leaves out the one that killed the helper.
         for page in sorted(lost_prints):
             self._tell(self._on_print_failed if page == bad_page else self._on_print_lost, page)
+        for number in sorted(lost_saves):
+            self._tell(self._on_save_failed, number, SAVE_FAILED, "the helper ended while saving")
         if crashed and bad_page is not None:
             self._tell(self._on_page_failed, bad_page, 0.0, "the helper ended while drawing it")
         if crashed and lost_search is not None:

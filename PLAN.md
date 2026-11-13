@@ -387,7 +387,7 @@ Notas de la Fase 1:
 ## Fase 2A – Anotar y guardado
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
-| 2.1 | Botones Guardar / Guardar como junto a Imprimir, con escritura segura (archivo temporal y sustitución) | Ctrl+S guarda en el mismo archivo; "Guardar como" crea otro; si el archivo está bloqueado, avisa y no pierdo nada | ⬜ |
+| 2.1 | Botones Guardar / Guardar como junto a Imprimir, con escritura segura (archivo temporal y sustitución) | Ctrl+S guarda en el mismo archivo; "Guardar como" crea otro; si el archivo está bloqueado, avisa y no pierdo nada | ✅ |
 | 2.2 | Resaltar, subrayar, tachar | Selecciono texto y lo marco; tras guardar se ve igual en Edge o Adobe | ⬜ |
 | 2.3 | Paleta de colores completa, grosor y opacidad | Elijo cualquier color para cada herramienta | ⬜ |
 | 2.4 | Deshacer / rehacer (cada cambio es una "orden", ver `CLAUDE.md` §5) | Ctrl+Z y Ctrl+Y funcionan con todo | ⬜ |
@@ -403,6 +403,36 @@ Notas de la Fase 1:
 | 2.12 | Mostrar/ocultar anotaciones (también al imprimir/exportar) | Con un botón veo el documento limpio | ⬜ |
 | 2.13 | Atajos de teclado para cada herramienta | Cambio de herramienta sin usar el ratón | ⬜ |
 | 2.14 | Versión 0.2 | Estudio un tema completo con el programa durante una sesión real | ⬜ |
+
+
+Notas de la Fase 2A:
+- **2.1, Guardar y Guardar como (13/11/2026).**
+  - Botones **Guardar** y **Guardar como** junto a Imprimir (modo Leer), en el menú
+    Archivo y con Ctrl+S y Ctrl+Mayús+S desde cualquier modo. Guardar está apagado
+    mientras no haya nada pendiente. Todavía no hay nada que cambie el documento
+    (eso llega con la 2.2), así que de momento solo se puede usar "Guardar como".
+  - **Escritura segura** (`app/core/saving.py`): el documento entero se escribe en
+    un archivo temporal al lado (`.nombre.pdf.guardando`), se comprueba que es un
+    PDF completo con las mismas páginas y solo entonces ocupa el sitio del
+    original, de un golpe. Hay una prueba que mata el programa en seis momentos
+    distintos mientras guarda: el archivo siempre queda entero.
+  - **Si no se puede guardar** (otro programa lo tiene abierto, la nube lo está
+    sincronizando, solo lectura, disco lleno) lo reintenta unos instantes, avisa
+    con el motivo y ofrece "Guardar como". No se pierde nada: los cambios siguen
+    en el documento abierto y el archivo del disco es el de antes, entero.
+  - **Guardar como** sigue trabajando en el archivo nuevo (como Word): la pestaña
+    cambia de nombre y el archivo original queda como estaba. No deja guardar
+    encima de un archivo abierto en otra pestaña.
+  - Un PDF con contraseña la conserva al guardarlo.
+  - Cómo funciona por dentro: guarda el proceso ayudante, que es quien tiene el
+    documento abierto con sus cambios. Para guardar encima de su propio archivo
+    tiene que soltarlo un momento (Windows no deja sustituir un archivo en uso).
+  - Decisión pequeña a revisar en la 2.2: los botones están solo en el modo Leer,
+    junto a Imprimir, como pedía el plan. Cuando se pueda subrayar (modo Estudiar)
+    habrá que verlos también allí.
+  - Pendiente de sus tareas: preguntar al cerrar e indicador de estado (2.6),
+    versiones anteriores y avisos de PDF firmado (2.6b), y que los cambios
+    sobrevivan a una caída del ayudante (2.5, diario).
 
 ## Fase 2B – Documentos escaneados (OCR)
 | # | Tarea | Terminado cuando… | Estado |

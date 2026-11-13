@@ -76,6 +76,12 @@ ICONS: dict[str, str] = {
         '<circle cx="5" cy="12" r=".7"/><circle cx="5" cy="18" r=".7"/>'
     ),
     "thumbnails": _GRID,
+    "save": ('<path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4"/><path d="M8 20v-6h8v6"/>'),
+    "save_as": (
+        '<path d="M12 20H5V4h11l3 3v5"/>'
+        '<path d="M8 4v5h7V4"/>'
+        '<path d="M14 20l.5-2.5 5-5 2 2-5 5z"/>'
+    ),
     "print": (
         '<path d="M7 9V4h10v5"/>'
         '<path d="M7 17H6a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-1"/>'

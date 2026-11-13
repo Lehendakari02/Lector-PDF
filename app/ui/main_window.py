@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from app import APP_NAME, BUILD_LABEL, __version__
+from app.core import saving
 from app.core.document import PdfDocument, PdfOpenError, engine_version
 from app.core.error_log import running_from_source_or_test_build
 from app.core.history import History, file_key
@@ -202,8 +203,11 @@ class MainWindow(QMainWindow):
             "outline": lambda: self.toggle_side_panel(Tab.OUTLINE),
             "reading_mode": self.toggle_reading_mode,
             "print": self.print_document,
+            "save": self.save_document,
+            "save_as": self.save_document_as,
         }
         self._mark_pending_features()
+        self._refresh_save_actions()
 
         self.set_theme(Theme.from_setting(self.settings.get(THEME_SETTING)), remember=False)
         self.set_paper(Paper.from_setting(self.settings.get(PAPER_SETTING)), remember=False)
@@ -410,6 +414,16 @@ class MainWindow(QMainWindow):
             self.addAction(action)
             file_menu.addAction(action)
         file_menu.addSeparator()
+        self.save_action = QAction(self.tr("&Guardar"), self)
+        self.save_action.setShortcut(QKeySequence(QKeySequence.StandardKey.Save))
+        self.save_action.triggered.connect(lambda _checked=False: self.save_document())
+        self.save_as_action = QAction(self.tr("Guardar c&omo…"), self)
+        self.save_as_action.setShortcut(QKeySequence("Ctrl+Shift+S"))
+        self.save_as_action.triggered.connect(lambda _checked=False: self.save_document_as())
+        for action in (self.save_action, self.save_as_action):
+            action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+            self.addAction(action)
+            file_menu.addAction(action)
         self.print_action = QAction(self.tr("&Imprimir…"), self)
         self.print_action.setShortcut(QKeySequence(QKeySequence.StandardKey.Print))
         self.print_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
@@ -810,6 +824,131 @@ class MainWindow(QMainWindow):
 
     # ---- printing -------------------------------------------------------
 
+    # ---- saving ---------------------------------------------------------
+
+    def _refresh_save_actions(self) -> None:
+        """ "Guardar" only lights up when the document in front has something to save."""
+        view = self.pdf_view
+        is_open = view.page_count > 0
+        can_save = is_open and view.modified and not view.saving
+        for action in (self.save_action, self.feature_actions["save"]):
+            action.setEnabled(can_save)
+        for action in (self.save_as_action, self.feature_actions["save_as"]):
+            action.setEnabled(is_open and not view.saving)
+
+    def _modified_changed(self, page: DocumentPage) -> None:
+        if page is self.current_document:
+            self._refresh_save_actions()
+
+    def save_document(self, page: DocumentPage | None = None) -> bool:
+        """Save the changes of a document (the one in front) in its own file.
+
+        Returns True if the saving has started; the result comes a moment later.
+        """
+        page = page if page is not None else self.current_document
+        if page.view.page_count == 0 or page.path is None:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return False
+        if page.view.saving:
+            return False
+        if not page.view.modified:
+            self.statusBar().showMessage(self.tr("No hay cambios que guardar."), STATUS_MESSAGE_MS)
+            return False
+        self._start_saving(page, None)
+        return True
+
+    def save_document_as(self, target: str | Path | None = None) -> bool:
+        """Save the document in front as another file and go on working in that one.
+
+        Without ``target`` the user is asked where. Returns True if the saving
+        has started.
+        """
+        page = self.current_document
+        if page.view.page_count == 0 or page.path is None:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return False
+        if page.view.saving:
+            return False
+        if target is None:
+            suggested = page.path.with_name(self.tr("{0} - copia.pdf").format(page.path.stem))
+            chosen, _filter = QFileDialog.getSaveFileName(
+                self, self.tr("Guardar como"), str(suggested), self.tr("Documentos PDF (*.pdf)")
+            )
+            if not chosen:
+                return False
+            target = chosen
+        target = Path(target).absolute()
+        if target.suffix.lower() != ".pdf":
+            target = target.with_name(target.name + ".pdf")
+        if file_key(target) != file_key(page.path) and self.index_of_document(target) >= 0:
+            self._show_problem(
+                self.tr("Ese archivo está abierto"),
+                self.tr(
+                    "«{0}» está abierto en otra pestaña. Elige otro nombre o cierra antes "
+                    "esa pestaña."
+                ).format(target.name),
+            )
+            return False
+        self._start_saving(page, target)
+        return True
+
+    def _start_saving(self, page: DocumentPage, target: Path | None) -> None:
+        self.statusBar().showMessage(self.tr("Guardando…"))
+        page.view.save(target)
+        self._refresh_save_actions()
+
+    def _document_saved(self, page: DocumentPage, _number: int, path: object) -> None:
+        path = Path(path)
+        if page.path is not None and file_key(path) != file_key(page.path):
+            # "Guardar como": from now on this tab is the new file.
+            page.path = path
+            self.history.add_recent(path)
+            if page in self.documents:
+                index = self.documents.index(page)
+                self.document_tabs.setTabText(index, page.title)
+                self.document_tabs.setTabToolTip(index, str(path))
+                self._save_session()
+            if page is self.current_document:
+                self.setWindowTitle(f"{page.title} – {APP_NAME}")
+        self.statusBar().showMessage(
+            self.tr("Guardado en «{0}».").format(path.name), STATUS_MESSAGE_MS
+        )
+        self._refresh_save_actions()
+
+    def _save_failed(self, page: DocumentPage, _number: int, kind: str) -> None:
+        self._refresh_save_actions()
+        name = page.title
+        reasons = {
+            saving.LOCKED: self.tr(
+                "Otro programa tiene abierto «{0}» (o se está sincronizando con la nube). "
+                "Ciérralo en el otro programa y vuelve a guardar."
+            ),
+            saving.READ_ONLY: self.tr(
+                "«{0}» o su carpeta no se pueden cambiar (es de solo lectura). "
+                "Guárdalo en otro sitio con «Guardar como»."
+            ),
+            saving.NO_SPACE: self.tr(
+                "No queda sitio en el disco para guardar «{0}». Libera espacio o guárdalo "
+                "en otro sitio con «Guardar como»."
+            ),
+        }
+        reason = reasons.get(
+            kind,
+            self.tr("No se ha podido guardar «{0}». Prueba a guardarlo en otro sitio."),
+        ).format(name)
+        text = self.tr("{0}\n\nNo se ha perdido nada: tus cambios siguen aquí.").format(reason)
+        title = self.tr("No se ha podido guardar")
+        self.statusBar().showMessage(f"{title}. {reason}", STATUS_MESSAGE_MS)
+        if not self.show_problem_dialogs:
+            return
+        box = QMessageBox(QMessageBox.Icon.Warning, title, text, parent=self)
+        save_as = box.addButton(self.tr("Guardar como…"), QMessageBox.ButtonRole.AcceptRole)
+        box.addButton(self.tr("Cerrar"), QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        if box.clickedButton() is save_as and page in self.documents:
+            self.document_tabs.setCurrentIndex(self.documents.index(page))
+            self.save_document_as()
+
     def print_document(self) -> None:
         """Ask what to print of the document in front, and print it."""
         if self.pdf_view.page_count == 0:
@@ -1007,6 +1146,11 @@ class MainWindow(QMainWindow):
         view.document_failed.connect(self._document_failed)
         view.text_copied.connect(self._text_copied)
         view.no_text_to_select.connect(self._no_text_to_select)
+        view.modified_changed.connect(lambda _modified, p=page: self._modified_changed(p))
+        view.saved.connect(lambda number, path, p=page: self._document_saved(p, number, path))
+        view.save_failed.connect(
+            lambda number, kind, details, p=page: self._save_failed(p, number, kind)
+        )
         page.search_panel.closed.connect(self.close_search)
         page.search_panel.box.textChanged.connect(self._panel_search_typed)
         page.side_panel.closed.connect(self.close_side_panel)
@@ -1235,6 +1379,7 @@ class MainWindow(QMainWindow):
         searching = page.search_panel.isVisible()
         self.search_box.setText(page.search_panel.box.text() if searching else "")
         self.side_panel_action.setChecked(page.side_panel.isVisible())
+        self._refresh_save_actions()
         self._show_speed(page)
         if self._full_screen:
             self._hide_panels_for_full_screen()
