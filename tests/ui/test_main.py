@@ -39,3 +39,14 @@ def test_the_program_does_not_start_again_by_itself(monkeypatch):
     monkeypatch.setattr(program, "relaunch", lambda: started.append(True))
     assert main(["lector-pdf", AUTOCLOSE_FLAG]) == 0
     assert started == []
+
+
+def test_check_print_option(sample, tmp_path):
+    from app.main import CHECK_PRINT_FLAG, EXIT_PRINT_FAILED
+
+    out = tmp_path / "impreso.pdf"
+    assert main(["lector-pdf", CHECK_PRINT_FLAG, str(sample("boe.pdf")), str(out)]) == 0
+    assert out.stat().st_size > 1000
+    assert main(["lector-pdf", CHECK_PRINT_FLAG, str(sample("boe.pdf"))]) == EXIT_PRINT_FAILED
+    missing = str(tmp_path / "no-existe.pdf")
+    assert main(["lector-pdf", CHECK_PRINT_FLAG, missing, str(out)]) == EXIT_PRINT_FAILED

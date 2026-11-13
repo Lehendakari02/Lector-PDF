@@ -164,6 +164,7 @@ def _worker_main(connection: Connection) -> None:
     doc = None
     wanted: list[tuple[int, float, int]] = []
     thumbnails: list[tuple[int, float, int]] = []  # small pictures, drawn when idle
+    prints: list[tuple[int, float, int]] = []  # pages for the printer
     token = 0
     search: _SearchJob | None = None
     page_texts: dict[int, PageText] = {}  # letters of pages already read
@@ -172,7 +173,7 @@ def _worker_main(connection: Connection) -> None:
     while True:
         # Read every waiting message before doing anything, so a newer list of
         # wanted pages (or a newer search) always wins over an older one.
-        if not (wanted or thumbnails or search) or connection.poll():
+        if not (wanted or prints or thumbnails or search) or connection.poll():
             try:
                 message = connection.recv()
             except (EOFError, OSError):
@@ -182,7 +183,7 @@ def _worker_main(connection: Connection) -> None:
                 return
             if kind == "open":
                 _, token, path, password = message
-                wanted, thumbnails, search = [], [], None
+                wanted, prints, thumbnails, search = [], [], [], None
                 page_texts.clear()
                 if doc is not None:
                     doc.close()
@@ -204,6 +205,9 @@ def _worker_main(connection: Connection) -> None:
             elif kind == "thumbnails":
                 _, want_token, items = message
                 thumbnails = list(items) if want_token == token and doc is not None else []
+            elif kind == "prints":
+                _, want_token, items = message
+                prints = list(items) if want_token == token and doc is not None else []
             elif kind == "search":
                 _, search_token, search_id, query, whole_word, exact = message
                 search = None
@@ -228,23 +232,24 @@ def _worker_main(connection: Connection) -> None:
                         copied = ""
                     connection.send(("copied", token, copy_id, copied))
             elif kind == "close":
-                wanted, thumbnails, search = [], [], None
+                wanted, prints, thumbnails, search = [], [], [], None
                 page_texts.clear()
                 if doc is not None:
                     doc.close()
                     doc = None
             continue
 
-        if not wanted and not thumbnails:
+        if not wanted and not prints and not thumbnails:
             # Nothing to draw: search one more page. Drawing always goes first,
             # so searching a long document never slows the scrolling down.
             if not _search_next_page(connection, token, doc, search, page_texts):
                 search = None
             continue
 
-        # The pages being read go before the small pictures of the side panel.
-        kind = "page" if wanted else "thumbnail"
-        page_index, zoom, rotation = (wanted or thumbnails).pop(0)
+        # The pages being read go first, then the printer, then the small
+        # pictures of the side panel.
+        kind = "page" if wanted else "print" if prints else "thumbnail"
+        page_index, zoom, rotation = (wanted or prints or thumbnails).pop(0)
         # Said first: if drawing this page kills the helper, the program knows which.
         connection.send(("drawing", token, page_index))
         if page_index in crash_pages:
@@ -266,7 +271,8 @@ def _worker_main(connection: Connection) -> None:
             )
             connection.send_bytes(result.samples)
         except Exception as exc:
-            connection.send(("page_failed", token, page_index, zoom, str(exc)))
+            failed = "print_failed" if kind == "print" else "page_failed"
+            connection.send((failed, token, page_index, zoom, str(exc)))
 
 
 class RenderService:
@@ -288,7 +294,14 @@ class RenderService:
         on_thumbnail: Callable[[RenderedPage], None] | None = None,
         on_text: Callable[[int, PageText], None] | None = None,
         on_copied: Callable[[int, str], None] | None = None,
+        on_print: Callable[[RenderedPage], None] | None = None,
+        on_print_failed: Callable[[int], None] | None = None,
+        on_print_lost: Callable[[int], None] | None = None,
     ) -> None:
+        self._on_print = on_print or (lambda page: None)
+        self._on_print_failed = on_print_failed or (lambda page: None)
+        self._on_print_lost = on_print_lost or (lambda page: None)
+        self._printing: set[int] = set()  # pages asked for the printer, not yet back
         self._on_text = on_text or (lambda page, text: None)
         self._on_copied = on_copied or (lambda copy_id, text: None)
         self._copy_id = 0
@@ -352,6 +365,23 @@ class RenderService:
             if self._ensure_started():
                 self._send(("open", self._token, str(self._path), self._password))
             self._send(("thumbnails", self._token, self._drawable(requests)))
+
+    def want_prints(self, requests: list[RenderRequest]) -> None:
+        """Replace the list of pages to draw for the printer (an empty list cancels).
+
+        Each arrives in ``on_print``, or its number in ``on_print_failed`` if it
+        cannot be drawn. They do not disturb the pages being read.
+        """
+        with self._lock:
+            if self._path is None:
+                return
+            if self._ensure_started():
+                self._send(("open", self._token, str(self._path), self._password))
+            bad = [r.page for r in requests if r.page in self._bad_pages]
+            self._printing = {r.page for r in requests} - set(bad)
+            self._send(("prints", self._token, self._drawable(requests)))
+        for page in bad:
+            self._tell(self._on_print_failed, page)
 
     def search(self, query: str, options: SearchOptions = DEFAULT_OPTIONS) -> int:
         """Start looking for ``query`` in the whole document.
@@ -509,13 +539,24 @@ class RenderService:
                     break
                 message = connection.recv()
                 kind = message[0]
-                samples = connection.recv_bytes() if kind in ("page", "thumbnail") else b""
+                has_picture = kind in ("page", "thumbnail", "print")
+                samples = connection.recv_bytes() if has_picture else b""
             except (EOFError, OSError, ValueError, TypeError):
                 break
             if message[1] != self._token:
                 continue  # belongs to a document that is no longer open
             if kind == "drawing":
                 self._drawing = message[2]
+            elif kind == "print_failed":
+                self._drawing = None
+                self._printing.discard(message[2])
+                self._tell(self._on_print_failed, message[2])
+            elif kind == "print":
+                _, _, page, zoom, width, height, stride, seconds, rotation = message
+                self._drawing = None
+                self._printing.discard(page)
+                drawn = RenderedPage(page, zoom, width, height, stride, samples, seconds, rotation)
+                self._tell(self._on_print, drawn)
             elif kind in ("page", "thumbnail"):
                 _, _, page, zoom, width, height, stride, seconds, rotation = message
                 self._drawing = None
@@ -541,6 +582,7 @@ class RenderService:
                 self._searching = False
                 self._tell(self._on_search_done, message[2], message[3])
         lost_search = bad_page = None
+        lost_prints: set[int] = set()
         with self._lock:
             crashed = not self._closing and connection is self._connection
             if crashed:
@@ -558,6 +600,11 @@ class RenderService:
                 gave_up = self._crashes >= MAX_CRASHES_PER_DOCUMENT
                 lost_search = self._search_id if self._searching else None
                 self._searching = False
+                lost_prints, self._printing = self._printing, set()
+        # The printer is told about every page it was waiting for: it asks again
+        # for the good ones and leaves out the one that killed the helper.
+        for page in sorted(lost_prints):
+            self._tell(self._on_print_failed if page == bad_page else self._on_print_lost, page)
         if crashed and bad_page is not None:
             self._tell(self._on_page_failed, bad_page, 0.0, "the helper ended while drawing it")
         if crashed and lost_search is not None:
