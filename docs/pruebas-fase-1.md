@@ -189,3 +189,16 @@ versiones publicadas (por ejemplo la 0.1.0 instalada y la 0.1.1 recién publicad
    tienes. Sin internet, dice que no se ha podido consultar.
 9. En Ajustes, desmarca "Avisarme cuando haya una versión nueva": al abrir ya no
    pregunta nada a internet.
+
+## Tarea 1.14 – Versión 0.1
+
+1. Ayuda → Acerca de Lector-PDF: dice "Versión 0.1.0" y enseña la lista de piezas
+   de software libre. "Ver el código fuente" abre la página del proyecto y "Abrir
+   la carpeta de licencias" abre una carpeta con los textos.
+2. En la versión publicada (no en las de prueba) no sale abajo el contador "Dibujo
+   de página" ni, en Ayuda, "Provocar un error de prueba".
+3. Instala con el instalador de la página de Releases en un ordenador limpio: no
+   pide permisos de administrador y el programa se abre al terminar.
+4. Descomprime la portátil en una carpeta cualquiera y ábrela: funciona sin
+   instalar y crea su carpeta `datos` al lado.
+5. Repasa por encima las tareas 1.1 a 1.13 de esta lista con la versión publicada.

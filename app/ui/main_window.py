@@ -37,6 +37,7 @@ from app.core.updates import Release
 from app.core.windows_store import SigningCancelled
 from app.ui import icons
 from app.ui import theme as theme_module
+from app.ui.about_dialog import AboutDialog
 from app.ui.command_palette import CommandPalette
 from app.ui.document_page import DocumentPage
 from app.ui.error_reporting import ErrorReporter, ProvokedError
@@ -452,6 +453,12 @@ class MainWindow(QMainWindow):
         self.test_error_action.setVisible(running_from_source_or_test_build())
         help_menu.addAction(self.test_error_action)
 
+        help_menu.addSeparator()
+        self.about_action = QAction(self.tr("&Acerca de {0}").format(APP_NAME), self)
+        self.about_action.setMenuRole(QAction.MenuRole.AboutRole)
+        self.about_action.triggered.connect(lambda _checked=False: self.show_about())
+        help_menu.addAction(self.about_action)
+
     def _build_welcome(self) -> QWidget:
         """The page shown while no document is open."""
         self.welcome_logo = QLabel()
@@ -637,6 +644,13 @@ class MainWindow(QMainWindow):
     def open_settings(self) -> SettingsDialog:
         """Show the settings window. Returned so that tests can use it."""
         dialog = SettingsDialog(self)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        dialog.open()
+        return dialog
+
+    def show_about(self) -> AboutDialog:
+        """The window with the version, the licence and the software used."""
+        dialog = AboutDialog(self)
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         dialog.open()
         return dialog
