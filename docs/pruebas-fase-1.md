@@ -202,3 +202,17 @@ versiones publicadas (por ejemplo la 0.1.0 instalada y la 0.1.1 recién publicad
 4. Descomprime la portátil en una carpeta cualquiera y ábrela: funciona sin
    instalar y crea su carpeta `datos` al lado.
 5. Repasa por encima las tareas 1.1 a 1.13 de esta lista con la versión publicada.
+
+## Barras compactas (después de la primera sesión de pruebas)
+
+1. Arriba ya no hay fila de menús: el botón **Menú** de la esquina (o Alt+M) los
+   enseña todos. Los atajos de siempre (Ctrl+O, Ctrl+P, Ctrl+F, F11…) funcionan.
+2. Escribe una palabra en el buscador de arriba: se abre el panel con los
+   resultados. Intro va al siguiente, Mayús+Intro al anterior y Esc lo cierra.
+3. Ctrl+K sigue abriendo el buscador de funciones.
+4. Ajustes → Barra de herramientas → "Solo iconos": los botones se quedan sin
+   nombre y las barras ocupan menos; al pasar el ratón sale el nombre. Al cerrar
+   y abrir el programa se acuerda.
+5. Ctrl+0 o el botón "Tamaño inicial" devuelven el documento al tamaño con el que
+   se abrió.
+6. Comprueba que el documento ocupa claramente más pantalla que antes.

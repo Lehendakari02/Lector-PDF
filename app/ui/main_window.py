@@ -11,7 +11,9 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QProgressDialog,
     QPushButton,
@@ -66,9 +68,15 @@ from app.ui.zoom_control import ZoomControl
 
 # Big enough to press comfortably with a finger on a touch screen.
 MIN_BUTTON_HEIGHT = 40
+# The row with the menu, the modes and the search box is a little lower.
+BAR_BUTTON_HEIGHT = 34
 STATUS_MESSAGE_MS = 6000
 LAST_FOLDER_SETTING = "ultima_carpeta"
 WELCOME_RECENT = 5  # recent documents offered on the welcome page
+# The tools of each mode with their names under the drawing, or only the drawings.
+TOOLBAR_SETTING = "barra_herramientas"
+TOOLBAR_NAMES, TOOLBAR_ICONS = "nombres", "iconos"
+TOP_SEARCH_WIDTH = 280
 SIDE_PANEL_SETTING = "panel_lateral"  # "", "miniaturas" or "indice"
 
 
@@ -107,6 +115,7 @@ class MainWindow(QMainWindow):
         self._docks_before: list[QWidget] = []
         self.feature_actions: dict[str, QAction] = {}
         self.mode_toolbars: dict[Mode, QToolBar] = {}
+        self._toolbar_icons_only = False
         self.theme_actions: dict[Theme, QAction] = {}
         self.paper_actions: dict[Paper, QAction] = {}
         # The size of the interface this copy of the program started with.
@@ -240,7 +249,7 @@ class MainWindow(QMainWindow):
         self.mode_tabs.setAccessibleName(self.tr("Modos de trabajo"))
         self.mode_tabs.setExpanding(False)
         self.mode_tabs.setDrawBase(False)
-        self.mode_tabs.setMinimumHeight(MIN_BUTTON_HEIGHT)
+        self.mode_tabs.setMinimumHeight(BAR_BUTTON_HEIGHT)
         self.mode_tabs.setIconSize(QSize(20, 20))
         self.mode_tabs.setCursor(Qt.CursorShape.PointingHandCursor)
         for number, mode in enumerate(MODES, start=1):
@@ -252,7 +261,43 @@ class MainWindow(QMainWindow):
             )
         self.mode_tabs.currentChanged.connect(lambda index: self.set_mode(MODES[index]))
 
-        self.finder_button = QPushButton(self.tr("Buscar una función…   Ctrl+K"))
+        # The menus (Archivo, Editar, Ver, Ayuda) live behind one button: a whole
+        # row less above the document. Filled in _build_menus.
+        self.menu_button = QToolButton()
+        self.menu_button.setObjectName("menuButton")
+        self.menu_button.setText(self.tr("&Menú"))
+        self.menu_button.setIcon(icons.icon("menu"))
+        self.menu_button.setIconSize(QSize(20, 20))
+        self.menu_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.menu_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.menu_button.setToolTip(self.tr("Archivo, Editar, Ver y Ayuda (Alt+M)"))
+        self.menu_button.setAccessibleName(self.tr("Menú del programa"))
+        self.menu_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.menu_button.setMinimumHeight(BAR_BUTTON_HEIGHT)
+
+        # Always in view: typing here searches the document in front.
+        self.search_box = QLineEdit()
+        self.search_box.setObjectName("topSearch")
+        self.search_box.setPlaceholderText(self.tr("Buscar en el documento…   Ctrl+F"))
+        self.search_box.setAccessibleName(self.tr("Buscar en el documento"))
+        self.search_box.setToolTip(
+            self.tr(
+                "Escribe una palabra o una frase. No hacen falta tildes ni mayúsculas. "
+                "Intro: siguiente resultado."
+            )
+        )
+        self.search_box.setClearButtonEnabled(True)
+        self.search_box.addAction(
+            icons.icon("search", icons.MUTED), QLineEdit.ActionPosition.LeadingPosition
+        )
+        self.search_box.setFixedWidth(TOP_SEARCH_WIDTH)
+        self.search_box.setMinimumHeight(BAR_BUTTON_HEIGHT)
+        self.search_box.textEdited.connect(self._top_search_typed)
+        self.search_box.returnPressed.connect(self._top_search_enter)
+        self.search_box.installEventFilter(self)
+
+        self.finder_button = QPushButton(self.tr("Funciones   Ctrl+K"))
+        self.finder_button.setAccessibleName(self.tr("Buscar una función"))
         self.finder_button.setObjectName("finderButton")
         self.finder_button.setIcon(icons.icon("search", icons.MUTED))
         self.finder_button.setIconSize(QSize(18, 18))
@@ -260,14 +305,17 @@ class MainWindow(QMainWindow):
         self.finder_button.setToolTip(
             self.tr("Escribe lo que quieres hacer y te lleva a la función, esté donde esté")
         )
-        self.finder_button.setMinimumHeight(MIN_BUTTON_HEIGHT)
+        self.finder_button.setMinimumHeight(BAR_BUTTON_HEIGHT)
         self.finder_button.clicked.connect(self.open_command_palette)
 
         bar = QWidget()
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(4, 0, 4, 0)
+        layout.setSpacing(6)
+        layout.addWidget(self.menu_button)
         layout.addWidget(self.mode_tabs)
         layout.addStretch()
+        layout.addWidget(self.search_box)
         layout.addWidget(self.finder_button)
 
         holder = self.mode_bar = QToolBar(self.tr("Modos"))
@@ -288,8 +336,7 @@ class MainWindow(QMainWindow):
             toolbar.setFloatable(False)
             toolbar.toggleViewAction().setEnabled(False)
             toolbar.setProperty("tools", True)  # the style sheet looks for this
-            toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
-            toolbar.setIconSize(QSize(22, 22))
+            toolbar.setIconSize(QSize(20, 20))
             for feature in features_of(mode):
                 if feature.id in GROUP_STARTS:
                     toolbar.addSeparator()
@@ -303,6 +350,35 @@ class MainWindow(QMainWindow):
                 more.setToolTip(self.tr("Más herramientas"))
             self.addToolBar(Qt.ToolBarArea.TopToolBarArea, toolbar)
             self.mode_toolbars[mode] = toolbar
+        self.set_toolbar_icons_only(
+            self.settings.get(TOOLBAR_SETTING) == TOOLBAR_ICONS, remember=False
+        )
+
+    @property
+    def toolbar_icons_only(self) -> bool:
+        return self._toolbar_icons_only
+
+    def set_toolbar_icons_only(self, icons_only: bool, remember: bool = True) -> None:
+        """Show the tools with their names (the default) or only their drawings.
+
+        Without names the bar is lower and the document gets more room; the
+        name of every tool is still in its tooltip and for screen readers.
+        """
+        self._toolbar_icons_only = icons_only
+        style = (
+            Qt.ToolButtonStyle.ToolButtonIconOnly
+            if icons_only
+            else Qt.ToolButtonStyle.ToolButtonTextUnderIcon
+        )
+        for toolbar in self.mode_toolbars.values():
+            toolbar.setToolButtonStyle(style)
+            toolbar.setIconSize(QSize(22, 22) if icons_only else QSize(20, 20))
+            for action in toolbar.actions():
+                button = toolbar.widgetForAction(action)
+                if isinstance(button, QToolButton) and not action.isSeparator():
+                    button.setMinimumWidth(MIN_BUTTON_HEIGHT if icons_only else 0)
+        if remember:
+            self.settings.set(TOOLBAR_SETTING, TOOLBAR_ICONS if icons_only else TOOLBAR_NAMES)
 
     def _build_menus(self) -> None:
         # Works in every mode, like the other shortcuts of the window.
@@ -466,6 +542,22 @@ class MainWindow(QMainWindow):
         self.about_action.setMenuRole(QAction.MenuRole.AboutRole)
         self.about_action.triggered.connect(lambda _checked=False: self.show_about())
         help_menu.addAction(self.about_action)
+
+        # The same menus, behind the "Menú" button. The classic bar stays hidden:
+        # its row is given to the document.
+        self.main_menu = QMenu(self.menu_button)
+        for top_action in self.menuBar().actions():
+            self.main_menu.addAction(top_action)
+        self.menu_button.setMenu(self.main_menu)
+        self.menuBar().hide()
+        # A shortcut only works while its action belongs to something in view.
+        waiting = list(self.menuBar().actions())
+        while waiting:
+            action = waiting.pop()
+            if action.menu() is not None:
+                waiting.extend(action.menu().actions())
+            elif not action.shortcut().isEmpty() and action not in self.actions():
+                self.addAction(action)
 
     def _build_welcome(self) -> QWidget:
         """The page shown while no document is open."""
@@ -916,6 +1008,7 @@ class MainWindow(QMainWindow):
         view.text_copied.connect(self._text_copied)
         view.no_text_to_select.connect(self._no_text_to_select)
         page.search_panel.closed.connect(self.close_search)
+        page.search_panel.box.textChanged.connect(self._panel_search_typed)
         page.side_panel.closed.connect(self.close_side_panel)
         page.side_panel.tab_changed.connect(self._side_tab_changed)
         # Ctrl+C and Ctrl+A belong to the document only while it has the keyboard:
@@ -1138,6 +1231,9 @@ class MainWindow(QMainWindow):
             self.setWindowTitle(APP_NAME)
         self.page_box.set_view(page.view)
         self.zoom_control.set_view(page.view)
+        # The box at the top shows what is being searched in this document.
+        searching = page.search_panel.isVisible()
+        self.search_box.setText(page.search_panel.box.text() if searching else "")
         self.side_panel_action.setChecked(page.side_panel.isVisible())
         self._show_speed(page)
         if self._full_screen:
@@ -1188,7 +1284,53 @@ class MainWindow(QMainWindow):
 
     def close_search(self) -> None:
         self.search_dock.hide()
+        self.search_box.clear()
         self.pdf_view.setFocus()
+
+    # ---- the search box at the top ---------------------------------------
+
+    def _top_search_typed(self, text: str) -> None:
+        """Typed in the box at the top: the panel of the document searches it."""
+        if self.pdf_view.page_count == 0:
+            self.statusBar().showMessage(
+                self.tr("Abre un documento para poder buscar en él."), STATUS_MESSAGE_MS
+            )
+            return
+        self.search_dock.show()  # the list of results; the cursor stays up here
+        self.search_panel.box.setText(text)
+
+    def _top_search_enter(self) -> None:
+        if self.pdf_view.page_count and self.search_box.text():
+            self.search_dock.show()
+            self.search_panel.box.setText(self.search_box.text())
+            self.search_panel.enter_pressed()
+
+    def _panel_search_typed(self, text: str) -> None:
+        """Typed in the panel of a document: the box at the top says the same."""
+        if self.sender() is self.search_panel.box and self.search_box.text() != text:
+            self.search_box.setText(text)
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802 (Qt naming)
+        """In the search box at the top: arrows walk the results, Esc ends the search."""
+        if watched is self.search_box and event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            shift = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+            if key in (Qt.Key.Key_Down, Qt.Key.Key_Up) or (
+                shift and key in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+            ):
+                if self.pdf_view.page_count:
+                    if key == Qt.Key.Key_Down:
+                        self.search_panel.go_next()
+                    else:
+                        self.search_panel.go_previous()
+                return True
+            if key == Qt.Key.Key_Escape:
+                if self.pdf_view.page_count:
+                    self.search_panel.close_search()
+                else:
+                    self.search_box.clear()
+                return True
+        return super().eventFilter(watched, event)
 
     # ---- text recognition (proof of concept of task 0.9) ---------------
 
@@ -1358,7 +1500,6 @@ class MainWindow(QMainWindow):
                     panel.show()
             self._docks_before = []
         self.document_tabs.setVisible(not on and bool(self.documents))
-        self.menuBar().setVisible(not on)
         self.statusBar().setVisible(not on)
         self.mode_bar.setVisible(not on)
         self.set_mode(self._mode)  # shows or hides the tools of the mode

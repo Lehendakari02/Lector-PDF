@@ -338,6 +338,19 @@ Notas de la Fase 1:
     tamaño con el que se abrió el documento.
   - Prueba nueva con 16 PDFs rotos de formas distintas (cortados, con trozos
     cambiados, quitados o metidos): la ventana aguanta todos.
+- **Barras de arriba más compactas (13/11/2026, decidido por Julen):** el documento
+  es el protagonista, como en Edge.
+  - Los menús (Archivo, Ver, Ayuda…) ya no ocupan una fila: están en el botón
+    **Menú** de la esquina (Alt+M). Todos los atajos siguen funcionando igual.
+  - El **buscador de palabras** está siempre a la vista arriba, junto al buscador
+    de funciones (Ctrl+K), que ahora ocupa menos. Escribir ahí abre el panel de
+    resultados; Intro, Mayús+Intro y las flechas pasan de uno a otro; Esc lo cierra.
+  - Filas más bajas: en una pantalla de portátil (1366×768) las barras ocupaban
+    237 puntos de alto y ahora 179. Con **"solo iconos"** (Ajustes → Barra de
+    herramientas), 170; el nombre de cada botón sale al pasar el ratón.
+  - Letra pequeña: la fila de modos mide 34 puntos de alto, algo menos que los 40
+    recomendados para el dedo; los botones de herramientas siguen en 40 o más. Se
+    revisará con una pantalla táctil de verdad en la tarea 2.11.
 
 ## Fase 2A – Anotar y guardado
 | # | Tarea | Terminado cuando… | Estado |
