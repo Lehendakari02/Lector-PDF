@@ -394,7 +394,7 @@ Notas de la Fase 1:
 | 2.4 | Deshacer / rehacer (cada cambio es una "orden", ver `CLAUDE.md` §5) | Ctrl+Z y Ctrl+Y funcionan con todo | ✅ |
 | 2.5 | **Diario de recuperación** | Apago el ordenador a la fuerza mientras subrayo, lo enciendo y no he perdido nada | ✅ |
 | 2.6 | **Preguntar al cerrar** (Guardar / No guardar / Cancelar), "Volver a como estaba al abrirlo", recuperar cambios descartados, e indicador "Guardado / Cambios sin guardar" | Subrayo, cierro y me pregunta; si le doy a "No guardar" con prisa, aún puedo recuperarlo | ✅ |
-| 2.6b | **Versiones anteriores** y avisos que salen siempre (firmado, cambios fuertes, no se puede guardar, cambiado por otro programa) | Vuelvo a como estaba el PDF esta mañana; un PDF firmado nunca se guarda solo | 🔄 versiones hechas; faltan los avisos |
+| 2.6b | **Versiones anteriores** y avisos que salen siempre (firmado, cambios fuertes, no se puede guardar, cambiado por otro programa) | Vuelvo a como estaba el PDF esta mañana; un PDF firmado nunca se guarda solo | ✅ (el aviso de cambios fuertes llega con cada herramienta que borra páginas, tapa datos o cambia el texto) |
 | 2.6c | **Ajustes de guardado**: qué hacer al cerrar (preguntar / guardar siempre), guardar solo mientras trabajo (desactivado por defecto), versiones y días que se conservan | Activo "guardar solo" y ya no me pregunta al cerrar | ⬜ |
 | 2.7 | Notas adhesivas y cuadros de texto | Escribo notas y texto con la fuente, tamaño y color que quiero | ⬜ |
 | 2.8 | Dibujo a mano alzada, flechas, formas, borrador | Dibujo y borro sobre la página | ⬜ |
@@ -565,8 +565,25 @@ Notas de la Fase 2A:
   - Si no se puede conservar la versión (disco lleno), se guarda igualmente y se
     avisa: lo importante es no perder los cambios.
   - Dos versiones idénticas seguidas no se guardan dos veces.
-  - Falta de la 2.6b: los avisos que salen siempre (PDF firmado, archivo
-    cambiado por otro programa, carpeta temporal).
+- **2.6b, final: avisos que salen siempre al guardar (14/11/2026).**
+  - Antes de guardar en el mismo archivo el programa mira tres cosas: si el
+    PDF está firmado con certificado, si otro programa ha cambiado el archivo
+    desde que se abrió (o desde nuestro último guardado) y si está en una
+    carpeta temporal (adjunto de correo). Si pasa alguna, pregunta: **Guardar
+    como…** (lo recomendado), **Guardar aquí de todos modos** o **Cancelar**.
+  - Sale también al cerrar eligiendo "Guardar"; si se cancela, no se cierra.
+  - "Guardar aquí de todos modos" vale para el resto de la sesión en ese
+    documento (no pregunta en cada guardado), salvo que otro programa vuelva a
+    cambiar el archivo: entonces pregunta otra vez.
+  - Tras "Guardar como" de un PDF firmado, la copia es el archivo de trabajo y
+    ya no avisa: el original firmado queda intacto.
+  - Lo que deja el otro programa no se pierde: queda en Versiones anteriores.
+  - Cuando llegue "guardar solo" (2.6c), un documento con alguno de estos
+    avisos nunca se guardará solo.
+  - Pendiente a propósito: el aviso de "cambios fuertes"
+    (borrar páginas, tapar datos, cambiar el texto) se hará con cada una de
+    esas herramientas (Fases 5 y 6). El archivo de solo lectura ya ofrecía
+    "Guardar como" desde la 2.1.
 
 ## Fase 2B – Documentos escaneados (OCR)
 | # | Tarea | Terminado cuando… | Estado |
