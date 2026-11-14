@@ -29,6 +29,7 @@ def window(qt_app, settings):
     main_window.show()
     qt_app.processEvents()
     yield main_window
+    main_window.unsaved_answer = "discard"  # never wait for an answer when a test ends
     main_window.close()
     # Really destroy it. Windows left behind make every later change of the
     # style sheet slower, and the tests ended up taking twice as long.

@@ -311,7 +311,8 @@ Notas de la Fase 1:
   - Publicar una versión añade ahora el archivo `SHA256SUMS.txt` con las huellas.
 - 1.14: **versión 0.1.0 publicada el 13/11/2026** y repositorio público. El código
   pasa a decir 0.1.1, que se publicará solo para probar de verdad la actualización
-  con un clic desde la 0.1.0.
+  con un clic desde la 0.1.0. **Probado por Julen el 13/11/2026 con la versión
+  instalada: funcionó como debía.** Falta probarlo con la portátil.
   - **Acerca de** (Ayuda → Acerca de Lector-PDF): versión, que es software libre,
     enlace al código y lista en lenguaje llano de las piezas que usa con su
     licencia. La carpeta `licencias` del programa lleva el texto de todas (M8); la
@@ -392,7 +393,7 @@ Notas de la Fase 1:
 | 2.3 | Paleta de colores completa, grosor y opacidad | Elijo cualquier color para cada herramienta | ⬜ |
 | 2.4 | Deshacer / rehacer (cada cambio es una "orden", ver `CLAUDE.md` §5) | Ctrl+Z y Ctrl+Y funcionan con todo | ✅ |
 | 2.5 | **Diario de recuperación** | Apago el ordenador a la fuerza mientras subrayo, lo enciendo y no he perdido nada | ⬜ |
-| 2.6 | **Preguntar al cerrar** (Guardar / No guardar / Cancelar), "Volver a como estaba al abrirlo", recuperar cambios descartados, e indicador "Guardado / Cambios sin guardar" | Subrayo, cierro y me pregunta; si le doy a "No guardar" con prisa, aún puedo recuperarlo | ⬜ |
+| 2.6 | **Preguntar al cerrar** (Guardar / No guardar / Cancelar), "Volver a como estaba al abrirlo", recuperar cambios descartados, e indicador "Guardado / Cambios sin guardar" | Subrayo, cierro y me pregunta; si le doy a "No guardar" con prisa, aún puedo recuperarlo | 🔄 pregunta e indicador hechos; recuperar, con la 2.5 |
 | 2.6b | **Versiones anteriores** y avisos que salen siempre (firmado, cambios fuertes, no se puede guardar, cambiado por otro programa) | Vuelvo a como estaba el PDF esta mañana; un PDF firmado nunca se guarda solo | ⬜ |
 | 2.6c | **Ajustes de guardado**: qué hacer al cerrar (preguntar / guardar siempre), guardar solo mientras trabajo (desactivado por defecto), versiones y días que se conservan | Activo "guardar solo" y ya no me pregunta al cerrar | ⬜ |
 | 2.7 | Notas adhesivas y cuadros de texto | Escribo notas y texto con la fuente, tamaño y color que quiero | ⬜ |
@@ -458,9 +459,23 @@ Notas de la Fase 2A:
     marcas no se pierden mientras el programa siga abierto. Que sobrevivan a un
     apagón es la tarea 2.5.
   - Todavía no: elegir color (2.3), quitar una marca suelta pinchando en ella o
-    cambiarla (2.9; de momento, con Deshacer), preguntar al cerrar con cambios
-    sin guardar (2.6). **Ojo hasta la 2.6: si se cierra sin guardar, las marcas
-    se pierden sin aviso.**
+    cambiarla (2.9; de momento, con Deshacer).
+- **2.6, primera parte: preguntar al cerrar e indicador de guardado (14/11/2026).**
+  - Al cerrar una pestaña con cambios sin guardar pregunta **Guardar / No guardar /
+    Cancelar**. Al cerrar el programa, una sola ventana con la lista de los
+    documentos pendientes y **Guardar todos**. Cerrar la pregunta con la X o con
+    Esc es "Cancelar".
+  - "Guardar" guarda y, cuando ha terminado bien, cierra. Si alguno no se puede
+    guardar (archivo ocupado, solo lectura…) sale el aviso de siempre y nada se
+    cierra: no se pierde nada.
+  - **Indicador siempre a la vista**, abajo a la derecha: "Guardado", "Guardando…"
+    o "Cambios sin guardar". Además, la pestaña con cambios pendientes lleva un
+    punto (●) junto al nombre.
+  - "Actualizar ahora" pasa por la misma pregunta: si se elige Guardar, guarda,
+    cierra e instala; si se cancela, no se instala nada.
+  - **Queda de la 2.6** (necesita el diario, tarea 2.5): que "No guardar" se pueda
+    recuperar durante unos días, y "Volver a como estaba al abrirlo". Hasta
+    entonces "No guardar" descarta de verdad, y la pregunta lo dice.
 
 ## Fase 2B – Documentos escaneados (OCR)
 | # | Tarea | Terminado cuando… | Estado |
