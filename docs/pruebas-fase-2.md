@@ -109,3 +109,16 @@ es lo correcto mientras no haya cambios. Lo que ya se puede probar:
 2. (Opcional) En la carpeta de datos del programa hay ahora, junto a
    `ajustes.json`, un `ajustes.copia.json`: es la copia de seguridad de los
    ajustes, por si el archivo se estropea.
+
+## Tarea 2.6b (primera parte) – Versiones anteriores
+
+1. Abre un PDF, resalta algo y guarda. **Menú → Archivo → Versiones
+   anteriores**: hay una, "Como estaba hoy a las …".
+2. Pulsa **Ver**: se abre en otra pestaña el PDF sin las marcas. Ciérrala.
+3. Resalta más y guarda otra vez: sigue habiendo una sola versión (es una por
+   cada vez que abres el documento, no por cada guardado).
+4. Cierra el programa, ábrelo, resalta y guarda: ahora hay dos.
+5. Elige la más antigua y pulsa **Restaurar**: el documento vuelve a estar
+   limpio, en la misma página.
+6. Vuelve a Versiones anteriores: lo que tenías justo antes de restaurar está
+   ahí como una versión más. Restáurala y vuelven las marcas.

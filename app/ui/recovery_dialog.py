@@ -1,8 +1,5 @@
 """Offers to bring back changes that were never saved."""
 
-import time
-from datetime import datetime
-
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
@@ -15,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.core.journal import KEEP_DISCARDED_DAYS, Pending
+from app.ui.when import when_text
 
 
 class RecoveryDialog(QDialog):
@@ -124,17 +122,7 @@ class RecoveryDialog(QDialog):
             changes = self.tr("1 cambio")
         else:
             changes = self.tr("{0} cambios").format(pending.count)
-        return f"{pending.path.name}  ·  {changes}  ·  {self._when(pending.when)}"
-
-    def _when(self, moment: float) -> str:
-        then = datetime.fromtimestamp(moment)
-        days = (datetime.fromtimestamp(time.time()).date() - then.date()).days
-        hour = then.strftime("%H:%M")
-        if days == 0:
-            return self.tr("hoy a las {0}").format(hour)
-        if days == 1:
-            return self.tr("ayer a las {0}").format(hour)
-        return self.tr("el {0} a las {1}").format(then.strftime("%d/%m/%Y"), hour)
+        return f"{pending.path.name}  ·  {changes}  ·  {when_text(pending.when)}"
 
     def keyPressEvent(self, event) -> None:  # noqa: N802 (Qt naming)
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and self.recover_button.isEnabled():

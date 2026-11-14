@@ -1,5 +1,9 @@
 """Main window: the work modes, their tools and the function finder."""
 
+import shutil
+import tempfile
+import time
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QSize, Qt, QTimer, qVersion
@@ -41,6 +45,8 @@ from app.core.paths import data_dir, is_portable
 from app.core.settings import Settings
 from app.core.signing import PasswordProtected, SigningError, sign_pdf
 from app.core.updates import Release
+from app.core.versions import FOLDER_NAME as VERSIONS_FOLDER
+from app.core.versions import Version, VersionError, Versions
 from app.core.windows_store import SigningCancelled
 from app.ui import icons
 from app.ui import theme as theme_module
@@ -72,6 +78,8 @@ from app.ui.sign_dialog import CertificateDialog
 from app.ui.theme import PAPER_SETTING, THEME_SETTING, Paper, Theme, apply_theme
 from app.ui.unsaved_dialog import CANCEL, DISCARD, SAVE, UnsavedDialog
 from app.ui.updater import UpdateBanner, Updater
+from app.ui.versions_dialog import RESTORE, VIEW, VersionsDialog
+from app.ui.when import when_text
 from app.ui.zoom_control import ZoomControl
 
 # Big enough to press comfortably with a finger on a touch screen.
@@ -83,6 +91,8 @@ LAST_FOLDER_SETTING = "ultima_carpeta"
 WELCOME_RECENT = 5  # recent documents offered on the welcome page
 # The tools of each mode with their names under the drawing, or only the drawings.
 TOOLBAR_SETTING = "barra_herramientas"
+RESTORE_TRIES = 6
+RESTORE_PAUSE = 0.25  # seconds
 PLACE_DELAY_MS = 2000  # how long after turning the page it is remembered
 MARKERS_SETTING = "rotuladores"  # colour and opacity of each marking tool
 TOOLBAR_NAMES, TOOLBAR_ICONS = "nombres", "iconos"
@@ -108,6 +118,12 @@ class MainWindow(QMainWindow):
         # Every change is written down here at once, apart from the PDF, next to
         # the settings (so the portable version keeps it in its own folder).
         self.journal = Journal(self.settings.path.parent / JOURNAL_FOLDER)
+        # The safety net under "Guardar": how each PDF was before it was saved.
+        self.versions = Versions(self.settings.path.parent / VERSIONS_FOLDER)
+        self._version_not_kept = False
+        self._versioned: set[str] = set()  # files whose version was kept in this session
+        # For the tests: the answer to "restore this version?" without the question.
+        self.restore_answer: bool | None = None
         # For the tests: the answer to "recover the changes?" without the question.
         self.recovery_answer: bool | None = None
         # The page being read is remembered a moment after it changes, not only
@@ -551,6 +567,13 @@ class MainWindow(QMainWindow):
         self.addAction(self.print_action)
         file_menu.addAction(self.print_action)
         file_menu.addSeparator()
+        self.versions_action = QAction(self.tr("Versiones &anteriores…"), self)
+        self.versions_action.setStatusTip(
+            self.tr("Ver o restaurar cómo estaba el documento antes de guardarlo")
+        )
+        self.versions_action.setEnabled(False)
+        self.versions_action.triggered.connect(lambda _checked=False: self.choose_version())
+        file_menu.addAction(self.versions_action)
         self.recover_discarded_action = QAction(self.tr("Recuperar cambios &descartados…"), self)
         self.recover_discarded_action.setStatusTip(
             self.tr("Volver a poner cambios que no se guardaron al cerrar")
@@ -1057,6 +1080,7 @@ class MainWindow(QMainWindow):
             action.setEnabled(can_save)
         for action in (self.save_as_action, self.feature_actions["save_as"]):
             action.setEnabled(is_open and not view.saving)
+        self.versions_action.setEnabled(is_open)
         if not is_open:
             state = ""
         elif view.saving:
@@ -1175,9 +1199,121 @@ class MainWindow(QMainWindow):
         return True
 
     def _start_saving(self, page: DocumentPage, target: Path | None) -> None:
+        self._keep_version(target if target is not None else page.path)
         self.statusBar().showMessage(self.tr("Guardando…"))
         page.view.save(target)
         self._refresh_save_actions()
+
+    def _keep_version(self, file: Path | None) -> None:
+        """Before a file is saved over for the first time in this session, keep
+        a copy of how it was. Not being able to must not stop the saving."""
+        if file is None or file_key(file) in self._versioned:
+            return
+        try:
+            self.versions.keep(file)
+        except VersionError:
+            self._version_not_kept = True  # said with the result of the saving
+            return
+        self._versioned.add(file_key(file))
+
+    # ---- earlier versions --------------------------------------------------
+
+    def choose_version(self) -> None:
+        """ "Archivo → Versiones anteriores": look at one or put it back."""
+        page = self.current_document
+        if not self.documents or page.path is None:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return
+        dialog = VersionsDialog(page.title, self.versions.of(page.path), self)
+        try:
+            dialog.exec()
+            action, chosen = dialog.action, dialog.chosen
+        finally:
+            dialog.deleteLater()
+        if chosen is None:
+            return
+        if action == VIEW:
+            self.view_version(chosen)
+        elif action == RESTORE:
+            self.restore_version(chosen)
+
+    def view_version(self, version: Version) -> bool:
+        """Open an earlier version in its own tab, to look at it. Nothing changes."""
+        moment = datetime.fromtimestamp(version.when).strftime("%d-%m-%Y %H.%M")
+        name = self.tr("{0} (versión del {1}).pdf").format(version.document.stem, moment)
+        copy = Path(tempfile.gettempdir()) / "Lector-PDF versiones" / name
+        try:
+            copy.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(version.file, copy)
+        except OSError:
+            self._show_problem(
+                self.tr("No se puede abrir esa versión"),
+                self.tr("No se ha podido preparar la copia para verla."),
+            )
+            return False
+        return self.open_document(copy, remember=False)
+
+    def restore_version(self, version: Version) -> bool:
+        """Leave the document as it was in ``version``.
+
+        How it is now is kept as one more version, and changes not saved are
+        set aside in the journal: nothing is lost by restoring.
+        """
+        document = version.document
+        if self.restore_answer is not None:
+            wanted = self.restore_answer
+        elif not self.show_problem_dialogs:
+            wanted = False
+        else:
+            wanted = (
+                QMessageBox.question(
+                    self,
+                    self.tr("Restaurar versión"),
+                    self.tr(
+                        "«{0}» quedará como estaba {1}.\n\nLo de ahora se guarda como una "
+                        "versión más, por si quieres volver."
+                    ).format(document.name, when_text(version.when)),
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+                    QMessageBox.StandardButton.Yes,
+                )
+                == QMessageBox.StandardButton.Yes
+            )
+        if not wanted:
+            return False
+        index = self.index_of_document(document)
+        place = -1
+        if index >= 0:
+            place = self.documents[index].view.current_page
+            # Its helper lets go of the file; changes not saved go to the journal.
+            self.close_document(index, ask=False)
+        error = ""
+        for _attempt in range(RESTORE_TRIES):
+            try:
+                self.versions.restore(version)
+                error = ""
+                break
+            except VersionError as failed:
+                error = str(failed)
+                time.sleep(RESTORE_PAUSE)  # the helper may need a moment to let go
+        self._versioned.add(file_key(document))
+        reopened = index < 0 or self.open_document(document)
+        if error:
+            self._show_problem(
+                self.tr("No se ha podido restaurar"),
+                self.tr(
+                    "«{0}» sigue como estaba. Puede que otro programa lo tenga abierto."
+                ).format(document.name),
+            )
+            return False
+        if reopened and index >= 0 and 0 < place < self.pdf_view.page_count:
+            self.pdf_view.scroll_to_page(place)
+        self.statusBar().showMessage(
+            self.tr("«{0}» ha vuelto a como estaba {1}.").format(
+                document.name, when_text(version.when)
+            ),
+            STATUS_MESSAGE_MS,
+        )
+        return True
 
     def _document_saved(self, page: DocumentPage, _number: int, path: object) -> None:
         path = Path(path)
@@ -1192,9 +1328,11 @@ class MainWindow(QMainWindow):
                 self._save_session()
             if page is self.current_document:
                 self.setWindowTitle(f"{page.title} – {APP_NAME}")
-        self.statusBar().showMessage(
-            self.tr("Guardado en «{0}».").format(path.name), STATUS_MESSAGE_MS
-        )
+        message = self.tr("Guardado en «{0}».").format(path.name)
+        if self._version_not_kept:
+            self._version_not_kept = False
+            message += " " + self.tr("No se ha podido conservar la versión anterior.")
+        self.statusBar().showMessage(message, STATUS_MESSAGE_MS)
         self._refresh_save_actions()
         self._saved_before_closing(page, True)
 
@@ -1472,8 +1610,13 @@ class MainWindow(QMainWindow):
                 return index
         return -1
 
-    def open_document(self, path: str | Path) -> bool:
-        """Show the PDF at ``path`` in a new tab. Problems give a message, never a crash."""
+    def open_document(self, path: str | Path, remember: bool = True) -> bool:
+        """Show the PDF at ``path`` in a new tab. Problems give a message, never a crash.
+
+        With ``remember`` False the document is only being looked at (an
+        earlier version): it is left out of the recent files and of the tabs
+        that come back the next time.
+        """
         already = self.index_of_document(path)
         if already >= 0:
             self.document_tabs.setCurrentIndex(already)  # it is open: go to its tab
@@ -1496,6 +1639,7 @@ class MainWindow(QMainWindow):
             )
             return False
         page.path = Path(path).absolute()
+        page.remembered = remember
         page.view.journal = self.journal.of(page.path)
         page.slowest_page = 0.0
         # Back to the page and the work mode where this document was left.
@@ -1503,7 +1647,8 @@ class MainWindow(QMainWindow):
         page.mode = _mode_named(place.mode)
         if 0 < place.page < page.view.page_count:
             page.view.scroll_to_page(place.page)
-        self.history.add_recent(page.path)
+        if remember:
+            self.history.add_recent(page.path)
         page.search_panel.document_changed()
         page.side_panel.document_changed()
         self._spare = self._new_page()
@@ -1565,8 +1710,10 @@ class MainWindow(QMainWindow):
     def _save_session(self) -> None:
         if self._restoring:
             return
-        paths = [page.path for page in self.documents if page.path is not None]
-        self.history.save_session(paths, self.document_tabs.currentIndex(), self._absent_tabs)
+        kept = [page for page in self.documents if page.path is not None and page.remembered]
+        front = self.current_document if self.documents else None
+        current = kept.index(front) if front in kept else -1
+        self.history.save_session([page.path for page in kept], current, self._absent_tabs)
         if self.settings.save_failed and not self._told_settings_failed:
             self._told_settings_failed = True  # said once, not at every change
             self.statusBar().showMessage(
@@ -1578,7 +1725,7 @@ class MainWindow(QMainWindow):
             )
 
     def _remember_place(self, page: DocumentPage) -> None:
-        if page.path is not None and page.view.page_count:
+        if page.path is not None and page.view.page_count and page.remembered:
             self.history.remember_place(page.path, max(page.view.current_page, 0), page.mode.name)
 
     def _remember_current_place(self) -> None:
