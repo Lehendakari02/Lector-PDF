@@ -242,6 +242,9 @@ def main(argv: list[str] | None = None) -> int:
         other_copies.files_arrived.connect(window.open_from_another_copy)
         other_copies.window_ready()  # what other copies brought while starting
     if not autoclose:
+        # Changes left by a power cut or a forced close, once the window is up.
+        QTimer.singleShot(0, window.offer_recovery)
+    if not autoclose:
         window.warm_up()  # the next document will open without waiting
         threading.Thread(target=clean_leftovers, args=(data_dir(),), daemon=True).start()
         QTimer.singleShot(UPDATE_CHECK_DELAY_MS, window.updater.check)

@@ -375,8 +375,8 @@ Notas de la Fase 1:
     portátil, según el caso) **y su huella.** GitHub tarda unos minutos en
     adjuntarlos después de publicar.
   - **Queda para la Fase 2** (cada cosa en la tarea que le toca):
-    - con el diario (2.5): guardar la página por la que se va también mientras se
-      lee, no solo al cerrar; no perder pestañas si el programa se cierra mientras
+    - guardar la página por la que se va también mientras se lee, no solo al
+      cerrar (**hecho con la 2.5**); pendiente: no perder pestañas si el programa se cierra mientras
       las restaura, ni olvidar las de un USB sin enchufar; si `ajustes.json` no se
       puede leer una vez, no pisarlo;
     - tarea nueva de memoria: "dormir" las pestañas que llevan rato sin verse y un
@@ -392,8 +392,8 @@ Notas de la Fase 1:
 | 2.2 | Resaltar, subrayar, tachar | Selecciono texto y lo marco; tras guardar se ve igual en Edge o Adobe | ✅ |
 | 2.3 | Paleta de colores completa, grosor y opacidad | Elijo cualquier color para cada herramienta | ✅ (el grosor llega con el dibujo, 2.8) |
 | 2.4 | Deshacer / rehacer (cada cambio es una "orden", ver `CLAUDE.md` §5) | Ctrl+Z y Ctrl+Y funcionan con todo | ✅ |
-| 2.5 | **Diario de recuperación** | Apago el ordenador a la fuerza mientras subrayo, lo enciendo y no he perdido nada | ⬜ |
-| 2.6 | **Preguntar al cerrar** (Guardar / No guardar / Cancelar), "Volver a como estaba al abrirlo", recuperar cambios descartados, e indicador "Guardado / Cambios sin guardar" | Subrayo, cierro y me pregunta; si le doy a "No guardar" con prisa, aún puedo recuperarlo | 🔄 pregunta e indicador hechos; recuperar, con la 2.5 |
+| 2.5 | **Diario de recuperación** | Apago el ordenador a la fuerza mientras subrayo, lo enciendo y no he perdido nada | ✅ |
+| 2.6 | **Preguntar al cerrar** (Guardar / No guardar / Cancelar), "Volver a como estaba al abrirlo", recuperar cambios descartados, e indicador "Guardado / Cambios sin guardar" | Subrayo, cierro y me pregunta; si le doy a "No guardar" con prisa, aún puedo recuperarlo | 🔄 falta solo "Volver a como estaba al abrirlo" |
 | 2.6b | **Versiones anteriores** y avisos que salen siempre (firmado, cambios fuertes, no se puede guardar, cambiado por otro programa) | Vuelvo a como estaba el PDF esta mañana; un PDF firmado nunca se guarda solo | ⬜ |
 | 2.6c | **Ajustes de guardado**: qué hacer al cerrar (preguntar / guardar siempre), guardar solo mientras trabajo (desactivado por defecto), versiones y días que se conservan | Activo "guardar solo" y ya no me pregunta al cerrar | ⬜ |
 | 2.7 | Notas adhesivas y cuadros de texto | Escribo notas y texto con la fuente, tamaño y color que quiero | ⬜ |
@@ -473,9 +473,8 @@ Notas de la Fase 2A:
     punto (●) junto al nombre.
   - "Actualizar ahora" pasa por la misma pregunta: si se elige Guardar, guarda,
     cierra e instala; si se cancela, no se instala nada.
-  - **Queda de la 2.6** (necesita el diario, tarea 2.5): que "No guardar" se pueda
-    recuperar durante unos días, y "Volver a como estaba al abrirlo". Hasta
-    entonces "No guardar" descarta de verdad, y la pregunta lo dice.
+  - **Queda de la 2.6:** "Volver a como estaba al abrirlo". Recuperar lo que se
+    cerró con "No guardar" llegó con el diario (2.5).
 - **2.3, colores y opacidad (14/11/2026).**
   - Resaltar, Subrayar y Tachar llevan una **flecha al lado** que abre su color:
     paleta rápida de 10 colores (seis de rotulador y cuatro de bolígrafo), **"Más
@@ -495,6 +494,37 @@ Notas de la Fase 2A:
     de PDF no guarda grosor (cada lector lo dibuja al suyo), así que ofrecerlo
     sería prometer algo que Adobe o Edge no respetarían. El grosor tiene sentido
     con el dibujo a mano y las formas (2.8) y se hará allí.
+- **2.5, diario de recuperación (14/11/2026).**
+  - **Cada cambio se apunta al instante** en un archivo pequeño aparte del PDF
+    (carpeta `diario`, junto a los ajustes; en la portátil, dentro de `datos`).
+    Uno por documento con cambios sin guardar. El PDF no se toca.
+  - **Tras un apagón, un cuelgue o un cierre a la fuerza**, al abrir el programa
+    vuelven las pestañas y pregunta: "Estos documentos tenían cambios sin
+    guardar" con **Recuperar** / **Ahora no**. Recuperar los devuelve como
+    cambios sin guardar (se pueden deshacer); el PDF solo cambia al pulsar Guardar.
+  - **"No guardar" ya no pierde nada:** los cambios se apartan 7 días y se
+    recuperan en **Archivo → Recuperar cambios descartados**. Lo mismo si se dice
+    "Ahora no" tras un apagón. La pregunta de cerrar lo explica.
+  - Al guardar bien, el diario de ese documento se vacía. Si guardar falla, se
+    queda. Con "Guardar como", el diario sigue al archivo nuevo.
+  - Lo deshecho no se recupera (deshacer y rehacer también se apuntan).
+  - **Escritura segura:** cada cambio es una línea añadida y enviada al disco en
+    el momento. Si la luz se va a mitad de una línea, esa línea se ignora y las
+    demás valen. Hay una prueba que mata el programa en seis momentos mientras
+    apunta sin parar: no se pierde ningún cambio ya apuntado.
+  - Si el programa muere justo después de sustituir el PDF pero antes de vaciar
+    el diario, recuperar no duplica las marcas (cada una lleva su nombre).
+  - **La página por la que se va** se recuerda a los 2 segundos de cambiarla, no
+    solo al cerrar: tras un apagón el documento vuelve donde estaba (era el punto
+    M1 de la revisión de la Fase 1).
+  - Diseño: el diario escribe las mismas "órdenes" que usa deshacer
+    (`app/core/journal.py` sobre `commands.to_dict`). No hay un sistema aparte.
+  - Queda para la 2.6c (ajustes): elegir cuántos días se conservan los cambios
+    descartados (hoy, 7). Quedan de la revisión de la Fase 1: no perder pestañas
+    si el programa se cierra mientras las restaura ni las de un USB sin enchufar
+    (M2), y no pisar `ajustes.json` si no se puede leer una vez (M4).
+  - No probado con un apagón de verdad en Windows (prueba de Julen): solo
+    simulado matando el programa.
 
 ## Fase 2B – Documentos escaneados (OCR)
 | # | Tarea | Terminado cuando… | Estado |
