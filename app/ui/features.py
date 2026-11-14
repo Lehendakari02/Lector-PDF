@@ -107,6 +107,8 @@ FEATURES: list[Feature] = [
     ),
     _f("print", READ, "Imprimir", "Imprimir el documento o unas páginas", "impresora papel"),
     # Estudiar
+    _f("undo", STUDY, "Deshacer", "Quitar el último cambio (Ctrl+Z)", "atrás quitar volver error"),
+    _f("redo", STUDY, "Rehacer", "Volver a poner el cambio deshecho (Ctrl+Y)", "adelante repetir"),
     _f("highlight", STUDY, "Resaltar", "Marcar texto con rotulador", "fosforito marcar color"),
     _f("underline", STUDY, "Subrayar", "Poner una línea debajo del texto", "línea marcar"),
     _f("strikeout", STUDY, "Tachar", "Tachar texto", "línea eliminar marcar"),
@@ -221,6 +223,7 @@ GROUP_STARTS = frozenset(
         "reading_mode",
         "outline",
         "save",
+        "highlight",
         "note",
         "bookmark",
         "annotations",

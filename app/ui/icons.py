@@ -88,6 +88,8 @@ ICONS: dict[str, str] = {
         '<path d="M7 14h10v6H7z"/>'
     ),
     # Estudiar
+    "undo": '<path d="M8 5L4 9l4 4"/><path d="M4 9h10a5 5 0 0 1 0 10h-3"/>',
+    "redo": '<path d="M16 5l4 4-4 4"/><path d="M20 9H10a5 5 0 0 0 0 10h3"/>',
     "highlight": _MARKER_PEN,
     "underline": '<path d="M7 4v7a5 5 0 0 0 10 0V4M5 20h14"/>',
     "strikeout": (
