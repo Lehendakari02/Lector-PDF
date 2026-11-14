@@ -235,6 +235,16 @@ QToolBar[tools="true"] QToolButton:checked {{
     background: {c.accent_soft}; color: {c.accent}; border-color: {c.accent};
 }}
 QToolBar[tools="true"] QToolButton:focus {{ border-color: {c.accent}; }}
+/* a tool with choices: the arrow at its side opens them */
+QToolBar[tools="true"] QToolButton[withMenu="true"] {{ padding-right: 17px; }}
+QToolBar[tools="true"] QToolButton::menu-button {{
+    border: none; border-left: 1px solid transparent; width: 15px;
+    border-top-right-radius: 6px; border-bottom-right-radius: 6px;
+}}
+QToolBar[tools="true"] QToolButton::menu-button:hover {{ background: {c.accent_soft}; }}
+QToolBar[tools="true"] QToolButton::menu-arrow {{ width: 9px; height: 9px; }}
+QWidget#colorPanel {{ background: {c.surface}; }}
+QLabel#colorPanelTitle {{ font-weight: 600; }}
 QToolBar[tools="true"]::separator {{ background: {c.border}; width: 1px; margin: 8px 5px; }}
 
 /* ---- buttons ---- */

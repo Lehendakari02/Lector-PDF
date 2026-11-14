@@ -390,7 +390,7 @@ Notas de la Fase 1:
 |---|-------|-------------------|--------|
 | 2.1 | Botones Guardar / Guardar como junto a Imprimir, con escritura segura (archivo temporal y sustitución) | Ctrl+S guarda en el mismo archivo; "Guardar como" crea otro; si el archivo está bloqueado, avisa y no pierdo nada | ✅ |
 | 2.2 | Resaltar, subrayar, tachar | Selecciono texto y lo marco; tras guardar se ve igual en Edge o Adobe | ✅ |
-| 2.3 | Paleta de colores completa, grosor y opacidad | Elijo cualquier color para cada herramienta | ⬜ |
+| 2.3 | Paleta de colores completa, grosor y opacidad | Elijo cualquier color para cada herramienta | ✅ (el grosor llega con el dibujo, 2.8) |
 | 2.4 | Deshacer / rehacer (cada cambio es una "orden", ver `CLAUDE.md` §5) | Ctrl+Z y Ctrl+Y funcionan con todo | ✅ |
 | 2.5 | **Diario de recuperación** | Apago el ordenador a la fuerza mientras subrayo, lo enciendo y no he perdido nada | ⬜ |
 | 2.6 | **Preguntar al cerrar** (Guardar / No guardar / Cancelar), "Volver a como estaba al abrirlo", recuperar cambios descartados, e indicador "Guardado / Cambios sin guardar" | Subrayo, cierro y me pregunta; si le doy a "No guardar" con prisa, aún puedo recuperarlo | 🔄 pregunta e indicador hechos; recuperar, con la 2.5 |
@@ -476,6 +476,25 @@ Notas de la Fase 2A:
   - **Queda de la 2.6** (necesita el diario, tarea 2.5): que "No guardar" se pueda
     recuperar durante unos días, y "Volver a como estaba al abrirlo". Hasta
     entonces "No guardar" descarta de verdad, y la pregunta lo dice.
+- **2.3, colores y opacidad (14/11/2026).**
+  - Resaltar, Subrayar y Tachar llevan una **flecha al lado** que abre su color:
+    paleta rápida de 10 colores (seis de rotulador y cuatro de bolígrafo), **"Más
+    colores…"** para elegir cualquiera, los últimos colores propios usados (hasta
+    5, comunes a las tres herramientas) y la **opacidad** (del 10 al 100 %).
+  - Elegir un color lo usa al momento, como coger un rotulador del estuche: con
+    texto seleccionado lo marca; sin nada seleccionado, el rotulador queda en la
+    mano con ese color.
+  - Cada herramienta recuerda su color y su opacidad, también al cerrar el
+    programa. El botón enseña el color en una franja bajo el dibujo. Las marcas
+    ya hechas no cambian al elegir otro color.
+  - Los colores no significan nada ni traen nombres de uso ("importante",
+    "repasar"…): eso es la tarea 2.26 y es opcional.
+  - Comprobado en el motor de PDF de Chrome y Edge, también con opacidad
+    (`capturas/colores-en-chrome.png`). Falta verlo en Adobe Reader.
+  - **Grosor:** no se ha hecho aquí a propósito. Un subrayado o tachado estándar
+    de PDF no guarda grosor (cada lector lo dibuja al suyo), así que ofrecerlo
+    sería prometer algo que Adobe o Edge no respetarían. El grosor tiene sentido
+    con el dibujo a mano y las formas (2.8) y se hará allí.
 
 ## Fase 2B – Documentos escaneados (OCR)
 | # | Tarea | Terminado cuando… | Estado |

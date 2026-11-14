@@ -33,6 +33,7 @@ from app.core.document import PdfDocument, PdfOpenError, engine_version
 from app.core.error_log import running_from_source_or_test_build
 from app.core.history import History, file_key
 from app.core.interface_size import NORMAL_SIZE
+from app.core.marker_styles import MarkerStyles
 from app.core.ocr import OcrError, OcrJob, OcrPage
 from app.core.paths import data_dir, is_portable
 from app.core.settings import Settings
@@ -42,6 +43,7 @@ from app.core.windows_store import SigningCancelled
 from app.ui import icons
 from app.ui import theme as theme_module
 from app.ui.about_dialog import AboutDialog
+from app.ui.color_menu import ColorMenu
 from app.ui.command_palette import CommandPalette
 from app.ui.document_page import DocumentPage
 from app.ui.error_reporting import ErrorReporter, ProvokedError
@@ -78,6 +80,7 @@ LAST_FOLDER_SETTING = "ultima_carpeta"
 WELCOME_RECENT = 5  # recent documents offered on the welcome page
 # The tools of each mode with their names under the drawing, or only the drawings.
 TOOLBAR_SETTING = "barra_herramientas"
+MARKERS_SETTING = "rotuladores"  # colour and opacity of each marking tool
 TOOLBAR_NAMES, TOOLBAR_ICONS = "nombres", "iconos"
 TOP_SEARCH_WIDTH = 280
 SIDE_PANEL_SETTING = "panel_lateral"  # "", "miniaturas" or "indice"
@@ -377,9 +380,78 @@ class MainWindow(QMainWindow):
                 more.setToolTip(self.tr("Más herramientas"))
             self.addToolBar(Qt.ToolBarArea.TopToolBarArea, toolbar)
             self.mode_toolbars[mode] = toolbar
+        self._build_color_menus()
         self.set_toolbar_icons_only(
             self.settings.get(TOOLBAR_SETTING) == TOOLBAR_ICONS, remember=False
         )
+
+    def _build_color_menus(self) -> None:
+        """Each marking tool carries, in the arrow next to it, its colour and opacity."""
+        self.marker_styles = MarkerStyles.from_setting(self.settings.get(MARKERS_SETTING))
+        self.color_menus: dict[str, ColorMenu] = {}
+        toolbar = self.mode_toolbars[Mode.STUDY]
+        for kind in MARKUP_KINDS:
+            action = self.feature_actions[kind]
+            name = translate(self._feature_named(kind).name)
+            menu = ColorMenu(name, self)
+            menu.color_chosen.connect(lambda color, k=kind: self.set_marker_color(k, color))
+            menu.opacity_chosen.connect(lambda value, k=kind: self.set_marker_opacity(k, value))
+            self.color_menus[kind] = menu
+            button = toolbar.widgetForAction(action)
+            button.setMenu(menu)
+            button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+            button.setProperty("withMenu", True)  # the style sheet makes room for the arrow
+        self._show_marker_styles()
+
+    def _show_marker_styles(self) -> None:
+        """Put the styles in the buttons, the menus and every open document."""
+        for kind in MARKUP_KINDS:
+            style = self.marker_styles.of(kind)
+            name = translate(self._feature_named(kind).name)
+            self.feature_actions[kind].setIcon(icons.marker_icon(kind, style.color))
+            menu = self.color_menus[kind]
+            menu.set_recent(self.marker_styles.recent)
+            menu.set_style(style.color, style.opacity)
+            button = self.mode_toolbars[Mode.STUDY].widgetForAction(self.feature_actions[kind])
+            button.setAccessibleDescription(
+                self.tr("Color de {0}: {1}. La flecha de al lado lo cambia.").format(
+                    name, menu.swatch_name(style.color)
+                )
+            )
+        # While the window is being built there are no documents yet.
+        pages = [*getattr(self, "documents", []), getattr(self, "_spare", None)]
+        for page in pages:
+            if page is not None:
+                self._give_marker_styles(page.view)
+
+    def _give_marker_styles(self, view: PdfView) -> None:
+        for kind in MARKUP_KINDS:
+            style = self.marker_styles.of(kind)
+            view.markup_colors[kind] = style.color
+            view.markup_opacity[kind] = style.opacity
+
+    def set_marker_color(self, kind: str, color: tuple[float, float, float]) -> None:
+        """Choose the colour of a marking tool and use it at once.
+
+        Like choosing a marker from the case: the selected text gets marked
+        with it or, with nothing selected, the marker stays in hand.
+        """
+        self.marker_styles.set_color(kind, color)
+        self.settings.set(MARKERS_SETTING, self.marker_styles.to_setting())
+        self._show_marker_styles()
+        view = self.pdf_view
+        if view.page_count == 0:
+            return
+        if view.has_selection:
+            view.mark_selection(kind)
+        elif view.markup_tool != kind:
+            self.use_marker(kind)
+        self._refresh_edit_actions()
+
+    def set_marker_opacity(self, kind: str, opacity: float) -> None:
+        self.marker_styles.set_opacity(kind, opacity)
+        self.settings.set(MARKERS_SETTING, self.marker_styles.to_setting())
+        self._show_marker_styles()
 
     @property
     def toolbar_icons_only(self) -> bool:
@@ -1299,6 +1371,7 @@ class MainWindow(QMainWindow):
     def _new_page(self) -> DocumentPage:
         page = DocumentPage()
         view = page.view
+        self._give_marker_styles(view)
         view.page_changed.connect(self._update_position)
         view.zoom_changed.connect(self._update_position)
         view.page_drawn.connect(lambda number, seconds, p=page: self._page_drawn(p, seconds))

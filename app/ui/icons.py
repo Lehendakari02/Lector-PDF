@@ -7,7 +7,7 @@ light or dark theme, and they stay sharp at any screen scale.
 """
 
 from PySide6.QtCore import QByteArray, QPoint, QRect, QRectF, QSize, Qt
-from PySide6.QtGui import QIcon, QIconEngine, QPainter, QPixmap
+from PySide6.QtGui import QColor, QIcon, QIconEngine, QPainter, QPen, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 
 from app.ui import theme
@@ -279,6 +279,42 @@ def icon(name: str, role: str = TEXT) -> QIcon:
     if name not in ICONS:
         raise KeyError(f"there is no icon called {name!r}")
     return QIcon(_LineIconEngine(name, role))
+
+
+class _MarkerIconEngine(_LineIconEngine):
+    """An icon with a strip under it, of the colour the tool paints with."""
+
+    def __init__(self, name: str, role: str, strip: tuple[float, float, float]) -> None:
+        super().__init__(name, role)
+        self.strip = strip
+
+    def paint(self, painter: QPainter, rect: QRect, mode: QIcon.Mode, state: QIcon.State) -> None:
+        box = QRectF(rect)
+        bar = max(4.0, box.height() * 0.22)
+        side = box.height() - bar
+        drawing = QRectF(box.center().x() - side / 2, box.top(), side, side)
+        _renderer(self.name, self._colour(mode, state)).render(painter, drawing)
+        if mode == QIcon.Mode.Disabled:
+            colour = QColor(theme.colours().disabled)
+        else:
+            colour = QColor.fromRgbF(*self.strip)
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(QPen(QColor(theme.colours().border), 0.6))
+        painter.setBrush(colour)
+        strip = QRectF(box.left() + 1, box.bottom() - bar + 0.5, box.width() - 2, bar - 1)
+        painter.drawRoundedRect(strip, 1.5, 1.5)
+        painter.restore()
+
+    def clone(self) -> QIconEngine:
+        return _MarkerIconEngine(self.name, self.role, self.strip)
+
+
+def marker_icon(name: str, colour: tuple[float, float, float], role: str = TEXT) -> QIcon:
+    """The icon of a marking tool, showing the colour it is used with."""
+    if name not in ICONS:
+        raise KeyError(f"there is no icon called {name!r}")
+    return QIcon(_MarkerIconEngine(name, role, colour))
 
 
 def has_icon(name: str) -> bool:
