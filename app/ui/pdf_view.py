@@ -18,6 +18,7 @@ from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QGuiApplication, QImage, QPainter, QPalette
 from PySide6.QtWidgets import QAbstractScrollArea, QFrame, QMenu, QWidget
 
+from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
 from app.core.document import PageSize, PdfDocument
 from app.core.outline import OutlineEntry
 from app.core.render_service import (
@@ -124,6 +125,14 @@ class PdfView(QAbstractScrollArea):
     # saved (the number of the save and the file it lives in now); it could not
     # be saved (number, one of the kinds of ``app.core.saving``, details).
     modified_changed = Signal(bool)
+    # The document was changed (a mark was made, undone or made again): the
+    # pages that look different now. ``edit_failed`` says a change did not work.
+    pages_changed = Signal(object)
+    edit_failed = Signal(str)
+    history_changed = Signal()  # what can be undone or done again is different
+    markup_tool_changed = Signal(str)  # the tool in hand ("" for none)
+    _changed = Signal(int, object, object, bool)
+    _change_failed = Signal(int, str)
     saved = Signal(int, object)
     save_failed = Signal(int, str, str)
     _saved = Signal(int, object)
@@ -192,7 +201,17 @@ class PdfView(QAbstractScrollArea):
             on_print_lost=self.print_page_lost.emit,
             on_saved=self._saved.emit,
             on_save_failed=self.save_failed.emit,
+            on_changed=self._changed.emit,
+            on_change_failed=self._change_failed.emit,
         )
+        self._changed.connect(self._change_done)
+        self._change_failed.connect(self._change_did_not_work)
+        self._stale: set[int] = set()  # pages whose picture is from before a change
+        self._undo: list = []  # orders carried out, the last one at the end
+        self._redo: list = []  # orders undone, that can be carried out again
+        self._changing: dict[int, str] = {}  # change number -> "do", "undo" or "redo"
+        self._markup_tool = ""  # the marker in hand: every selection gets marked
+        self.markup_colors: dict[str, tuple[float, float, float]] = {}
         self._saved.connect(self._document_saved)
         self.save_failed.connect(self._save_did_not_work)
         self._changes = 0  # changes made to the document since it was opened
@@ -215,6 +234,79 @@ class PdfView(QAbstractScrollArea):
         self.zoom_changed.emit(self.zoom)
         self.verticalScrollBar().setValue(0)
         self._scrolled()
+
+    # ---- changing the document -------------------------------------------
+
+    @property
+    def markup_tool(self) -> str:
+        """The marker in hand ("highlight", "underline", "strikeout") or ""."""
+        return self._markup_tool
+
+    def set_markup_tool(self, kind: str) -> None:
+        """Take a marker: from now on every text selected is marked with it."""
+        kind = kind if kind in MARKUP_KINDS else ""
+        if kind != self._markup_tool:
+            self._markup_tool = kind
+            self.markup_tool_changed.emit(kind)
+
+    def mark_selection(self, kind: str) -> bool:
+        """Highlight, underline or strike out the selected text. False if there is none."""
+        chosen = self.selection()
+        if chosen is None or kind not in MARKUP_KINDS or self._document is None:
+            return False
+        number = self.service.mark_text(kind, chosen[0], chosen[1], self.markup_colors.get(kind))
+        self._changing[number] = "do"
+        self.clear_selection()
+        return True
+
+    @property
+    def can_undo(self) -> bool:
+        return bool(self._undo)
+
+    @property
+    def can_redo(self) -> bool:
+        return bool(self._redo)
+
+    def undo(self) -> bool:
+        """Take back the last change. False if there is nothing to take back."""
+        if not self._undo:
+            return False
+        order = self._undo.pop()
+        self._changing[self.service.apply(order, undo=True)] = "undo"
+        self.history_changed.emit()
+        return True
+
+    def redo(self) -> bool:
+        """Carry out again the last change taken back."""
+        if not self._redo:
+            return False
+        order = self._redo.pop()
+        self._changing[self.service.apply(order)] = "redo"
+        self.history_changed.emit()
+        return True
+
+    def _change_done(self, number: int, order: object, pages: object, _undone: bool) -> None:
+        how = self._changing.pop(number, None)
+        if how is None or self._document is None:
+            return  # belongs to a document that is no longer open
+        if how == "undo":
+            self._redo.append(order)
+        else:
+            self._undo.append(order)
+            if how == "do":
+                self._redo.clear()  # a new change: the undone ones are gone
+        # The pictures of those pages are old: they stay on screen until the
+        # new ones arrive, so nothing blinks.
+        self._stale.update(page for page in pages if 0 <= page < self.page_count)
+        self.mark_modified()
+        self._request_pages()
+        self.history_changed.emit()
+        self.pages_changed.emit(list(pages))
+
+    def _change_did_not_work(self, number: int, details: str) -> None:
+        if self._changing.pop(number, None) is not None:
+            self.history_changed.emit()
+            self.edit_failed.emit(details)
 
     # ---- saving ---------------------------------------------------------
 
@@ -265,6 +357,12 @@ class PdfView(QAbstractScrollArea):
         was_modified = self.modified
         self._changes = self._saved_changes = 0
         self._saves.clear()
+        self._stale.clear()
+        self._changing.clear()
+        if self._undo or self._redo:
+            self._undo.clear()
+            self._redo.clear()
+            self.history_changed.emit()
         if was_modified:
             self.modified_changed.emit(False)
         self._document = None
@@ -642,7 +740,7 @@ class PdfView(QAbstractScrollArea):
                 break
             if page in self._failed_pages:
                 continue  # it cannot be drawn: asking again would only fail again
-            if page not in self._cache or self._cache[page][0] != zoom:
+            if page not in self._cache or self._cache[page][0] != zoom or page in self._stale:
                 self._wanted.append(RenderRequest(page, zoom, self._rotation))
         self.service.want(self._wanted)
 
@@ -675,6 +773,7 @@ class PdfView(QAbstractScrollArea):
             result.stride,
             QImage.Format.Format_RGB888,
         ).copy()  # own copy: the bytes object will not outlive this call
+        self._stale.discard(result.page)
         old = self._cache.pop(result.page, None)
         if old is not None:
             self._cache_bytes -= old[1].sizeInBytes()
@@ -947,8 +1046,10 @@ class PdfView(QAbstractScrollArea):
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.LeftButton:
-            self._selecting = False
+            was_selecting, self._selecting = self._selecting, False
             self._autoscroll.stop()
+            if was_selecting and self._markup_tool and self.has_selection:
+                self.mark_selection(self._markup_tool)  # the marker in hand marks it
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802
@@ -958,6 +1059,8 @@ class PdfView(QAbstractScrollArea):
         page, caret = place
         start, stop = word_at(self._texts[page], caret)
         self.select((page, start), (page, stop))
+        if self._markup_tool:
+            self.mark_selection(self._markup_tool)  # a double click marks the word
 
     def _extend_selection(self) -> None:
         place = self._caret_at(self._drag_position)
@@ -991,6 +1094,19 @@ class PdfView(QAbstractScrollArea):
         copy.setEnabled(self.has_selection)
         copy.triggered.connect(self.copy_selection)
         menu.addAction(self.tr("Seleccionar todo")).triggered.connect(self.select_all)
+        menu.addSeparator()
+        for kind, name in (
+            (HIGHLIGHT, self.tr("Resaltar")),
+            (UNDERLINE, self.tr("Subrayar")),
+            (STRIKEOUT, self.tr("Tachar")),
+        ):
+            mark = menu.addAction(name)
+            mark.setEnabled(self.has_selection)
+            mark.triggered.connect(lambda _checked=False, k=kind: self.mark_selection(k))
+        menu.addSeparator()
+        undo = menu.addAction(self.tr("Deshacer"))
+        undo.setEnabled(self.can_undo)
+        undo.triggered.connect(self.undo)
         menu.exec(event.globalPos())
 
     def wheelEvent(self, event) -> None:  # noqa: N802
@@ -1022,6 +1138,8 @@ class PdfView(QAbstractScrollArea):
             bar.setValue(bar.value() - bar.singleStep())
         elif key == Qt.Key.Key_Escape and self.has_selection:
             self.clear_selection()
+        elif key == Qt.Key.Key_Escape and self._markup_tool:
+            self.set_markup_tool("")  # put the marker down
         else:
             super().keyPressEvent(event)
 

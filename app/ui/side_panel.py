@@ -74,6 +74,7 @@ class ThumbnailList(QListWidget):
         view.thumbnail_drawn.connect(self._store)
         view.page_changed.connect(lambda page, _count: self.follow(page - 1))
         view.rotation_changed.connect(lambda _degrees: self.rebuild())
+        view.pages_changed.connect(self._pages_changed)
 
     def rebuild(self) -> None:
         """Start again for the document (or the rotation) the view shows now."""
@@ -86,6 +87,11 @@ class ThumbnailList(QListWidget):
             item.setToolTip(self.tr("Página {0}").format(page + 1))
             self.addItem(item)
         self.follow(self.view.current_page)
+        self._pause.start()
+
+    def _pages_changed(self, pages: object) -> None:
+        """Some pages look different now (a mark was made): draw them again."""
+        self._drawn.difference_update(pages)
         self._pause.start()
 
     def drawn_pages(self) -> set[int]:

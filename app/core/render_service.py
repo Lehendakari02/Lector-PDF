@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from multiprocessing.connection import Connection
 from pathlib import Path
 
+from app.core.commands import Color, Command, CommandError, markup_for_selection
 from app.core.outline import OutlineEntry, read_outline
 from app.core.saving import FAILED as SAVE_FAILED
 from app.core.saving import SaveError, put_in_place, write_copy
@@ -311,6 +312,34 @@ def _worker_main(connection: Connection) -> None:
                     except Exception:
                         copied = ""
                     connection.send(("copied", token, copy_id, copied))
+            elif kind in ("mark", "apply"):
+                # A change to the document: a new mark on the text selected, or
+                # an order that already exists (to undo it, or to do it again).
+                change_token, change_id = message[1], message[2]
+                if change_token == token and doc is not None:
+                    try:
+                        if kind == "mark":
+                            _, _, _, mark_kind, start, stop, color, opacity = message
+                            order, undo = (
+                                markup_for_selection(
+                                    mark_kind,
+                                    start,
+                                    stop,
+                                    lambda number, doc=doc: _page_text(doc, number, page_texts),
+                                    color,
+                                    opacity,
+                                ),
+                                False,
+                            )
+                            if order is None:
+                                raise CommandError("there is no text there")
+                        else:
+                            _, _, _, order, undo = message
+                        pages = order.undo(doc) if undo else order.apply(doc)
+                    except Exception as exc:
+                        connection.send(("change_failed", token, change_id, str(exc)))
+                    else:
+                        connection.send(("changed", token, change_id, order, pages, undo))
             elif kind == "save":
                 _, save_token, save_id, target = message
                 if save_token == token and doc is not None:
@@ -391,7 +420,15 @@ class RenderService:
         on_print_lost: Callable[[int], None] | None = None,
         on_saved: Callable[[int, Path], None] | None = None,
         on_save_failed: Callable[[int, str, str], None] | None = None,
+        on_changed: Callable[[int, Command, list[int], bool], None] | None = None,
+        on_change_failed: Callable[[int, str], None] | None = None,
     ) -> None:
+        self._on_changed = on_changed or (lambda number, order, pages, undo: None)
+        self._on_change_failed = on_change_failed or (lambda number, details: None)
+        self._change_id = 0
+        # Changes that are in the helper's document and not yet in the file, in
+        # order, each (order, undone). A new helper is given them again.
+        self._unsaved: list[tuple[Command, bool]] = []
         self._on_saved = on_saved or (lambda save_id, path: None)
         self._on_save_failed = on_save_failed or (lambda save_id, kind, details: None)
         self._save_id = 0
@@ -437,6 +474,7 @@ class RenderService:
             self._crashes = 0
             self._drawing = None
             self._bad_pages = set()
+            self._unsaved = []
             self._ensure_started()
             self._send(("open", self._token, str(self._path), password))
 
@@ -452,7 +490,7 @@ class RenderService:
                 return
             if self._ensure_started():
                 # A new helper knows nothing yet: give it the document again.
-                self._send(("open", self._token, str(self._path), self._password))
+                self._reopen()
             self._send(("want", self._token, self._drawable(requests)))
 
     def want_thumbnails(self, requests: list[RenderRequest]) -> None:
@@ -461,7 +499,7 @@ class RenderService:
             if self._path is None:
                 return
             if self._ensure_started():
-                self._send(("open", self._token, str(self._path), self._password))
+                self._reopen()
             self._send(("thumbnails", self._token, self._drawable(requests)))
 
     def want_prints(self, requests: list[RenderRequest]) -> None:
@@ -474,7 +512,7 @@ class RenderService:
             if self._path is None:
                 return
             if self._ensure_started():
-                self._send(("open", self._token, str(self._path), self._password))
+                self._reopen()
             bad = [r.page for r in requests if r.page in self._bad_pages]
             self._printing = {r.page for r in requests} - set(bad)
             self._send(("prints", self._token, self._drawable(requests)))
@@ -493,7 +531,7 @@ class RenderService:
             if self._path is None:
                 return self._search_id
             if self._ensure_started():
-                self._send(("open", self._token, str(self._path), self._password))
+                self._reopen()
             self._searching = True
             self._send(
                 (
@@ -513,7 +551,7 @@ class RenderService:
             if self._path is None:
                 return
             if self._ensure_started():
-                self._send(("open", self._token, str(self._path), self._password))
+                self._reopen()
             self._send(("text", self._token, page))
 
     def copy_text(self, start: tuple[int, int], stop: tuple[int, int]) -> int:
@@ -526,9 +564,51 @@ class RenderService:
             if self._path is None:
                 return self._copy_id
             if self._ensure_started():
-                self._send(("open", self._token, str(self._path), self._password))
+                self._reopen()
             self._send(("copy", self._token, self._copy_id, start, stop))
             return self._copy_id
+
+    def _reopen(self) -> None:
+        """Give a new helper the document again, with the changes not yet saved."""
+        self._send(("open", self._token, str(self._path), self._password))
+        for order, undo in self._unsaved:
+            self._send(("apply", self._token, 0, order, undo))
+
+    def mark_text(
+        self,
+        kind: str,
+        start: tuple[int, int],
+        stop: tuple[int, int],
+        color: Color | None = None,
+        opacity: float = 1.0,
+    ) -> int:
+        """Highlight, underline or strike out the text between two places.
+
+        ``kind`` is one of ``app.core.commands.MARKUP_KINDS``; each place is
+        (page, caret). Returns a number; the answer comes with it through
+        ``on_changed`` (with the order that was carried out, which can undo
+        it) or ``on_change_failed``. The file is not touched until it is saved.
+        """
+        return self._change(
+            lambda number: ("mark", self._token, number, kind, start, stop, color, opacity)
+        )
+
+    def apply(self, order: Command, undo: bool = False) -> int:
+        """Carry out an order on the open document, or undo it. Answers like ``mark_text``."""
+        return self._change(lambda number: ("apply", self._token, number, order, undo))
+
+    def _change(self, message) -> int:
+        with self._lock:
+            self._change_id += 1
+            number = self._change_id
+            ready = self._path is not None
+            if ready:
+                if self._ensure_started():
+                    self._reopen()
+                self._send(message(number))
+        if not ready:
+            self._tell(self._on_change_failed, number, "no document is open")
+        return number
 
     def save(self, target: str | Path | None = None) -> int:
         """Save the open document, in its own file or (``target``) in another one.
@@ -541,10 +621,12 @@ class RenderService:
         with self._lock:
             self._save_id += 1
             number = self._save_id
-            if self._path is None or not (self.is_running() or self._ensure_started()):
+            if self._path is None:
                 failed = True
             else:
                 failed = False
+                if self._ensure_started():
+                    self._reopen()
                 self._saving.add(number)
                 where = os.path.abspath(target if target is not None else self._path)
                 self._send(("save", self._token, number, where))
@@ -565,6 +647,7 @@ class RenderService:
             self._search_id += 1
             self._searching = False
             self._token += 1
+            self._unsaved = []
             if self.is_running():
                 self._send(("close",))
 
@@ -694,8 +777,18 @@ class RenderService:
             elif kind == "page_failed":
                 self._drawing = None
                 self._tell(self._on_page_failed, message[2], message[3], message[4])
+            elif kind == "changed":
+                _, _, number, order, pages, undo = message
+                if number:  # 0: given again to a new helper, already counted
+                    with self._lock:
+                        self._unsaved.append((order, undo))
+                    self._tell(self._on_changed, number, order, pages, undo)
+            elif kind == "change_failed":
+                if message[2]:
+                    self._tell(self._on_change_failed, message[2], message[3])
             elif kind == "saved":
                 with self._lock:
+                    self._unsaved = []  # everything done before is in the file now
                     self._saving.discard(message[2])
                     self._path = Path(message[3])  # after "Save as", the new file
                 self._tell(self._on_saved, message[2], Path(message[3]))

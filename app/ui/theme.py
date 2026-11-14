@@ -231,6 +231,9 @@ QToolBar[tools="true"] QToolButton {{
 QToolBar[tools="true"] QToolButton[pending="true"] {{ color: {c.muted}; }}
 QToolBar[tools="true"] QToolButton:hover {{ background: {c.hover}; }}
 QToolBar[tools="true"] QToolButton:pressed {{ background: {c.accent_soft}; }}
+QToolBar[tools="true"] QToolButton:checked {{
+    background: {c.accent_soft}; color: {c.accent}; border-color: {c.accent};
+}}
 QToolBar[tools="true"] QToolButton:focus {{ border-color: {c.accent}; }}
 QToolBar[tools="true"]::separator {{ background: {c.border}; width: 1px; margin: 8px 5px; }}
 

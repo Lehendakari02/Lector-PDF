@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 
 from app import APP_NAME, BUILD_LABEL, __version__
 from app.core import saving
+from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
 from app.core.document import PdfDocument, PdfOpenError, engine_version
 from app.core.error_log import running_from_source_or_test_build
 from app.core.history import History, file_key
@@ -203,11 +204,17 @@ class MainWindow(QMainWindow):
             "outline": lambda: self.toggle_side_panel(Tab.OUTLINE),
             "reading_mode": self.toggle_reading_mode,
             "print": self.print_document,
+            "highlight": lambda: self.use_marker(HIGHLIGHT),
+            "underline": lambda: self.use_marker(UNDERLINE),
+            "strikeout": lambda: self.use_marker(STRIKEOUT),
+            "undo": self.undo,
+            "redo": self.redo,
             "save": self.save_document,
             "save_as": self.save_document_as,
         }
         self._mark_pending_features()
         self._refresh_save_actions()
+        self._refresh_edit_actions()
 
         self.set_theme(Theme.from_setting(self.settings.get(THEME_SETTING)), remember=False)
         self.set_paper(Paper.from_setting(self.settings.get(PAPER_SETTING)), remember=False)
@@ -341,6 +348,12 @@ class MainWindow(QMainWindow):
             toolbar.toggleViewAction().setEnabled(False)
             toolbar.setProperty("tools", True)  # the style sheet looks for this
             toolbar.setIconSize(QSize(20, 20))
+            if mode is not Mode.READ:
+                # Saving is at hand wherever the document can be changed.
+                toolbar.addAction(self.feature_actions["save"])
+                save_button = toolbar.widgetForAction(self.feature_actions["save"])
+                save_button.setMinimumHeight(MIN_BUTTON_HEIGHT)
+                toolbar.addSeparator()
             for feature in features_of(mode):
                 if feature.id in GROUP_STARTS:
                     toolbar.addSeparator()
@@ -444,6 +457,15 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self.quit_action)
 
         edit_menu = self.menuBar().addMenu(self.tr("&Editar"))
+        self.undo_action = QAction(self.tr("&Deshacer"), self)
+        self.undo_action.setShortcut(QKeySequence(QKeySequence.StandardKey.Undo))
+        self.undo_action.triggered.connect(lambda _checked=False: self.undo())
+        self.redo_action = QAction(self.tr("&Rehacer"), self)
+        self.redo_action.setShortcuts([QKeySequence("Ctrl+Y"), QKeySequence("Ctrl+Shift+Z")])
+        self.redo_action.triggered.connect(lambda _checked=False: self.redo())
+        edit_menu.addAction(self.undo_action)
+        edit_menu.addAction(self.redo_action)
+        edit_menu.addSeparator()
         self.copy_action = QAction(self.tr("&Copiar"), self)
         self.copy_action.setShortcut(QKeySequence(QKeySequence.StandardKey.Copy))
         self.copy_action.triggered.connect(lambda _checked=False: self.pdf_view.copy_selection())
@@ -824,6 +846,69 @@ class MainWindow(QMainWindow):
 
     # ---- printing -------------------------------------------------------
 
+    # ---- marking text, undo and redo -------------------------------------
+
+    def use_marker(self, kind: str) -> None:
+        """Highlight, underline or strike out.
+
+        With text selected, it is marked at once. With nothing selected, the
+        marker stays in hand: every text selected from then on gets marked,
+        until the button is pressed again (or Esc).
+        """
+        view = self.pdf_view
+        if view.page_count == 0:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            self._refresh_edit_actions()
+            return
+        if view.has_selection:
+            view.mark_selection(kind)
+        elif view.markup_tool == kind:
+            view.set_markup_tool("")
+            self.statusBar().showMessage(self.tr("Rotulador guardado."), STATUS_MESSAGE_MS)
+        else:
+            view.set_markup_tool(kind)
+            self.statusBar().showMessage(
+                self.tr("{0}: selecciona texto y queda marcado. Esc para dejarlo.").format(
+                    translate(self._feature_named(kind).name)
+                ),
+                STATUS_MESSAGE_MS,
+            )
+        self._refresh_edit_actions()
+
+    @staticmethod
+    def _feature_named(feature_id: str) -> Feature:
+        return next(feature for feature in FEATURES if feature.id == feature_id)
+
+    def undo(self) -> None:
+        if not self.pdf_view.undo():
+            self.statusBar().showMessage(self.tr("No hay nada que deshacer."), STATUS_MESSAGE_MS)
+
+    def redo(self) -> None:
+        if not self.pdf_view.redo():
+            self.statusBar().showMessage(self.tr("No hay nada que rehacer."), STATUS_MESSAGE_MS)
+
+    def _edit_state_changed(self, page: DocumentPage) -> None:
+        if page is self.current_document:
+            self._refresh_edit_actions()
+
+    def _refresh_edit_actions(self) -> None:
+        """Undo and redo light up when there is something; the marker in hand stays pressed."""
+        view = self.pdf_view
+        for action in (self.undo_action, self.feature_actions["undo"]):
+            action.setEnabled(view.can_undo)
+        for action in (self.redo_action, self.feature_actions["redo"]):
+            action.setEnabled(view.can_redo)
+        for kind in MARKUP_KINDS:
+            action = self.feature_actions[kind]
+            action.setCheckable(True)
+            action.setChecked(view.markup_tool == kind)
+
+    def _edit_failed(self, _details: str) -> None:
+        self.statusBar().showMessage(
+            self.tr("No se ha podido hacer el cambio: ahí no hay texto que marcar."),
+            STATUS_MESSAGE_MS,
+        )
+
     # ---- saving ---------------------------------------------------------
 
     def _refresh_save_actions(self) -> None:
@@ -1157,9 +1242,19 @@ class MainWindow(QMainWindow):
         page.side_panel.tab_changed.connect(self._side_tab_changed)
         # Ctrl+C and Ctrl+A belong to the document only while it has the keyboard:
         # in the search box they must keep copying and selecting what is typed.
-        for action in (self.copy_action, self.select_all_action):
+        # The same goes for Ctrl+Z: in a text box it undoes what was typed there.
+        for action in (
+            self.copy_action,
+            self.select_all_action,
+            self.undo_action,
+            self.redo_action,
+        ):
             action.setShortcutContext(Qt.ShortcutContext.WidgetShortcut)
             view.addAction(action)
+        view.history_changed.connect(lambda p=page: self._edit_state_changed(p))
+        view.markup_tool_changed.connect(lambda _kind, p=page: self._edit_state_changed(p))
+        view.selection_changed.connect(lambda _has, p=page: self._edit_state_changed(p))
+        view.edit_failed.connect(self._edit_failed)
         self.pages.addWidget(page)
         return page
 
@@ -1380,6 +1475,7 @@ class MainWindow(QMainWindow):
         self.search_box.setText(page.search_panel.box.text() if searching else "")
         self.side_panel_action.setChecked(page.side_panel.isVisible())
         self._refresh_save_actions()
+        self._refresh_edit_actions()
         self._show_speed(page)
         if self._full_screen:
             self._hide_panels_for_full_screen()

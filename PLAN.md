@@ -388,9 +388,9 @@ Notas de la Fase 1:
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
 | 2.1 | Botones Guardar / Guardar como junto a Imprimir, con escritura segura (archivo temporal y sustitución) | Ctrl+S guarda en el mismo archivo; "Guardar como" crea otro; si el archivo está bloqueado, avisa y no pierdo nada | ✅ |
-| 2.2 | Resaltar, subrayar, tachar | Selecciono texto y lo marco; tras guardar se ve igual en Edge o Adobe | ⬜ |
+| 2.2 | Resaltar, subrayar, tachar | Selecciono texto y lo marco; tras guardar se ve igual en Edge o Adobe | ✅ |
 | 2.3 | Paleta de colores completa, grosor y opacidad | Elijo cualquier color para cada herramienta | ⬜ |
-| 2.4 | Deshacer / rehacer (cada cambio es una "orden", ver `CLAUDE.md` §5) | Ctrl+Z y Ctrl+Y funcionan con todo | ⬜ |
+| 2.4 | Deshacer / rehacer (cada cambio es una "orden", ver `CLAUDE.md` §5) | Ctrl+Z y Ctrl+Y funcionan con todo | ✅ |
 | 2.5 | **Diario de recuperación** | Apago el ordenador a la fuerza mientras subrayo, lo enciendo y no he perdido nada | ⬜ |
 | 2.6 | **Preguntar al cerrar** (Guardar / No guardar / Cancelar), "Volver a como estaba al abrirlo", recuperar cambios descartados, e indicador "Guardado / Cambios sin guardar" | Subrayo, cierro y me pregunta; si le doy a "No guardar" con prisa, aún puedo recuperarlo | ⬜ |
 | 2.6b | **Versiones anteriores** y avisos que salen siempre (firmado, cambios fuertes, no se puede guardar, cambiado por otro programa) | Vuelvo a como estaba el PDF esta mañana; un PDF firmado nunca se guarda solo | ⬜ |
@@ -433,6 +433,34 @@ Notas de la Fase 2A:
   - Pendiente de sus tareas: preguntar al cerrar e indicador de estado (2.6),
     versiones anteriores y avisos de PDF firmado (2.6b), y que los cambios
     sobrevivan a una caída del ayudante (2.5, diario).
+- **2.2 y 2.4, resaltar, subrayar, tachar, deshacer y rehacer (14/11/2026).**
+  - En el modo Estudiar: **Resaltar** (amarillo), **Subrayar** y **Tachar** (rojo).
+    Dos formas de usarlos: con texto ya seleccionado, el botón lo marca; sin nada
+    seleccionado, el rotulador se queda "en la mano" (botón pulsado) y todo lo que
+    se seleccione queda marcado, hasta pulsar Esc o el botón otra vez. Con el
+    rotulador en la mano, doble clic marca una palabra. También con clic derecho.
+  - Se ve al momento en la página y en la miniatura. **El PDF no cambia hasta
+    Guardar.** El botón Guardar está ahora también al principio de las barras de
+    Estudiar, Rellenar y Organizar.
+  - **Deshacer y rehacer** (Ctrl+Z, Ctrl+Y o Ctrl+Mayús+Z, botones y menú Editar),
+    sin límite, por documento. En el buscador, Ctrl+Z sigue deshaciendo lo escrito.
+  - Lo guardado son anotaciones PDF normales. Comprobado abriendo el resultado con
+    el motor de PDF de Chrome y Edge: se ve igual (`capturas/subrayar-en-chrome.png`).
+    Falta verlo en Adobe Reader (prueba de Julen).
+  - Las marcas caen en su sitio también en páginas guardadas giradas (90, 180 y
+    270 grados), que es lo habitual en escaneados.
+  - **Diseño interno** (`app/core/commands.py`, `CLAUDE.md` §5.8): cada cambio es
+    una "orden" con sus datos, que sabe aplicarse, deshacerse y escribirse como
+    texto. El ayudante, que tiene el documento abierto, las ejecuta. Deshacer,
+    rehacer y (tarea 2.5) el diario salen de esa misma pieza. **Toda herramienta
+    nueva que cambie el documento tiene que ser una orden.**
+  - Si el ayudante se cae, el nuevo recibe otra vez las órdenes sin guardar: las
+    marcas no se pierden mientras el programa siga abierto. Que sobrevivan a un
+    apagón es la tarea 2.5.
+  - Todavía no: elegir color (2.3), quitar una marca suelta pinchando en ella o
+    cambiarla (2.9; de momento, con Deshacer), preguntar al cerrar con cambios
+    sin guardar (2.6). **Ojo hasta la 2.6: si se cierra sin guardar, las marcas
+    se pierden sin aviso.**
 
 ## Fase 2B – Documentos escaneados (OCR)
 | # | Tarea | Terminado cuando… | Estado |
