@@ -24,6 +24,9 @@ class DocumentPage(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.path: Path | None = None
+        # False for a document that is only being looked at (an earlier
+        # version): it is not a recent file nor a tab to bring back.
+        self.remembered = True
         self.slowest_page = 0.0  # seconds, for the drawing figure of test builds
         self.mode = Mode.READ  # the work mode this document is used in
         self.view = PdfView()
