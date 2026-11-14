@@ -82,6 +82,10 @@ def _same_size(image: QImage, target: QRect) -> bool:
     return abs(image.width() - target.width()) <= 1 and abs(image.height() - target.height()) <= 1
 
 
+# How a change being made is told apart: put back from the journal, not new.
+RECOVER, RECOVER_UNDO = "recover", "recover_undo"
+
+
 class PdfView(QAbstractScrollArea):
     """Continuous view of one document."""
 
@@ -213,6 +217,10 @@ class PdfView(QAbstractScrollArea):
         self._markup_tool = ""  # the marker in hand: every selection gets marked
         self.markup_colors: dict[str, tuple[float, float, float]] = {}
         self.markup_opacity: dict[str, float] = {}
+        # Where every change is written down the moment it is made (the window
+        # gives it when a document is opened). None: nothing is written down.
+        self.journal = None
+        self._journal_at_save: dict[int, int] = {}  # save number -> changes noted by then
         self._saved.connect(self._document_saved)
         self.save_failed.connect(self._save_did_not_work)
         self._changes = 0  # changes made to the document since it was opened
@@ -296,12 +304,16 @@ class PdfView(QAbstractScrollArea):
         how = self._changing.pop(number, None)
         if how is None or self._document is None:
             return  # belongs to a document that is no longer open
-        if how == "undo":
+        undone = how in ("undo", RECOVER_UNDO)
+        if undone:
             self._redo.append(order)
         else:
             self._undo.append(order)
             if how == "do":
                 self._redo.clear()  # a new change: the undone ones are gone
+        if self.journal is not None and how not in (RECOVER, RECOVER_UNDO):
+            # Written down at once: a power cut from here on does not lose it.
+            self.journal.record(order, undone)
         # The pictures of those pages are old: they stay on screen until the
         # new ones arrive, so nothing blinks.
         self._stale.update(page for page in pages if 0 <= page < self.page_count)
@@ -309,6 +321,19 @@ class PdfView(QAbstractScrollArea):
         self._request_pages()
         self.history_changed.emit()
         self.pages_changed.emit(list(pages))
+
+    def recover(self, entries) -> int:
+        """Put back changes read from the journal: (order, undone) pairs.
+
+        They come back as changes not saved. They are not written down again:
+        the journal already has them. Returns how many were asked for.
+        """
+        if self._document is None:
+            return 0
+        for order, undone in entries:
+            number = self.service.apply(order, undo=undone)
+            self._changing[number] = RECOVER_UNDO if undone else RECOVER
+        return len(entries)
 
     def _change_did_not_work(self, number: int, details: str) -> None:
         if self._changing.pop(number, None) is not None:
@@ -341,6 +366,8 @@ class PdfView(QAbstractScrollArea):
         """
         number = self.service.save(target)
         self._saves[number] = self._changes
+        if self.journal is not None:
+            self._journal_at_save[number] = self.journal.count
         return number
 
     def _document_saved(self, number: int, path: object) -> None:
@@ -350,12 +377,16 @@ class PdfView(QAbstractScrollArea):
             self._saved_changes = max(self._saved_changes, carried)
         if self._document is not None:
             self._document.path = Path(path)
+        noted = self._journal_at_save.pop(number, None)
+        if self.journal is not None and noted is not None:
+            self.journal.saved(noted, path)  # what is in the file leaves the journal
         if was and not self.modified:
             self.modified_changed.emit(False)
         self.saved.emit(number, path)
 
     def _save_did_not_work(self, number: int, _kind: str, _details: str) -> None:
         self._saves.pop(number, None)
+        self._journal_at_save.pop(number, None)
 
     def close_document(self) -> None:
         if self._document is not None:
@@ -364,6 +395,8 @@ class PdfView(QAbstractScrollArea):
         was_modified = self.modified
         self._changes = self._saved_changes = 0
         self._saves.clear()
+        self.journal = None
+        self._journal_at_save.clear()
         self._stale.clear()
         self._changing.clear()
         if self._undo or self._redo:

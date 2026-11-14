@@ -48,7 +48,7 @@ es lo correcto mientras no haya cambios. Lo que ya se puede probar:
    - **Cancelar** (o Esc, o la X): no pasa nada, sigues donde estabas.
    - **Guardar**: guarda y cierra la pestaña. Ábrelo otra vez: la marca está.
    - **No guardar**: cierra sin tocar el archivo. Ábrelo otra vez: no está.
-     (Todavía no se puede recuperar; llega con el diario, tarea 2.5.)
+     Se puede recuperar durante 7 días (ver la tarea 2.5).
 4. Abre dos PDFs, resalta algo en los dos y cierra el programa: una sola ventana
    con la lista de los dos y **Guardar todos**.
 5. Cierra una pestaña que no tiene cambios: se cierra sin preguntar.
@@ -71,3 +71,24 @@ es lo correcto mientras no haya cambios. Lo que ya se puede probar:
 7. Cierra el programa y ábrelo: cada herramienta sigue con su color.
 8. Guarda y abre el PDF en Edge y en Adobe Reader: mismos colores y misma
    transparencia.
+
+## Tarea 2.5 – Diario de recuperación (no perder nada)
+
+1. **Cierre a la fuerza.** Abre un PDF, resalta tres o cuatro frases y NO
+   guardes. Abre el Administrador de tareas (Ctrl+Mayús+Esc), busca Lector-PDF y
+   pulsa "Finalizar tarea". Abre el programa otra vez: vuelve la pestaña y
+   pregunta si quieres recuperar los cambios. Pulsa **Recuperar**: las marcas
+   están y pone "Cambios sin guardar". Guarda.
+2. **Apagón de verdad** (si te atreves): lo mismo, pero apagando el ordenador
+   manteniendo pulsado el botón de encendido. Esto no lo he podido probar yo.
+3. **Ahora no.** Repite el paso 1 y pulsa "Ahora no". El documento queda sin las
+   marcas y no vuelve a preguntar. Ve a **Menú → Archivo → Recuperar cambios
+   descartados**: ahí están; elígelo y pulsa Recuperar.
+4. **No guardar con prisa.** Resalta algo, cierra la pestaña y pulsa "No
+   guardar". Luego Archivo → Recuperar cambios descartados: vuelven.
+5. **Lo deshecho no vuelve.** Resalta dos frases, deshaz la segunda (Ctrl+Z),
+   mata el programa y recupera: solo vuelve la primera.
+6. **La página.** Abre un PDF largo, baja hasta la página 30, espera un par de
+   segundos y mata el programa. Al abrirlo vuelve a la página 30.
+7. Después de guardar, en Archivo → Recuperar cambios descartados no queda nada
+   de ese documento.

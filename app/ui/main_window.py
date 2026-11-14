@@ -33,6 +33,8 @@ from app.core.document import PdfDocument, PdfOpenError, engine_version
 from app.core.error_log import running_from_source_or_test_build
 from app.core.history import History, file_key
 from app.core.interface_size import NORMAL_SIZE
+from app.core.journal import FOLDER_NAME as JOURNAL_FOLDER
+from app.core.journal import Journal, Pending
 from app.core.marker_styles import MarkerStyles
 from app.core.ocr import OcrError, OcrJob, OcrPage
 from app.core.paths import data_dir, is_portable
@@ -62,6 +64,7 @@ from app.ui.password_dialog import PasswordDialog
 from app.ui.pdf_view import PdfView
 from app.ui.print_dialog import PrintChoices, PrintDialog
 from app.ui.print_run import PrintRun
+from app.ui.recovery_dialog import RecoveryDialog
 from app.ui.search_panel import SearchPanel
 from app.ui.settings_dialog import SettingsDialog
 from app.ui.side_panel import SidePanel, Tab
@@ -80,6 +83,7 @@ LAST_FOLDER_SETTING = "ultima_carpeta"
 WELCOME_RECENT = 5  # recent documents offered on the welcome page
 # The tools of each mode with their names under the drawing, or only the drawings.
 TOOLBAR_SETTING = "barra_herramientas"
+PLACE_DELAY_MS = 2000  # how long after turning the page it is remembered
 MARKERS_SETTING = "rotuladores"  # colour and opacity of each marking tool
 TOOLBAR_NAMES, TOOLBAR_ICONS = "nombres", "iconos"
 TOP_SEARCH_WIDTH = 280
@@ -98,6 +102,17 @@ class MainWindow(QMainWindow):
         # Tests turn this off so that message boxes do not block them.
         self.show_problem_dialogs = True
         self.history = History(self.settings)
+        # Every change is written down here at once, apart from the PDF, next to
+        # the settings (so the portable version keeps it in its own folder).
+        self.journal = Journal(self.settings.path.parent / JOURNAL_FOLDER)
+        # For the tests: the answer to "recover the changes?" without the question.
+        self.recovery_answer: bool | None = None
+        # The page being read is remembered a moment after it changes, not only
+        # when closing: after a power cut the document comes back where it was.
+        self._place_timer = QTimer(self)
+        self._place_timer.setSingleShot(True)
+        self._place_timer.setInterval(PLACE_DELAY_MS)
+        self._place_timer.timeout.connect(self._remember_current_place)
         # How a protected PDF gets its password. Tests put their own answer here.
         self.ask_password = self._ask_password
         self._password_dialogs: bool | None = None  # None: as show_problem_dialogs
@@ -525,6 +540,15 @@ class MainWindow(QMainWindow):
         self.print_action.triggered.connect(lambda _checked=False: self.print_document())
         self.addAction(self.print_action)
         file_menu.addAction(self.print_action)
+        file_menu.addSeparator()
+        self.recover_discarded_action = QAction(self.tr("Recuperar cambios &descartados…"), self)
+        self.recover_discarded_action.setStatusTip(
+            self.tr("Volver a poner cambios que no se guardaron al cerrar")
+        )
+        self.recover_discarded_action.triggered.connect(
+            lambda _checked=False: self.choose_discarded_changes()
+        )
+        file_menu.addAction(self.recover_discarded_action)
         file_menu.addSeparator()
         self.settings_action = QAction(self.tr("A&justes…"), self)
         self.settings_action.setShortcut(QKeySequence("Ctrl+,"))
@@ -1373,6 +1397,7 @@ class MainWindow(QMainWindow):
         view = page.view
         self._give_marker_styles(view)
         view.page_changed.connect(self._update_position)
+        view.page_changed.connect(lambda *_args: self._place_timer.start())
         view.zoom_changed.connect(self._update_position)
         view.page_drawn.connect(lambda number, seconds, p=page: self._page_drawn(p, seconds))
         view.document_failed.connect(self._document_failed)
@@ -1442,6 +1467,7 @@ class MainWindow(QMainWindow):
             )
             return False
         page.path = Path(path).absolute()
+        page.view.journal = self.journal.of(page.path)
         page.slowest_page = 0.0
         # Back to the page and the work mode where this document was left.
         place = self.history.place_of(page.path)
@@ -1503,6 +1529,102 @@ class MainWindow(QMainWindow):
     def _remember_place(self, page: DocumentPage) -> None:
         if page.path is not None and page.view.page_count:
             self.history.remember_place(page.path, max(page.view.current_page, 0), page.mode.name)
+
+    def _remember_current_place(self) -> None:
+        if self.documents:
+            self._remember_place(self.current_document)
+
+    # ---- recovering changes that were never saved --------------------------
+
+    def offer_recovery(self) -> int:
+        """After a power cut, a hang or a forced close: offer the changes back.
+
+        Called when the program starts. Returns how many documents got their
+        changes back. Saying no does not lose them: they are set aside some days.
+        """
+        self.journal.forget_old()
+        pending = self.journal.pending()
+        if not pending:
+            return 0
+        if self.recovery_answer is not None:
+            wanted = self.recovery_answer
+        elif not self.show_problem_dialogs:
+            return 0  # nobody to ask (automatic checks): they stay where they are
+        else:
+            dialog = RecoveryDialog(pending, crashed=True, parent=self)
+            try:
+                dialog.exec()
+                wanted = bool(dialog.chosen)
+            finally:
+                dialog.deleteLater()
+        if not wanted:
+            for found in pending:
+                self._set_aside(found)
+            self.statusBar().showMessage(
+                self.tr(
+                    "Cambios no recuperados. Siguen en Archivo → Recuperar cambios descartados."
+                ),
+                STATUS_MESSAGE_MS,
+            )
+            return 0
+        return sum(1 for found in pending if self.recover_changes(found))
+
+    def choose_discarded_changes(self) -> None:
+        """ "Archivo → Recuperar cambios descartados": choose one and bring it back."""
+        self.journal.forget_old()
+        dialog = RecoveryDialog(self.journal.discarded(), crashed=False, parent=self)
+        try:
+            dialog.exec()
+            chosen = list(dialog.chosen)
+        finally:
+            dialog.deleteLater()
+        for found in chosen:
+            self.recover_changes(found)
+
+    def recover_changes(self, found: Pending) -> bool:
+        """Put the changes of ``found`` back in its document, as changes not saved.
+
+        The document is opened if it is not. False if it cannot be opened; the
+        changes are then kept for later.
+        """
+        name = found.path.name
+        if not found.path.is_file() or not self.open_document(found.path):
+            self._set_aside(found)  # not asked again at every start, but kept
+            self.statusBar().showMessage(
+                self.tr("No se encuentra «{0}»: sus cambios se conservan unos días.").format(name),
+                STATUS_MESSAGE_MS,
+            )
+            return False
+        view = self.documents[self.index_of_document(found.path)].view
+        entries = list(found.entries)
+        if view.journal is None:
+            view.journal = self.journal.of(found.path)
+        if found.file == view.journal.file and not view.modified:
+            view.journal.restart(entries)  # the same journal goes on, tidied up
+        else:
+            # First written down in the journal of the open document, then the
+            # old note is thrown away: at no moment are they in neither.
+            for order, undone in entries:
+                view.journal.record(order, undone)
+            if found.file != view.journal.file:
+                self.journal.forget(found)
+        view.recover(entries)
+        self.statusBar().showMessage(
+            self.tr("Cambios de «{0}» recuperados. Están sin guardar: pulsa Guardar.").format(name),
+            STATUS_MESSAGE_MS,
+        )
+        return True
+
+    def _set_aside(self, found: Pending) -> None:
+        """Keep these changes for some days without offering them at every start."""
+        if found.discarded:
+            return
+        index = self.index_of_document(found.path)
+        journal = self.documents[index].view.journal if index >= 0 else None
+        if journal is not None and journal.file == found.file:
+            journal.discard()  # the open document starts a clean journal
+        else:
+            self.journal.set_aside(found)
 
     def _fill_recent_menu(self) -> None:
         self.recent_menu.clear()
@@ -1600,6 +1722,7 @@ class MainWindow(QMainWindow):
         index = self.documents.index(page)
         self.documents.pop(index)
         self._remember_place(page)
+        self._set_changes_aside(page)
         self.document_tabs.blockSignals(True)
         self.document_tabs.removeTab(index)
         self.document_tabs.blockSignals(False)
@@ -1609,6 +1732,12 @@ class MainWindow(QMainWindow):
         self.document_tabs.setVisible(bool(self.documents) and not self._full_screen)
         self._tab_changed(self.document_tabs.currentIndex())
         self._save_session()
+
+    @staticmethod
+    def _set_changes_aside(page: DocumentPage) -> None:
+        """A document is closed without saving: its changes are kept some days."""
+        if page.view.modified and page.view.journal is not None:
+            page.view.journal.discard()
 
     def step_tab(self, step: int) -> None:
         """Go to the next (1) or the previous (-1) tab, round and round."""
@@ -2020,8 +2149,10 @@ class MainWindow(QMainWindow):
         if self._print_run is not None:
             self._print_run.cancel()
         self.updater.cancel()
+        self._place_timer.stop()
         for page in self.documents:
             self._remember_place(page)
+            self._set_changes_aside(page)  # "No guardar": recoverable for some days
         self._save_session()
         self.shutdown_documents()
         super().closeEvent(event)
