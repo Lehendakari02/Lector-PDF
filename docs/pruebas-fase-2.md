@@ -21,9 +21,6 @@ es lo correcto mientras no haya cambios. Lo que ya se puede probar:
 
 ## Tareas 2.2 y 2.4 – Resaltar, subrayar, tachar, deshacer y rehacer
 
-Aviso: el programa todavía no pregunta al cerrar. Si cierras sin guardar, las
-marcas se pierden. Llega en la tarea 2.6.
-
 1. Abre un PDF con texto y pasa al modo **Estudiar**.
 2. Selecciona una frase con el ratón y pulsa **Resaltar**: queda en amarillo al
    momento. Prueba también Subrayar y Tachar con otras frases.
@@ -41,3 +38,20 @@ marcas se pierden. Llega en la tarea 2.6.
    marcadas las dos páginas, y un solo Ctrl+Z quita las dos.
 9. Con un PDF escaneado al que hayas pasado "Reconocer texto", comprueba que el
    resaltado cae encima de las palabras.
+
+## Tarea 2.6 (primera parte) – Preguntar al cerrar e indicador de guardado
+
+1. Abre un PDF: abajo a la derecha pone **Guardado**.
+2. Resalta una frase: pasa a **Cambios sin guardar** y la pestaña lleva un punto
+   (●) junto al nombre. Guarda (Ctrl+S): vuelve a "Guardado" y el punto se va.
+3. Resalta algo y cierra la pestaña: pregunta **Guardar / No guardar / Cancelar**.
+   - **Cancelar** (o Esc, o la X): no pasa nada, sigues donde estabas.
+   - **Guardar**: guarda y cierra la pestaña. Ábrelo otra vez: la marca está.
+   - **No guardar**: cierra sin tocar el archivo. Ábrelo otra vez: no está.
+     (Todavía no se puede recuperar; llega con el diario, tarea 2.5.)
+4. Abre dos PDFs, resalta algo en los dos y cierra el programa: una sola ventana
+   con la lista de los dos y **Guardar todos**.
+5. Cierra una pestaña que no tiene cambios: se cierra sin preguntar.
+6. Ten un PDF abierto también en Adobe Reader (lo bloquea), resalta algo, cierra
+   y elige Guardar: avisa de que no ha podido, y la pestaña sigue abierta con
+   sus marcas.

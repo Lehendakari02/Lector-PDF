@@ -345,6 +345,7 @@ QStatusBar {{ background: {c.window}; color: {c.muted}; border-top: 1px solid {c
 QStatusBar::item {{ border: none; }}
 QStatusBar QLabel {{ color: {c.muted}; padding: 0 8px; }}
 QStatusBar QToolButton#iconButton {{ padding: 2px; }}
+QStatusBar QLabel#saveStateLabel[pending="true"] {{ color: {c.text}; font-weight: 600; }}
 
 /* ---- welcome page ---- */
 QWidget#welcome {{ background: {c.canvas}; }}

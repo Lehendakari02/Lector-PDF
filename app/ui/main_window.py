@@ -65,6 +65,7 @@ from app.ui.settings_dialog import SettingsDialog
 from app.ui.side_panel import SidePanel, Tab
 from app.ui.sign_dialog import CertificateDialog
 from app.ui.theme import PAPER_SETTING, THEME_SETTING, Paper, Theme, apply_theme
+from app.ui.unsaved_dialog import CANCEL, DISCARD, SAVE, UnsavedDialog
 from app.ui.updater import UpdateBanner, Updater
 from app.ui.zoom_control import ZoomControl
 
@@ -174,6 +175,15 @@ class MainWindow(QMainWindow):
         self.speed_label = QLabel()
         self.speed_label.setObjectName("speedLabel")
         self.speed_label.setVisible(running_from_source_or_test_build())
+        # Always in sight: whether the document in front is saved.
+        self.save_state_label = QLabel()
+        self.save_state_label.setObjectName("saveStateLabel")
+        self.save_state_label.setAccessibleName(self.tr("Estado de guardado"))
+        self.statusBar().addPermanentWidget(self.save_state_label)
+        # For the tests: the answer to "save the changes?" without showing the question.
+        self.unsaved_answer: str | None = None
+        self._saving_to_close: list[DocumentPage] = []  # being saved before closing
+        self._after_saving = None  # what to do once they are all saved
         self.statusBar().addPermanentWidget(self.speed_label)
         self.statusBar().addPermanentWidget(self.page_box)
         self.zoom_control = ZoomControl(self.pdf_view)
@@ -839,6 +849,8 @@ class MainWindow(QMainWindow):
         self.update_banner.installing()
         self.after_exit_command = [str(part) for part in command]
         self.close()
+        if self._saving_to_close:
+            return  # saving first; the program closes and installs when that is done
         if self.isVisible():  # closing was refused (something pending): do not install
             self.after_exit_command = None
             if self.updater.release is not None:
@@ -920,10 +932,70 @@ class MainWindow(QMainWindow):
             action.setEnabled(can_save)
         for action in (self.save_as_action, self.feature_actions["save_as"]):
             action.setEnabled(is_open and not view.saving)
+        if not is_open:
+            state = ""
+        elif view.saving:
+            state = self.tr("Guardando…")
+        elif view.modified:
+            state = self.tr("Cambios sin guardar")
+        else:
+            state = self.tr("Guardado")
+        self.save_state_label.setText(state)
+        self.save_state_label.setProperty("pending", is_open and view.modified)
+        self.save_state_label.style().unpolish(self.save_state_label)
+        self.save_state_label.style().polish(self.save_state_label)
 
     def _modified_changed(self, page: DocumentPage) -> None:
+        if page in self.documents:
+            # A dot on the tab says "this one has changes not saved yet".
+            index = self.documents.index(page)
+            self.document_tabs.setTabText(index, self._tab_title(page))
         if page is self.current_document:
             self._refresh_save_actions()
+
+    @staticmethod
+    def _tab_title(page: DocumentPage) -> str:
+        return f"{page.title} ●" if page.view.modified else page.title
+
+    # ---- closing with changes not saved ------------------------------------
+
+    def _ask_unsaved(self, pages: list[DocumentPage]) -> str:
+        """Guardar / No guardar / Cancelar for these documents: what the user answers."""
+        if self.unsaved_answer is not None:
+            return self.unsaved_answer
+        if not self.show_problem_dialogs:
+            return DISCARD  # nobody to ask (automatic checks)
+        dialog = UnsavedDialog([page.title for page in pages], self)
+        try:
+            dialog.exec()
+            return dialog.choice
+        finally:
+            dialog.deleteLater()
+
+    def _save_then(self, pages: list[DocumentPage], then) -> None:
+        """Save these documents and, once every one is saved, do ``then``.
+
+        If one cannot be saved nothing else happens: its message is shown and
+        the documents stay open with their changes.
+        """
+        self._saving_to_close = list(pages)
+        self._after_saving = then
+        for page in pages:
+            if not page.view.saving:
+                self._start_saving(page, None)
+
+    def _saved_before_closing(self, page: DocumentPage, worked: bool) -> None:
+        if page not in self._saving_to_close:
+            return
+        if not worked:
+            self._saving_to_close, self._after_saving = [], None
+            self.restart_wanted = False
+            self.after_exit_command = None
+            return
+        self._saving_to_close.remove(page)
+        if not self._saving_to_close and self._after_saving is not None:
+            then, self._after_saving = self._after_saving, None
+            then()
 
     def save_document(self, page: DocumentPage | None = None) -> bool:
         """Save the changes of a document (the one in front) in its own file.
@@ -990,7 +1062,7 @@ class MainWindow(QMainWindow):
             self.history.add_recent(path)
             if page in self.documents:
                 index = self.documents.index(page)
-                self.document_tabs.setTabText(index, page.title)
+                self.document_tabs.setTabText(index, self._tab_title(page))
                 self.document_tabs.setTabToolTip(index, str(path))
                 self._save_session()
             if page is self.current_document:
@@ -999,9 +1071,11 @@ class MainWindow(QMainWindow):
             self.tr("Guardado en «{0}».").format(path.name), STATUS_MESSAGE_MS
         )
         self._refresh_save_actions()
+        self._saved_before_closing(page, True)
 
     def _save_failed(self, page: DocumentPage, _number: int, kind: str) -> None:
         self._refresh_save_actions()
+        self._saved_before_closing(page, False)
         name = page.title
         reasons = {
             saving.LOCKED: self.tr(
@@ -1427,13 +1501,31 @@ class MainWindow(QMainWindow):
         self.raise_()
         self.activateWindow()
 
-    def close_document(self, index: int | None = None) -> None:
-        """Close a tab (the one in front if none is given)."""
+    def close_document(self, index: int | None = None, ask: bool = True) -> None:
+        """Close a tab (the one in front if none is given).
+
+        With changes not saved it asks first: Guardar / No guardar / Cancelar.
+        """
         if index is None:
             index = self.document_tabs.currentIndex()
         if not 0 <= index < len(self.documents):
             return
-        page = self.documents.pop(index)
+        page = self.documents[index]
+        if ask and page.view.modified:
+            self.document_tabs.setCurrentIndex(index)  # the one being asked about, in front
+            answer = self._ask_unsaved([page])
+            if answer == CANCEL:
+                return
+            if answer == SAVE:
+                self._save_then([page], lambda p=page: self._close_page(p))
+                return
+        self._close_page(page)
+
+    def _close_page(self, page: DocumentPage) -> None:
+        if page not in self.documents:
+            return
+        index = self.documents.index(page)
+        self.documents.pop(index)
         self._remember_place(page)
         self.document_tabs.blockSignals(True)
         self.document_tabs.removeTab(index)
@@ -1837,6 +1929,18 @@ class MainWindow(QMainWindow):
             self.welcome_logo.setPixmap(icons.logo_pixmap(84, self.devicePixelRatioF()))
 
     def closeEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        pending = [page for page in self.documents if page.view.modified]
+        if pending:
+            answer = self._ask_unsaved(pending)
+            if answer != DISCARD:
+                event.ignore()
+                if answer == SAVE:
+                    # Closing goes on by itself when every one is saved.
+                    self._save_then(pending, self.close)
+                else:
+                    self.restart_wanted = False
+                    self.after_exit_command = None
+                return
         if self._ocr_job is not None:
             self._ocr_job.cancel()
             self._ocr_job = None
