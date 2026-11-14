@@ -55,3 +55,19 @@ es lo correcto mientras no haya cambios. Lo que ya se puede probar:
 6. Ten un PDF abierto también en Adobe Reader (lo bloquea), resalta algo, cierra
    y elige Guardar: avisa de que no ha podido, y la pestaña sigue abierta con
    sus marcas.
+
+## Tarea 2.3 – Colores y opacidad
+
+1. Modo **Estudiar**. Junto a Resaltar, Subrayar y Tachar hay una flechita:
+   púlsala en Resaltar. Sale la paleta, "Más colores…" y la opacidad.
+2. Selecciona una frase, abre la flecha y pulsa el verde: la frase queda en verde
+   y la franja bajo el dibujo del botón pasa a verde.
+3. Sin nada seleccionado, elige el rosa: el rotulador se queda en la mano en
+   rosa. Marca dos frases y pulsa Esc.
+4. **Más colores…**: elige uno cualquiera. Queda apuntado en "Usados hace poco",
+   también en la flecha de Subrayar y de Tachar.
+5. Baja la opacidad al 40 % y resalta: el color tapa menos.
+6. Las marcas de antes no han cambiado de color.
+7. Cierra el programa y ábrelo: cada herramienta sigue con su color.
+8. Guarda y abre el PDF en Edge y en Adobe Reader: mismos colores y misma
+   transparencia.

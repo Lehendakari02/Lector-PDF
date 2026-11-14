@@ -212,6 +212,7 @@ class PdfView(QAbstractScrollArea):
         self._changing: dict[int, str] = {}  # change number -> "do", "undo" or "redo"
         self._markup_tool = ""  # the marker in hand: every selection gets marked
         self.markup_colors: dict[str, tuple[float, float, float]] = {}
+        self.markup_opacity: dict[str, float] = {}
         self._saved.connect(self._document_saved)
         self.save_failed.connect(self._save_did_not_work)
         self._changes = 0  # changes made to the document since it was opened
@@ -254,7 +255,13 @@ class PdfView(QAbstractScrollArea):
         chosen = self.selection()
         if chosen is None or kind not in MARKUP_KINDS or self._document is None:
             return False
-        number = self.service.mark_text(kind, chosen[0], chosen[1], self.markup_colors.get(kind))
+        number = self.service.mark_text(
+            kind,
+            chosen[0],
+            chosen[1],
+            self.markup_colors.get(kind),
+            self.markup_opacity.get(kind, 1.0),
+        )
         self._changing[number] = "do"
         self.clear_selection()
         return True
