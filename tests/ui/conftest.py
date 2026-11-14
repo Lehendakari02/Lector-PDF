@@ -38,6 +38,13 @@ def window(qt_app, settings):
 
 
 @pytest.fixture(autouse=True)
+def documents_in_temporary_folders_are_fine(monkeypatch):
+    """The documents of the tests all live in temporary folders: do not warn
+    about it before every save (the tests of that warning turn it on)."""
+    monkeypatch.setattr(MainWindow, "warn_about_temporary_folders", False)
+
+
+@pytest.fixture(autouse=True)
 def no_windows_left_behind(qt_app):
     """Destroy every window, dialog and menu a test leaves behind.
 
