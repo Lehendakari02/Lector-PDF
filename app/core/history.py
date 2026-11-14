@@ -19,6 +19,7 @@ SESSION_SETTING = "sesion"
 PLACES_SETTING = "documentos"
 RECENT_SETTING = "recientes"
 MAX_RECENT = 12
+ABSENT_DAYS = 30  # how long the tab of a file that is not there is waited for
 MAX_PLACES = 300  # documents whose page is remembered; the oldest are forgotten
 
 
@@ -47,8 +48,27 @@ class History:
     def restore_wanted(self) -> bool:
         return bool(self.settings.get(RESTORE_SETTING, True))
 
-    def save_session(self, paths: list[Path], current: int) -> None:
-        self.settings.set(SESSION_SETTING, {"abiertos": [str(p) for p in paths], "actual": current})
+    def save_session(
+        self, paths: list[Path], current: int, absent: list[Path] | tuple[Path, ...] = ()
+    ) -> None:
+        """Remember the open documents and which one is in front.
+
+        ``absent`` are documents of the last time whose file is not there now
+        (a USB stick not plugged in, a network folder not ready): their tab
+        comes back when the file does. They are forgotten after some weeks.
+        """
+        since = {file_key(path): when for path, when in self._absent()}
+        open_keys = {file_key(path) for path in paths}
+        now = int(time.time())
+        waiting = [
+            {"ruta": str(path), "desde": since.get(file_key(path), now)}
+            for path in absent
+            if file_key(path) not in open_keys
+        ]
+        stored = {"abiertos": [str(p) for p in paths], "actual": current}
+        if waiting:
+            stored["ausentes"] = waiting
+        self.settings.set(SESSION_SETTING, stored)
 
     def session(self) -> tuple[list[Path], int]:
         """The documents open the last time and which one was in front."""
@@ -58,6 +78,21 @@ class History:
         paths = [Path(p) for p in stored.get("abiertos", ()) if isinstance(p, str)]
         current = stored.get("actual", -1)
         return paths, current if isinstance(current, int) else -1
+
+    def absent_tabs(self, now: float | None = None) -> list[Path]:
+        """Documents of earlier sessions whose file was not found, still waited for."""
+        limit = (time.time() if now is None else now) - ABSENT_DAYS * 86400
+        return [path for path, when in self._absent() if when >= limit]
+
+    def _absent(self) -> list[tuple[Path, int]]:
+        stored = self.settings.get(SESSION_SETTING)
+        waiting = stored.get("ausentes") if isinstance(stored, dict) else None
+        found = []
+        for entry in waiting if isinstance(waiting, list) else ():
+            if isinstance(entry, dict) and isinstance(entry.get("ruta"), str):
+                when = entry.get("desde")
+                found.append((Path(entry["ruta"]), when if isinstance(when, int) else 0))
+        return found
 
     # ---- where every document was left ------------------------------------
 

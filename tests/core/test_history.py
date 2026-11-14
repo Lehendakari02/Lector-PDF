@@ -107,3 +107,42 @@ def test_restoring_can_be_turned_off(tmp_path):
     settings = Settings(tmp_path / "ajustes.json")
     settings.set(history.RESTORE_SETTING, False)
     assert not History(settings).restore_wanted
+
+
+# ---- tabs whose file is not there right now --------------------------------
+
+
+def test_absent_tabs_are_waited_for(store, tmp_path):
+    files = make_files(tmp_path, 2)
+    away = tmp_path / "usb" / "tema.pdf"
+    store.save_session(files, 0, [away])
+    assert store.session() == (files, 0), "they are not counted among the open ones"
+    assert store.absent_tabs() == [away]
+
+
+def test_an_absent_tab_that_is_open_again_is_no_longer_absent(store, tmp_path):
+    files = make_files(tmp_path, 2)
+    store.save_session(files, 0, [files[1], tmp_path / "otro.pdf"])
+    assert store.absent_tabs() == [tmp_path / "otro.pdf"]
+
+
+def test_absent_tabs_are_forgotten_after_some_weeks(store, tmp_path):
+    import time
+
+    from app.core.history import ABSENT_DAYS
+
+    away = tmp_path / "usb" / "tema.pdf"
+    store.save_session([], -1, [away])
+    store.save_session([], -1, [away])  # saved again later: the first day counts
+    later = time.time() + (ABSENT_DAYS - 1) * 86400
+    assert store.absent_tabs(now=later) == [away]
+    assert store.absent_tabs(now=later + 2 * 86400) == []
+
+
+def test_damaged_absent_tabs_are_ignored(store):
+    from app.core.history import SESSION_SETTING
+
+    store.settings.set(SESSION_SETTING, {"abiertos": [], "ausentes": [3, {"ruta": 5}, "x"]})
+    assert store.absent_tabs() == []
+    store.settings.set(SESSION_SETTING, {"abiertos": [], "ausentes": "no"})
+    assert store.absent_tabs() == []

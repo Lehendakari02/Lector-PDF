@@ -457,3 +457,65 @@ def test_older_changes_say_their_day(window, opened, wait_until):
     assert "ayer" in dialog.list.item(0).text()
     older = RecoveryDialog([replace(item, when=time.time() - 5 * 86400)], crashed=True)
     assert "/" in older.list.item(0).text()
+
+
+# ---- "Volver a como estaba al abrirlo" -------------------------------------
+
+
+def test_back_to_how_it_was_when_opened(window, opened, wait_until):
+    path = opened()
+    assert not window.revert_action.isEnabled(), "nothing to take back yet"
+    mark(window, wait_until)
+    mark(window, wait_until, 30, "underline")
+    mark(window, wait_until, 60, "strikeout")
+    assert window.revert_action.isEnabled()
+    assert window.revert_document() == 3
+    view = window.pdf_view
+    settle(view, wait_until)
+    assert not view.can_undo and view.can_redo
+    assert not window.revert_action.isEnabled()
+    assert "como estaba al abrirlo" in window.statusBar().currentMessage()
+    assert window.journal.pending() == [], "nothing left to recover either"
+    window.save_document()
+    settle(view, wait_until)
+    assert marks_in(path) == 0
+
+
+def test_going_back_also_takes_away_what_was_saved_in_this_session(window, opened, wait_until):
+    path = opened()
+    mark(window, wait_until)
+    window.save_document()
+    settle(window.pdf_view, wait_until)
+    mark(window, wait_until, 30)
+    assert marks_in(path) == 1
+    assert window.revert_document() == 2
+    view = window.pdf_view
+    settle(view, wait_until)
+    assert view.modified, "the file still has the saved mark until it is saved again"
+    window.save_document()
+    settle(view, wait_until)
+    assert marks_in(path) == 0
+
+
+def test_redo_brings_back_what_going_back_took_away(window, opened, wait_until):
+    opened()
+    mark(window, wait_until)
+    mark(window, wait_until, 30)
+    window.revert_document()
+    view = window.pdf_view
+    settle(view, wait_until)
+    view.redo()
+    view.redo()
+    settle(view, wait_until)
+    assert window.journal.pending()[0].count == 2
+
+
+def test_going_back_with_nothing_changed_says_so(window, opened):
+    opened()
+    assert window.revert_document() == 0
+    assert "ya está como al abrirlo" in window.statusBar().currentMessage()
+
+
+def test_go_back_is_in_the_file_menu(window):
+    file_menu = window.menuBar().actions()[0].menu()
+    assert window.revert_action in file_menu.actions()

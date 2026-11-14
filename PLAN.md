@@ -376,9 +376,9 @@ Notas de la Fase 1:
     adjuntarlos después de publicar.
   - **Queda para la Fase 2** (cada cosa en la tarea que le toca):
     - guardar la página por la que se va también mientras se lee, no solo al
-      cerrar (**hecho con la 2.5**); pendiente: no perder pestañas si el programa se cierra mientras
-      las restaura, ni olvidar las de un USB sin enchufar; si `ajustes.json` no se
-      puede leer una vez, no pisarlo;
+      cerrar; no perder pestañas si el programa se cierra mientras las restaura,
+      ni olvidar las de un USB sin enchufar; si `ajustes.json` no se puede leer
+      una vez, no pisarlo (**todo hecho el 14/11/2026**, ver notas de la Fase 2A);
     - tarea nueva de memoria: "dormir" las pestañas que llevan rato sin verse y un
       tope común de memoria (15 o 20 temas abiertos pasan de 1 GB);
     - **decisión de Julen pendiente:** cuándo hacer que NVDA lea el texto del
@@ -393,7 +393,7 @@ Notas de la Fase 1:
 | 2.3 | Paleta de colores completa, grosor y opacidad | Elijo cualquier color para cada herramienta | ✅ (el grosor llega con el dibujo, 2.8) |
 | 2.4 | Deshacer / rehacer (cada cambio es una "orden", ver `CLAUDE.md` §5) | Ctrl+Z y Ctrl+Y funcionan con todo | ✅ |
 | 2.5 | **Diario de recuperación** | Apago el ordenador a la fuerza mientras subrayo, lo enciendo y no he perdido nada | ✅ |
-| 2.6 | **Preguntar al cerrar** (Guardar / No guardar / Cancelar), "Volver a como estaba al abrirlo", recuperar cambios descartados, e indicador "Guardado / Cambios sin guardar" | Subrayo, cierro y me pregunta; si le doy a "No guardar" con prisa, aún puedo recuperarlo | 🔄 falta solo "Volver a como estaba al abrirlo" |
+| 2.6 | **Preguntar al cerrar** (Guardar / No guardar / Cancelar), "Volver a como estaba al abrirlo", recuperar cambios descartados, e indicador "Guardado / Cambios sin guardar" | Subrayo, cierro y me pregunta; si le doy a "No guardar" con prisa, aún puedo recuperarlo | ✅ |
 | 2.6b | **Versiones anteriores** y avisos que salen siempre (firmado, cambios fuertes, no se puede guardar, cambiado por otro programa) | Vuelvo a como estaba el PDF esta mañana; un PDF firmado nunca se guarda solo | ⬜ |
 | 2.6c | **Ajustes de guardado**: qué hacer al cerrar (preguntar / guardar siempre), guardar solo mientras trabajo (desactivado por defecto), versiones y días que se conservan | Activo "guardar solo" y ya no me pregunta al cerrar | ⬜ |
 | 2.7 | Notas adhesivas y cuadros de texto | Escribo notas y texto con la fuente, tamaño y color que quiero | ⬜ |
@@ -473,8 +473,8 @@ Notas de la Fase 2A:
     punto (●) junto al nombre.
   - "Actualizar ahora" pasa por la misma pregunta: si se elige Guardar, guarda,
     cierra e instala; si se cancela, no se instala nada.
-  - **Queda de la 2.6:** "Volver a como estaba al abrirlo". Recuperar lo que se
-    cerró con "No guardar" llegó con el diario (2.5).
+  - Recuperar lo que se cerró con "No guardar" llegó con el diario (2.5), y
+    "Volver a como estaba al abrirlo" después (ver más abajo).
 - **2.3, colores y opacidad (14/11/2026).**
   - Resaltar, Subrayar y Tachar llevan una **flecha al lado** que abre su color:
     paleta rápida de 10 colores (seis de rotulador y cuatro de bolígrafo), **"Más
@@ -520,11 +520,34 @@ Notas de la Fase 2A:
   - Diseño: el diario escribe las mismas "órdenes" que usa deshacer
     (`app/core/journal.py` sobre `commands.to_dict`). No hay un sistema aparte.
   - Queda para la 2.6c (ajustes): elegir cuántos días se conservan los cambios
-    descartados (hoy, 7). Quedan de la revisión de la Fase 1: no perder pestañas
-    si el programa se cierra mientras las restaura ni las de un USB sin enchufar
-    (M2), y no pisar `ajustes.json` si no se puede leer una vez (M4).
+    descartados (hoy, 7).
   - No probado con un apagón de verdad en Windows (prueba de Julen): solo
     simulado matando el programa.
+- **2.6, final: "Volver a como estaba al abrirlo" (14/11/2026).**
+  - **Archivo → Volver a como estaba al abrirlo** quita de una vez todos los
+    cambios hechos desde que se abrió el documento, también los que ya se
+    hubieran guardado en esta sesión (el PDF no cambia hasta pulsar Guardar).
+  - No pregunta, porque no se pierde nada: **Rehacer** (Ctrl+Y) los devuelve uno
+    a uno. Apagado mientras no haya cambios.
+- **Dos arreglos pendientes de la revisión de la Fase 1 (14/11/2026).**
+  - **Pestañas (M2):** mientras vuelven las pestañas de la última vez no se
+    apunta nada, así que cerrar el programa a la fuerza en ese rato (por ejemplo
+    con la ventana de contraseña a la vista) ya no olvida las demás. Y la pestaña
+    de un archivo que hoy no está (USB sin enchufar, carpeta de red o de la nube
+    aún no lista) se guarda hasta 30 días y vuelve sola cuando el archivo vuelve.
+    Cancelar la contraseña al arrancar sí olvida esa pestaña (decisión: quien
+    cancela no quiere abrirlo).
+  - **Ajustes (M4):** si `ajustes.json` existe pero no se puede leer (un
+    antivirus o la sincronización lo tienen cogido), se reintenta y **nunca se
+    escribe encima sin haberlo leído**; lo que se cambie mientras tanto se añade
+    cuando por fin se lee. Si está dañado se aparta como `ajustes.dañado.json` y
+    se usa la última copia buena (`ajustes.copia.json`, que se renueva en cada
+    arranque que lo lee bien). Si los ajustes no se pueden guardar (disco lleno,
+    USB protegido) se avisa una vez abajo, no en silencio.
+  - De paso: las pruebas automáticas de la interfaz tardaban cada vez más
+    (ventanas de prueba que no se destruían y se iban acumulando). Ahora cada
+    prueba limpia lo que deja; la tanda de interfaz pasa de 7 minutos y medio a
+    menos de 3.
 
 ## Fase 2B – Documentos escaneados (OCR)
 | # | Tarea | Terminado cuando… | Estado |

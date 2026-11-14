@@ -102,6 +102,9 @@ class MainWindow(QMainWindow):
         # Tests turn this off so that message boxes do not block them.
         self.show_problem_dialogs = True
         self.history = History(self.settings)
+        self._told_settings_failed = False
+        self._restoring = False  # True while the tabs of the last time are coming back
+        self._absent_tabs: list[Path] = self.history.absent_tabs()
         # Every change is written down here at once, apart from the PDF, next to
         # the settings (so the portable version keeps it in its own folder).
         self.journal = Journal(self.settings.path.parent / JOURNAL_FOLDER)
@@ -534,6 +537,13 @@ class MainWindow(QMainWindow):
             action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
             self.addAction(action)
             file_menu.addAction(action)
+        self.revert_action = QAction(self.tr("&Volver a como estaba al abrirlo"), self)
+        self.revert_action.setStatusTip(
+            self.tr("Quitar de una vez todos los cambios hechos desde que se abrió el documento")
+        )
+        self.revert_action.setEnabled(False)
+        self.revert_action.triggered.connect(lambda _checked=False: self.revert_document())
+        file_menu.addAction(self.revert_action)
         self.print_action = QAction(self.tr("&Imprimir…"), self)
         self.print_action.setShortcut(QKeySequence(QKeySequence.StandardKey.Print))
         self.print_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
@@ -995,6 +1005,24 @@ class MainWindow(QMainWindow):
         if not self.pdf_view.redo():
             self.statusBar().showMessage(self.tr("No hay nada que rehacer."), STATUS_MESSAGE_MS)
 
+    def revert_document(self) -> int:
+        """ "Volver a como estaba al abrirlo": take back every change of this session.
+
+        Nothing is lost for good: Rehacer brings them back one by one, and the
+        PDF itself does not change until it is saved. Returns how many changes.
+        """
+        count = self.pdf_view.undo_all()
+        if count == 0:
+            self.statusBar().showMessage(
+                self.tr("El documento ya está como al abrirlo."), STATUS_MESSAGE_MS
+            )
+        else:
+            self.statusBar().showMessage(
+                self.tr("Documento como estaba al abrirlo. Rehacer (Ctrl+Y) devuelve los cambios."),
+                STATUS_MESSAGE_MS,
+            )
+        return count
+
     def _edit_state_changed(self, page: DocumentPage) -> None:
         if page is self.current_document:
             self._refresh_edit_actions()
@@ -1006,6 +1034,7 @@ class MainWindow(QMainWindow):
             action.setEnabled(view.can_undo)
         for action in (self.redo_action, self.feature_actions["redo"]):
             action.setEnabled(view.can_redo)
+        self.revert_action.setEnabled(view.can_undo)
         for kind in MARKUP_KINDS:
             action = self.feature_actions[kind]
             action.setCheckable(True)
@@ -1501,17 +1530,28 @@ class MainWindow(QMainWindow):
         if not self.history.restore_wanted:
             return 0
         paths, current = self.history.session()
+        # The ones that were not there the last times are tried again too.
+        waited = [path for path in self.history.absent_tabs() if path not in paths]
         asking = self.show_problem_dialogs
         self.show_problem_dialogs = False  # a file that is gone is not worth a dialog
         self._password_dialogs = asking  # but a protected one still asks for its password
+        # Nothing is written down until all are back: closing by force half way
+        # (say, with a password being asked) must not forget the rest.
+        self._restoring = True
         try:
-            opened = [path for path in paths if path.is_file() and self.open_document(path)]
+            opened = [
+                path for path in [*paths, *waited] if path.is_file() and self.open_document(path)
+            ]
         finally:
             self.show_problem_dialogs = asking
             self._password_dialogs = None
+            self._restoring = False
+        # A file that is not there now (a USB stick not plugged in, a network
+        # folder not ready) keeps its place: its tab comes back when it does.
+        self._absent_tabs = [path for path in [*paths, *waited] if not path.is_file()]
         if 0 <= current < len(paths) and paths[current] in opened:
             self.document_tabs.setCurrentIndex(self.index_of_document(paths[current]))
-        missing = len(paths) - len(opened)
+        missing = len(paths) - len([path for path in paths if path in opened])
         if missing:
             self.statusBar().showMessage(
                 self.tr("No se han encontrado {0} de los documentos de la última vez.").format(
@@ -1523,8 +1563,19 @@ class MainWindow(QMainWindow):
         return len(opened)
 
     def _save_session(self) -> None:
+        if self._restoring:
+            return
         paths = [page.path for page in self.documents if page.path is not None]
-        self.history.save_session(paths, self.document_tabs.currentIndex())
+        self.history.save_session(paths, self.document_tabs.currentIndex(), self._absent_tabs)
+        if self.settings.save_failed and not self._told_settings_failed:
+            self._told_settings_failed = True  # said once, not at every change
+            self.statusBar().showMessage(
+                self.tr(
+                    "No se pueden guardar los ajustes (disco lleno o protegido): "
+                    "las pestañas y preferencias no se recordarán."
+                ),
+                STATUS_MESSAGE_MS,
+            )
 
     def _remember_place(self, page: DocumentPage) -> None:
         if page.path is not None and page.view.page_count:
