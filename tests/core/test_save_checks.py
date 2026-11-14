@@ -113,11 +113,17 @@ def test_where_mail_programs_leave_attachments_is_temporary(folder):
     assert in_temporary_folder(folder + "nomina.pdf", "Z:/otra")
 
 
+def _but_temporary(found: list[str]) -> list[str]:
+    """On Windows the folders of the tests are inside AppData/Local/Temp, which
+    is temporary whatever ``temp_dir`` says: that reason is left out here."""
+    return [reason for reason in found if reason != TEMPORARY]
+
+
 def test_every_reason_is_told_the_gravest_first(tmp_path):
     path = tmp_path / "contrato.pdf"
     shutil.copy(SAMPLES / "firmado.pdf", path)
     known = stamp_of(path)
-    assert warnings_for(path, known, temp_dir=tmp_path / "otra") == [SIGNED]
+    assert _but_temporary(warnings_for(path, known, temp_dir=tmp_path / "otra")) == [SIGNED]
     assert warnings_for(path, known, temp_dir=tmp_path) == [SIGNED, TEMPORARY]
     os.utime(path, ns=(known.modified + 5_000_000_000, known.modified + 5_000_000_000))
     assert warnings_for(path, known, temp_dir=tmp_path) == [CHANGED_OUTSIDE, SIGNED, TEMPORARY]
@@ -126,4 +132,5 @@ def test_every_reason_is_told_the_gravest_first(tmp_path):
 def test_an_ordinary_file_has_no_warnings(tmp_path):
     path = tmp_path / "tema.pdf"
     shutil.copy(SAMPLES / "boe.pdf", path)
-    assert warnings_for(path, stamp_of(path), temp_dir=tmp_path / "otra") == []
+    found = warnings_for(path, stamp_of(path), temp_dir=tmp_path / "otra")
+    assert _but_temporary(found) == []
