@@ -92,3 +92,20 @@ es lo correcto mientras no haya cambios. Lo que ya se puede probar:
    segundos y mata el programa. Al abrirlo vuelve a la página 30.
 7. Después de guardar, en Archivo → Recuperar cambios descartados no queda nada
    de ese documento.
+
+## Tarea 2.6 (final) – Volver a como estaba al abrirlo
+
+1. Abre un PDF, resalta y subraya varias frases.
+2. **Menú → Archivo → Volver a como estaba al abrirlo**: desaparecen todas de
+   una vez, sin preguntar.
+3. Pulsa Ctrl+Y varias veces: vuelven una a una.
+4. Con el documento recién abierto, esa opción está apagada.
+
+## Pestañas y ajustes que no se pierden
+
+1. Abre un PDF que esté en un USB y otro del disco. Cierra el programa, quita
+   el USB y ábrelo: vuelve solo el del disco y avisa abajo. Ciérralo, pon el USB
+   y ábrelo otra vez: vuelve también la pestaña del USB.
+2. (Opcional) En la carpeta de datos del programa hay ahora, junto a
+   `ajustes.json`, un `ajustes.copia.json`: es la copia de seguridad de los
+   ajustes, por si el archivo se estropea.

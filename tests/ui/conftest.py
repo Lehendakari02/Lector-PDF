@@ -37,6 +37,27 @@ def window(qt_app, settings):
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
 
+@pytest.fixture(autouse=True)
+def no_windows_left_behind(qt_app):
+    """Destroy every window, dialog and menu a test leaves behind.
+
+    Left alone they pile up, and each one makes every later change of the
+    style sheet slower: the whole suite ended up taking twice as long.
+    """
+    yield
+    for _round in range(3):  # closing a window can leave a dialog of its own
+        left = qt_app.topLevelWidgets()
+        if not left:
+            break
+        for widget in left:
+            if isinstance(widget, MainWindow):
+                widget.unsaved_answer = "discard"
+                widget.shutdown_documents()
+            widget.close()
+            widget.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
 @pytest.fixture
 def wait_until(qt_app):
     """Keep the interface running until ``condition`` is true (or fail)."""

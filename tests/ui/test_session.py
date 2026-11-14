@@ -153,3 +153,71 @@ def test_recent_list_can_be_emptied(window, sample):
     window.recent_menu.aboutToShow.emit()
     actions = window.recent_menu.actions()
     assert len(actions) == 1 and not actions[0].isEnabled()
+
+
+# ---- tabs are not lost by accident (review of Phase 1, M2) -----------------
+
+
+def test_a_tab_whose_file_is_away_comes_back_when_the_file_does(window, sample, settings, tmp_path):
+    usb = tmp_path / "usb"
+    usb.mkdir()
+    stick = usb / "tema.pdf"
+    shutil.copy(sample("formulario.pdf"), stick)
+    open_samples(window, sample, "boe.pdf")
+    assert window.open_document(stick)
+    window.close()
+    away = tmp_path / "desenchufado"
+    usb.rename(away)  # the USB stick is not plugged in today
+
+    again = start_again(settings)
+    try:
+        assert again.restore_session() == 1
+        assert [page.title for page in again.documents] == ["boe.pdf"]
+        assert "No se han encontrado 1" in again.statusBar().currentMessage()
+    finally:
+        again.close()
+
+    away.rename(usb)  # plugged in again
+    third = start_again(settings)
+    try:
+        assert third.restore_session() == 2
+        assert [page.title for page in third.documents] == ["boe.pdf", "tema.pdf"]
+    finally:
+        third.close()
+
+    fourth = start_again(settings)
+    try:
+        assert fourth.restore_session() == 2, "and from then on it is one more tab"
+        assert fourth.history.absent_tabs() == []
+    finally:
+        fourth.close()
+
+
+def test_nothing_is_written_down_until_every_tab_is_back(window, sample, settings, monkeypatch):
+    open_samples(window, sample, "boe.pdf", "largo.pdf", "formulario.pdf")
+    window.close()
+    again = start_again(settings)
+    seen = []
+    real = MainWindow.open_document
+
+    def open_and_look(self, path):
+        # What the settings file would hold if the program were killed right now.
+        seen.append(len(self.history.session()[0]))
+        return real(self, path)
+
+    monkeypatch.setattr(MainWindow, "open_document", open_and_look)
+    try:
+        assert again.restore_session() == 3
+        assert seen == [3, 3, 3], "the three tabs are safe all the time"
+        assert len(again.history.session()[0]) == 3
+    finally:
+        again.close()
+
+
+def test_settings_that_cannot_be_saved_are_said_once(window, sample, settings, monkeypatch):
+    monkeypatch.setattr(type(settings), "save", lambda self: setattr(self, "save_failed", True))
+    open_samples(window, sample, "boe.pdf")
+    assert "No se pueden guardar los ajustes" in window.statusBar().currentMessage()
+    window.statusBar().clearMessage()
+    open_samples(window, sample, "formulario.pdf")
+    assert "No se pueden guardar los ajustes" not in window.statusBar().currentMessage()

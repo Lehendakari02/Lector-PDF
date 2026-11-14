@@ -291,6 +291,16 @@ class PdfView(QAbstractScrollArea):
         self.history_changed.emit()
         return True
 
+    def undo_all(self) -> int:
+        """Take back every change made since the document was opened.
+
+        Returns how many. They can be brought back one by one with ``redo``.
+        """
+        count = 0
+        while self.undo():
+            count += 1
+        return count
+
     def redo(self) -> bool:
         """Carry out again the last change taken back."""
         if not self._redo:
