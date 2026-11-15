@@ -123,6 +123,13 @@ FEATURES: list[Feature] = [
         "rectángulo círculo",
     ),
     _f("eraser", STUDY, "Borrador", "Borrar dibujos y anotaciones", "goma eliminar quitar"),
+    _f(
+        "hide_annotations",
+        STUDY,
+        "Ocultar anotaciones",
+        "Ver el documento limpio, sin subrayados, notas ni dibujos; no se borra nada",
+        "mostrar esconder limpio ver quitar original",
+    ),
     _f("bookmark", STUDY, "Marcador", "Marcar esta página para volver a ella", "favorito señal"),
     _f("go_to_article", STUDY, "Ir a artículo", "Saltar a un artículo o apartado", "saltar número"),
     _f(
@@ -225,6 +232,7 @@ GROUP_STARTS = frozenset(
         "save",
         "highlight",
         "note",
+        "hide_annotations",
         "bookmark",
         "annotations",
         "margins",

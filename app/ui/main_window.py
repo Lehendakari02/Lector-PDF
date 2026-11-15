@@ -293,6 +293,7 @@ class MainWindow(QMainWindow):
             "draw": lambda: self.use_writing_tool(DRAW),
             "shapes": lambda: self.use_writing_tool(SHAPE_TOOL),
             "eraser": lambda: self.use_writing_tool(ERASER),
+            "hide_annotations": self.toggle_annotations,
             "undo": self.undo,
             "redo": self.redo,
             "save": self.save_document,
@@ -957,6 +958,7 @@ class MainWindow(QMainWindow):
             view_menu.addAction(action)
 
         view_menu.addSeparator()
+        view_menu.addAction(self.feature_actions["hide_annotations"])
         theme_menu = view_menu.addMenu(self.tr("&Tema"))
         theme_group = QActionGroup(self)
         names = {
@@ -1433,6 +1435,24 @@ class MainWindow(QMainWindow):
             action = self.feature_actions[kind]
             action.setCheckable(True)
             action.setChecked(view.markup_tool == kind)
+        hide = self.feature_actions["hide_annotations"]
+        hide.setCheckable(True)
+        hide.setChecked(not view.annotations_shown)
+
+    def toggle_annotations(self) -> None:
+        """See the document clean, or with what was put on it again."""
+        view = self.pdf_view
+        if view.page_count == 0:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            self._refresh_edit_actions()
+            return
+        view.set_annotations_shown(not view.annotations_shown)
+        self.statusBar().showMessage(
+            self.tr("Anotaciones a la vista.")
+            if view.annotations_shown
+            else self.tr("Anotaciones ocultas: no se ha borrado nada."),
+            STATUS_MESSAGE_MS,
+        )
 
     def _edit_failed(self, details: str) -> None:
         self.statusBar().showMessage(
@@ -1953,6 +1973,7 @@ class MainWindow(QMainWindow):
             max(0, self.pdf_view.current_page),
             self.settings,
             self,
+            annotations=self.pdf_view.annotations_shown,
         )
         try:
             if dialog.exec() != PrintDialog.DialogCode.Accepted or dialog.choices is None:
@@ -1975,7 +1996,9 @@ class MainWindow(QMainWindow):
         printer.setColorMode(
             QPrinter.ColorMode.GrayScale if choices.grey else QPrinter.ColorMode.Color
         )
-        run = PrintRun(page.view, printer, choices.pages, choices.scaling, self)
+        run = PrintRun(
+            page.view, printer, choices.pages, choices.scaling, self, choices.annotations
+        )
         progress = QProgressDialog(self)
         progress.setWindowTitle(self.tr("Imprimiendo"))
         progress.setLabelText(self.tr("Preparando «{0}»…").format(page.title))
@@ -2159,6 +2182,7 @@ class MainWindow(QMainWindow):
         view.markup_tool_changed.connect(lambda _kind, p=page: self._edit_state_changed(p))
         view.selection_changed.connect(lambda _has, p=page: self._edit_state_changed(p))
         view.picked_changed.connect(lambda p=page: self._edit_state_changed(p))
+        view.annotations_shown_changed.connect(lambda _on, p=page: self._edit_state_changed(p))
         view.item_copied.connect(self._refresh_edit_actions)
         view.item_copied.connect(
             lambda: self.statusBar().showMessage(

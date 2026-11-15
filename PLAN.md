@@ -401,7 +401,7 @@ Notas de la Fase 1:
 | 2.9 | Seleccionar, mover, redimensionar, copiar y borrar anotaciones | Corrijo una anotación mal puesta sin rehacerla | ✅ (solo las hechas con este programa) |
 | 2.10 | Herramientas favoritas | Guardo "rotulador amarillo fino" y lo uso con un clic | ✅ |
 | 2.11 | Lápiz y pantalla táctil | Subrayo con lápiz en una tableta sin que la mano pinte | ✅ (hecho sin tableta: falta la prueba con un lápiz y una pantalla táctil de verdad) |
-| 2.12 | Mostrar/ocultar anotaciones (también al imprimir/exportar) | Con un botón veo el documento limpio | ⬜ |
+| 2.12 | Mostrar/ocultar anotaciones (también al imprimir/exportar) | Con un botón veo el documento limpio | ✅ (exportar llegará con la Fase 5) |
 | 2.13 | Atajos de teclado para cada herramienta | Cambio de herramienta sin usar el ratón | ⬜ |
 | 2.14 | Versión 0.2 | Estudio un tema completo con el programa durante una sesión real | ⬜ |
 
@@ -746,8 +746,30 @@ Notas de la Fase 2A:
     más el lápiz" (activado) y qué hace el dedo.
   - Dos toques seguidos con el dedo o el lápiz son un doble clic (seleccionan
     la palabra, abren un texto).
-  - Sin hacer: inclinación del lápiz. La fila de modos sigue midiendo 34 puntos de alto (lo recomendado
-    para el dedo son 40): se decide al probarla con el dedo.
+  - Sin hacer: inclinación del lápiz. La fila de modos sigue midiendo 34
+    puntos de alto (lo recomendado para el dedo son 40): se decide al probarla
+    con el dedo.
+- **2.12: mostrar y ocultar anotaciones (15/11/2026).**
+  - Botón **"Ocultar anotaciones"** en el modo Estudiar (y en el menú Ver y en
+    el buscador de funciones): enseña el documento limpio, sin subrayados,
+    notas ni dibujos. El mismo botón los devuelve. **No se borra nada:**
+    siguen en el documento y se guardan igual.
+  - Se ocultan todas las anotaciones, también las hechas con otros programas.
+    **Lo que es del propio documento se sigue viendo:** su texto, sus imágenes
+    y los campos de formulario con lo que tengan escrito (y el dibujo de una
+    firma).
+  - Mientras están ocultas no se pueden elegir ni borrar (lo que no se ve no
+    se toca). Si se anota algo nuevo, o se deshace o rehace un cambio, vuelven
+    a verse solas, para no trabajar a ciegas.
+  - Va por documento: ocultar en una pestaña no oculta en las demás. No se
+    recuerda al cerrar: un documento siempre se abre con todo a la vista, para
+    que nadie crea que ha perdido sus apuntes.
+  - **Imprimir:** la ventana de imprimir tiene la casilla "Con las anotaciones
+    (subrayados, notas y dibujos)". Viene marcada o no según cómo se esté
+    viendo el documento, y se puede cambiar ahí mismo.
+  - Las miniaturas del panel lateral siguen enseñando las anotaciones.
+  - Pendiente: lo mismo al **exportar** páginas como imagen, cuando exista la
+    exportación (Fase 5).
 
 ## Fase 2B – Documentos escaneados (OCR)
 | # | Tarea | Terminado cuando… | Estado |

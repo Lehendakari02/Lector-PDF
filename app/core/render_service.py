@@ -62,6 +62,8 @@ class RenderRequest:
     page: int
     zoom: float
     rotation: int = 0  # extra quarter turns for viewing: 0, 90, 180 or 270
+    # False: the page without what was put on it (marks, notes, drawings).
+    annotations: bool = True
 
 
 @dataclass(frozen=True)
@@ -76,12 +78,36 @@ class RenderedPage:
     samples: bytes
     seconds: float
     rotation: int = 0
+    annotations: bool = True  # False: drawn without what was put on the page
 
 
-def render_page(doc, page_index: int, zoom: float, rotation: int = 0) -> RenderedPage:
+def _clean_pixmap(page, matrix):
+    """The picture of a page without its annotations.
+
+    What the document itself has stays: its text and pictures and also its
+    form fields with what was written in them (and the look of a signature),
+    which the PDF keeps next to the annotations.
+    """
+    import pymupdf
+    from pymupdf import mupdf
+
+    inner, still = page.this, mupdf.FzMatrix()
+    drawn = mupdf.fz_new_display_list(mupdf.fz_bound_page(inner))
+    device = mupdf.fz_new_list_device(drawn)
+    mupdf.fz_run_page_contents(inner, device, still, mupdf.FzCookie())
+    mupdf.fz_run_page_widgets(inner, device, still, mupdf.FzCookie())
+    mupdf.fz_close_device(device)
+    return pymupdf.DisplayList(drawn).get_pixmap(matrix=matrix, alpha=False)
+
+
+def render_page(
+    doc, page_index: int, zoom: float, rotation: int = 0, annotations: bool = True
+) -> RenderedPage:
     """Draw one page of an open PyMuPDF document.
 
     ``rotation`` turns the picture clockwise for viewing; the file is not changed.
+    Without ``annotations`` the page is drawn clean: marks, notes and drawings
+    are left out (they stay in the document).
     """
     import pymupdf
 
@@ -91,7 +117,10 @@ def render_page(doc, page_index: int, zoom: float, rotation: int = 0) -> Rendere
     if pixels > MAX_PIXELS_PER_PAGE:
         zoom *= (MAX_PIXELS_PER_PAGE / pixels) ** 0.5
     matrix = pymupdf.Matrix(zoom, zoom).prerotate(rotation % 360)
-    pixmap = page.get_pixmap(matrix=matrix, alpha=False)
+    if annotations:
+        pixmap = page.get_pixmap(matrix=matrix, alpha=False)
+    else:
+        pixmap = _clean_pixmap(page, matrix)
     return RenderedPage(
         page=page_index,
         zoom=zoom,
@@ -101,6 +130,7 @@ def render_page(doc, page_index: int, zoom: float, rotation: int = 0) -> Rendere
         samples=pixmap.samples,
         seconds=time.perf_counter() - started,
         rotation=rotation % 360,
+        annotations=annotations,
     )
 
 
@@ -244,9 +274,9 @@ def _worker_main(connection: Connection) -> None:
 
     doc = None
     doc_path = doc_password = None  # where the open document lives, to save it
-    wanted: list[tuple[int, float, int]] = []
-    thumbnails: list[tuple[int, float, int]] = []  # small pictures, drawn when idle
-    prints: list[tuple[int, float, int]] = []  # pages for the printer
+    wanted: list[tuple[int, float, int, bool]] = []
+    thumbnails: list[tuple[int, float, int, bool]] = []  # small pictures, drawn when idle
+    prints: list[tuple[int, float, int, bool]] = []  # pages for the printer
     token = 0
     search: _SearchJob | None = None
     page_texts: dict[int, PageText] = {}  # letters of pages already read
@@ -381,13 +411,13 @@ def _worker_main(connection: Connection) -> None:
         # The pages being read go first, then the printer, then the small
         # pictures of the side panel.
         kind = "page" if wanted else "print" if prints else "thumbnail"
-        page_index, zoom, rotation = (wanted or prints or thumbnails).pop(0)
+        page_index, zoom, rotation, annotations = (wanted or prints or thumbnails).pop(0)
         # Said first: if drawing this page kills the helper, the program knows which.
         connection.send(("drawing", token, page_index))
         if page_index in crash_pages:
             os._exit(13)
         try:
-            result = render_page(doc, page_index, zoom, rotation)
+            result = render_page(doc, page_index, zoom, rotation, annotations)
             connection.send(
                 (
                     kind,
@@ -399,6 +429,7 @@ def _worker_main(connection: Connection) -> None:
                     result.stride,
                     result.seconds,
                     result.rotation,
+                    result.annotations,
                 )
             )
             connection.send_bytes(result.samples)
@@ -740,9 +771,13 @@ class RenderService:
         self._reader.start()
         return True
 
-    def _drawable(self, requests: list[RenderRequest]) -> list[tuple[int, float, int]]:
+    def _drawable(self, requests: list[RenderRequest]) -> list[tuple[int, float, int, bool]]:
         """The requests as the helper wants them, without the pages that killed it."""
-        return [(r.page, r.zoom, r.rotation) for r in requests if r.page not in self._bad_pages]
+        return [
+            (r.page, r.zoom, r.rotation, r.annotations)
+            for r in requests
+            if r.page not in self._bad_pages
+        ]
 
     @staticmethod
     def _tell(callback: Callable, *values: object) -> None:
@@ -785,18 +820,22 @@ class RenderService:
                 self._printing.discard(message[2])
                 self._tell(self._on_print_failed, message[2])
             elif kind == "print":
-                _, _, page, zoom, width, height, stride, seconds, rotation = message
+                _, _, page, zoom, width, height, stride, seconds, rotation, shown = message
                 self._drawing = None
                 self._printing.discard(page)
-                drawn = RenderedPage(page, zoom, width, height, stride, samples, seconds, rotation)
+                drawn = RenderedPage(
+                    page, zoom, width, height, stride, samples, seconds, rotation, shown
+                )
                 self._tell(self._on_print, drawn)
             elif kind in ("page", "thumbnail"):
-                _, _, page, zoom, width, height, stride, seconds, rotation = message
+                _, _, page, zoom, width, height, stride, seconds, rotation, shown = message
                 self._drawing = None
                 self._drawn_since_crash += 1
                 if self._drawn_since_crash >= GOOD_PAGES_TO_FORGET_CRASHES:
                     self._crashes = 0  # the document is fine: the crash was a one-off
-                drawn = RenderedPage(page, zoom, width, height, stride, samples, seconds, rotation)
+                drawn = RenderedPage(
+                    page, zoom, width, height, stride, samples, seconds, rotation, shown
+                )
                 self._tell(self._on_page if kind == "page" else self._on_thumbnail, drawn)
             elif kind == "outline":
                 self._tell(self._on_outline, message[2])

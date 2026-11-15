@@ -33,8 +33,10 @@ class PrintRun(QObject):
         pages: list[int],
         scaling: Scaling = Scaling.FIT,
         parent: QObject | None = None,
+        annotations: bool = True,
     ) -> None:
         super().__init__(parent)
+        self._annotations = annotations  # False: the pages are printed clean
         self._view = view
         self._printer = printer
         self._pages = list(pages)
@@ -90,7 +92,7 @@ class PrintRun(QObject):
         if not self._batch:
             self._end(cancelled=False)
             return
-        self._view.want_print_pages(self._batch, self._zoom)
+        self._view.want_print_pages(self._batch, self._zoom, self._annotations)
 
     def _page_ready(self, drawn: RenderedPage) -> None:
         if not self.running or drawn.page not in self._batch:
@@ -119,7 +121,7 @@ class PrintRun(QObject):
                 self._ready[page] = None
             self._send_what_is_ready()
             return
-        self._view.want_print_pages(missing, self._zoom)
+        self._view.want_print_pages(missing, self._zoom, self._annotations)
 
     def _send_what_is_ready(self) -> None:
         """Send to the printer, in order, every page of the batch that has arrived."""
