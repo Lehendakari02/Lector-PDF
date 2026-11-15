@@ -13,6 +13,7 @@ from app.core.marker_styles import (
     same_color,
     to_hex,
 )
+from app.core.notes import NOTE, NOTE_COLOR, SANS, SERIF, TEXT_BOX, TEXT_COLOR
 
 
 def test_colours_are_written_and_read_back():
@@ -108,3 +109,35 @@ def test_a_partly_right_setting_keeps_what_is_right():
     assert to_hex(styles.of(HIGHLIGHT).color) == "#00ff00"
     assert styles.of(HIGHLIGHT).opacity == 0.3
     assert styles.of(UNDERLINE).color == DEFAULT_COLORS[UNDERLINE]
+
+
+# ---- notes and text ---------------------------------------------------------
+
+
+def test_notes_and_text_have_their_own_colour_font_and_size():
+    styles = MarkerStyles()
+    assert styles.of(NOTE).color == NOTE_COLOR and styles.of(TEXT_BOX).color == TEXT_COLOR
+    assert (styles.text_font, styles.text_size) == (SANS, 12)
+    styles.set_color(TEXT_BOX, (0.85, 0.15, 0.15))
+    styles.set_text_font(SERIF)
+    styles.set_text_size(18)
+    back = MarkerStyles.from_setting(styles.to_setting())
+    assert same_color(back.of(TEXT_BOX).color, (0.85, 0.15, 0.15))
+    assert (back.text_font, back.text_size) == (SERIF, 18)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [None, 3, [], {"font": "comic", "size": "big"}, {"font": ["a"], "size": True}, {"size": -4}],
+)
+def test_a_strange_text_style_falls_back_to_something_usable(text):
+    back = MarkerStyles.from_setting({"text": text})
+    assert back.text_font == SANS
+    assert 6 <= back.text_size <= 72
+
+
+def test_settings_written_before_there_were_notes_still_work():
+    old = {"tools": {"highlight": {"color": "#112233", "opacity": 0.5}}, "recent": []}
+    back = MarkerStyles.from_setting(old)
+    assert to_hex(back.of(HIGHLIGHT).color) == "#112233"
+    assert back.of(NOTE).color == NOTE_COLOR and back.text_size == 12

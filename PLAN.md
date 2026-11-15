@@ -396,7 +396,7 @@ Notas de la Fase 1:
 | 2.6 | **Preguntar al cerrar** (Guardar / No guardar / Cancelar), "Volver a como estaba al abrirlo", recuperar cambios descartados, e indicador "Guardado / Cambios sin guardar" | Subrayo, cierro y me pregunta; si le doy a "No guardar" con prisa, aún puedo recuperarlo | ✅ |
 | 2.6b | **Versiones anteriores** y avisos que salen siempre (firmado, cambios fuertes, no se puede guardar, cambiado por otro programa) | Vuelvo a como estaba el PDF esta mañana; un PDF firmado nunca se guarda solo | ✅ (el aviso de cambios fuertes llega con cada herramienta que borra páginas, tapa datos o cambia el texto) |
 | 2.6c | **Ajustes de guardado**: qué hacer al cerrar (preguntar / guardar siempre), guardar solo mientras trabajo (desactivado por defecto), versiones y días que se conservan | Activo "guardar solo" y ya no me pregunta al cerrar | ✅ |
-| 2.7 | Notas adhesivas y cuadros de texto | Escribo notas y texto con la fuente, tamaño y color que quiero | ⬜ |
+| 2.7 | Notas adhesivas y cuadros de texto | Escribo notas y texto con la fuente, tamaño y color que quiero | ✅ (tres tipos de letra; mover y cambiar de tamaño llega con la 2.9) |
 | 2.8 | Dibujo a mano alzada, flechas, formas, borrador | Dibujo y borro sobre la página | ⬜ |
 | 2.9 | Seleccionar, mover, redimensionar, copiar y borrar anotaciones | Corrijo una anotación mal puesta sin rehacerla | ⬜ |
 | 2.10 | Herramientas favoritas | Guardo "rotulador amarillo fino" y lo uso con un clic | ⬜ |
@@ -608,6 +608,33 @@ Notas de la Fase 2A:
     nada en el momento: se aplica en el siguiente guardado.
   - **Cambios descartados:** 1, 3, 7, 14 o 30 días.
   - Un valor raro en el archivo de ajustes cuenta como el valor por defecto.
+- **2.7: notas adhesivas y cuadros de texto (15/11/2026).**
+  - En el modo Estudiar, los botones **Nota** y **Cuadro de texto** se quedan
+    "en la mano" como los rotuladores: un clic en la página abre un panel
+    pequeño para escribir. Guardar (o Ctrl+Intro, o un clic fuera) lo pone en
+    la página; Esc lo descarta.
+  - Un clic en una nota la abre para leerla, cambiarla o borrarla. Un texto
+    se abre con doble clic (o con un clic si se lleva la herramienta). El botón
+    derecho ofrece Editar y Borrar. Al pasar el ratón por una nota se lee.
+  - La flecha de cada botón elige el color; la del texto, además, el tipo de
+    letra y el tamaño. Se recuerdan para la próxima vez.
+  - Son anotaciones PDF estándar (nota = "Text", texto = "FreeText").
+    Comprobado que se ven igual en el motor de Chrome/Edge; en Adobe Reader,
+    pendiente de la prueba manual.
+  - **Tipos de letra: solo tres** (sin remates, con remates y máquina de
+    escribir), porque son los que cualquier lector de PDF trae y así el texto
+    se ve igual en todas partes. Otras fuentes exigirían guardar el texto como
+    dibujo (ver la "letra pequeña" de `CLAUDE.md`); queda para más adelante si
+    se echa de menos.
+  - Se escribe en un panel, no directamente sobre la página. Es más sencillo y
+    seguro; escribir sobre la propia página sería una mejora posterior.
+  - Todo son "órdenes": deshacer, rehacer, diario de recuperación y versiones
+    funcionan igual que con los subrayados.
+  - Las notas hechas con otros programas se pueden leer, no cambiar ni borrar
+    (llevan datos que este programa perdería). Se revisará en la 2.9.
+  - Mover una nota o un texto ya puesto y cambiarle el tamaño llega con la 2.9.
+  - El cuadro de texto nunca se sale de la página: si una línea no cabe, se
+    parte por los espacios.
 
 ## Fase 2B – Documentos escaneados (OCR)
 | # | Tarea | Terminado cuando… | Estado |

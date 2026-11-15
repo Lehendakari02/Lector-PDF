@@ -15,11 +15,13 @@ from enum import Enum
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QGuiApplication, QImage, QPainter, QPalette
-from PySide6.QtWidgets import QAbstractScrollArea, QFrame, QMenu, QWidget
+from PySide6.QtGui import QColor, QCursor, QFont, QGuiApplication, QImage, QPainter, QPalette
+from PySide6.QtWidgets import QAbstractScrollArea, QFrame, QMenu, QToolTip, QWidget
 
+from app.core import notes
 from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
 from app.core.document import PageSize, PdfDocument
+from app.core.notes import NOTE, TEXT_BOX, PageNote
 from app.core.outline import OutlineEntry
 from app.core.render_service import (
     MAX_PIXELS_PER_PAGE,
@@ -30,6 +32,7 @@ from app.core.render_service import (
 from app.core.search import PageText, SearchHit
 from app.core.selection import caret_at, is_on_text, selection_rects, word_at
 from app.ui import theme
+from app.ui.note_panel import NotePanel
 
 PAGE_GAP = 12  # space between pages, in Qt units
 SIDE_MARGIN = 16
@@ -66,6 +69,10 @@ SELECTION_COLOR = QColor(61, 79, 208, 80)
 PAGE_TEXTS_KEPT = 40  # pages whose letters are kept ready for selecting
 END_OF_PAGE = 10**9  # a caret after the last letter, whatever the page has
 AUTOSCROLL_MS = 40  # while dragging a selection past the edge of the window
+# What can be held in hand: a marker, the notes or the text.
+TOOLS = (*MARKUP_KINDS, NOTE, TEXT_BOX)
+NOTE_REACH = 3.0  # points around a note that still count as on it
+TIP_LETTERS = 400  # of a note, shown when the pointer rests on it
 
 
 def _engine_pixels(points: float, zoom: float) -> int:
@@ -135,6 +142,8 @@ class PdfView(QAbstractScrollArea):
     edit_failed = Signal(str)
     history_changed = Signal()  # what can be undone or done again is different
     markup_tool_changed = Signal(str)  # the tool in hand ("" for none)
+    notes_changed = Signal(int)  # the notes and text boxes of a page are known or different
+    _notes_ready = Signal(int, object)
     _changed = Signal(int, object, object, bool)
     _change_failed = Signal(int, str)
     saved = Signal(int, object)
@@ -207,7 +216,17 @@ class PdfView(QAbstractScrollArea):
             on_save_failed=self.save_failed.emit,
             on_changed=self._changed.emit,
             on_change_failed=self._change_failed.emit,
+            on_notes=self._notes_ready.emit,
         )
+        self._notes_ready.connect(self._store_notes)
+        self._notes: dict[int, list[PageNote]] = {}  # notes and text boxes by page
+        self._asked_notes: set[int] = set()
+        self.note_panel: NotePanel | None = None  # where one is being written
+        # How new notes and text are made (the window gives what the user chose).
+        self.note_color = notes.NOTE_COLOR
+        self.text_font = notes.SANS
+        self.text_size = notes.TEXT_SIZE
+        self.text_color = notes.TEXT_COLOR
         self._changed.connect(self._change_done)
         self._change_failed.connect(self._change_did_not_work)
         self._stale: set[int] = set()  # pages whose picture is from before a change
@@ -248,15 +267,18 @@ class PdfView(QAbstractScrollArea):
 
     @property
     def markup_tool(self) -> str:
-        """The marker in hand ("highlight", "underline", "strikeout") or ""."""
+        """The tool in hand: a marker ("highlight", "underline", "strikeout"),
+        the notes ("note"), the text ("text_box") or ""."""
         return self._markup_tool
 
     def set_markup_tool(self, kind: str) -> None:
-        """Take a marker: from now on every text selected is marked with it."""
-        kind = kind if kind in MARKUP_KINDS else ""
+        """Take a tool. A marker marks every text selected from now on; with
+        the notes or the text, a click on the page starts one there."""
+        kind = kind if kind in TOOLS else ""
         if kind != self._markup_tool:
             self._markup_tool = kind
             self.markup_tool_changed.emit(kind)
+            self._update_pointer(self.viewport().mapFromGlobal(QCursor.pos()))
 
     def mark_selection(self, kind: str) -> bool:
         """Highlight, underline or strike out the selected text. False if there is none."""
@@ -327,6 +349,8 @@ class PdfView(QAbstractScrollArea):
         # The pictures of those pages are old: they stay on screen until the
         # new ones arrive, so nothing blinks.
         self._stale.update(page for page in pages if 0 <= page < self.page_count)
+        for page in pages:
+            self._want_notes(page, again=True)  # what is on those pages may be different
         self.mark_modified()
         self._request_pages()
         self.history_changed.emit()
@@ -429,6 +453,9 @@ class PdfView(QAbstractScrollArea):
             self.outline_changed.emit()
         self._texts.clear()
         self._asked_texts.clear()
+        self._notes.clear()
+        self._asked_notes.clear()
+        self.close_note_panel()
         self._selecting = False
         self._autoscroll.stop()
         self.clear_selection()
@@ -793,10 +820,14 @@ class PdfView(QAbstractScrollArea):
             if page not in self._cache or self._cache[page][0] != zoom or page in self._stale:
                 self._wanted.append(RenderRequest(page, zoom, self._rotation))
         self.service.want(self._wanted)
+        for page in visible:
+            self._want_notes(page)
 
     def _helper_restarted(self) -> None:
         """The helper died and a new one takes over: ask again for what was pending."""
         self._asked_texts = set(self._texts)  # letters asked for and never received
+        for page in sorted(self._asked_notes):
+            self.service.want_notes(page)
         self._request_pages()
 
     def failed_pages(self) -> set[int]:
@@ -994,6 +1025,136 @@ class PdfView(QAbstractScrollArea):
             QGuiApplication.clipboard().setText(text)
         self.text_copied.emit(len(text))
 
+    # ---- notes and text boxes ----------------------------------------------
+
+    def _want_notes(self, page: int, again: bool = False) -> None:
+        if not 0 <= page < self.page_count:
+            return
+        if again or (page not in self._notes and page not in self._asked_notes):
+            self._asked_notes.add(page)
+            self.service.want_notes(page)
+
+    def _store_notes(self, page: int, found: object) -> None:
+        if self._document is None:
+            return
+        self._asked_notes.discard(page)
+        self._notes[page] = list(found)
+        self.notes_changed.emit(page)
+
+    def notes_of(self, page: int) -> list[PageNote]:
+        """The notes and text boxes known of a page (asked for if not yet)."""
+        self._want_notes(page)
+        return list(self._notes.get(page, ()))
+
+    def note_under(self, position: QPoint) -> PageNote | None:
+        """The note or text box under a place of the window."""
+        point = self._point_on_page(position, reach=NOTE_REACH)
+        if point is None:
+            return None
+        page, x, y = point
+        found = self._notes.get(page, ())
+        return notes.note_at(found, x, y) or next(
+            (
+                note
+                for note in reversed(found)
+                if note.kind == NOTE
+                and note.rect[0] - NOTE_REACH <= x <= note.rect[2] + NOTE_REACH
+                and note.rect[1] - NOTE_REACH <= y <= note.rect[3] + NOTE_REACH
+            ),
+            None,
+        )
+
+    def _point_on_page(
+        self, position: QPoint, reach: float = 0.0
+    ) -> tuple[int, float, float] | None:
+        """Like ``_page_point``, but only when the place is on a page."""
+        point = self._page_point(position)
+        if point is None:
+            return None
+        page, x, y = point
+        size = self._sizes[page]
+        if -reach <= x <= size.width + reach and -reach <= y <= size.height + reach:
+            return point
+        return None
+
+    def _do(self, order) -> bool:
+        if self._document is None:
+            return False
+        self._changing[self.service.apply(order)] = "do"
+        return True
+
+    def put_note(self, page: int, x: float, y: float, text: str) -> bool:
+        """Stick a note on a page, its icon centred on that point."""
+        if not text.strip() or not 0 <= page < self.page_count:
+            return False
+        size, half = self._sizes[page], notes.NOTE_SIZE / 2
+        x = max(0.0, min(size.width - notes.NOTE_SIZE, x - half))
+        y = max(0.0, min(size.height - notes.NOTE_SIZE, y - half))
+        return self._do(notes.new_note(page, (x, y), text.strip(), self.note_color))
+
+    def put_text_box(self, page: int, x: float, y: float, text: str) -> bool:
+        """Write text on a page, starting at that point."""
+        if not text.strip() or not 0 <= page < self.page_count:
+            return False
+        size = self._sizes[page]
+        x = max(0.0, min(size.width - notes.MIN_BOX_WIDTH, x))
+        y = max(0.0, min(size.height - self.text_size * notes.LINE_HEIGHT, y))
+        order = notes.new_text_box(
+            page, (x, y), text.strip(), self.text_font, self.text_size, self.text_color
+        )
+        return self._do(order)
+
+    def change_note(self, note: PageNote, text: str) -> bool:
+        """Change what a note or a text box says. Only the ones made here."""
+        if not note.ours or not text.strip() or text.strip() == note.text:
+            return False
+        return self._do(notes.changed(note, text=text.strip()))
+
+    def remove_note(self, note: PageNote) -> bool:
+        """Take a note or a text box away. Only the ones made here."""
+        return note.ours and self._do(notes.Remove(note.order()))
+
+    def close_note_panel(self, keep: bool = False) -> None:
+        """Close the panel where a note is being written, keeping the text or not."""
+        panel = self.note_panel
+        if panel is not None:
+            if keep:
+                panel.save()
+            else:
+                panel.cancel()
+
+    def _panel_closed(self) -> None:
+        self.note_panel = None
+        self.setFocus()
+
+    def start_note(self, kind: str, page: int, x: float, y: float, near: QPoint) -> NotePanel:
+        """Open the panel to write a new note or text at a point of a page."""
+        self.close_note_panel(keep=True)
+        panel = NotePanel(kind, parent=self)
+        if kind == NOTE:
+            panel.saved.connect(lambda text: self.put_note(page, x, y, text))
+        else:
+            panel.show_text_style(self.text_font, self.text_size, self.text_color)
+            panel.saved.connect(lambda text: self.put_text_box(page, x, y, text))
+        return self._show_panel(panel, near)
+
+    def open_note(self, note: PageNote, near: QPoint | None = None) -> NotePanel:
+        """Open a note or a text box that is on the page: read, change or remove it."""
+        self.close_note_panel(keep=True)
+        panel = NotePanel(note.kind, note.text, existing=True, editable=note.ours, parent=self)
+        if note.kind == TEXT_BOX:
+            panel.show_text_style(note.font, note.size, note.color)
+        panel.saved.connect(lambda text: self.change_note(note, text))
+        panel.removed.connect(lambda: self.remove_note(note))
+        return self._show_panel(panel, near if near is not None else QPoint(40, 40))
+
+    def _show_panel(self, panel: NotePanel, near: QPoint) -> NotePanel:
+        self.note_panel = panel
+        panel.closed.connect(self._panel_closed)
+        panel.place_near(self.viewport().mapTo(self, near))
+        panel.start()
+        return panel
+
     def _want_text(self, page: int) -> None:
         if page not in self._texts and page not in self._asked_texts:
             self._asked_texts.add(page)
@@ -1067,6 +1228,19 @@ class PdfView(QAbstractScrollArea):
             return
         self.setFocus()
         position = event.position().toPoint()
+        if self.note_panel is not None:
+            self.close_note_panel(keep=True)  # a click outside keeps what was written
+            return
+        note = self.note_under(position)
+        writing = self._markup_tool in (NOTE, TEXT_BOX)
+        if note is not None and (note.kind == NOTE or writing):
+            self.open_note(note, position)
+            return
+        if writing:
+            point = self._point_on_page(position)
+            if point is not None:
+                self.start_note(self._markup_tool, *point, position)
+            return
         place = self._caret_at(position)
         if place is None:
             self.clear_selection()
@@ -1098,18 +1272,23 @@ class PdfView(QAbstractScrollArea):
         if event.button() == Qt.MouseButton.LeftButton:
             was_selecting, self._selecting = self._selecting, False
             self._autoscroll.stop()
-            if was_selecting and self._markup_tool and self.has_selection:
+            if was_selecting and self._markup_tool in MARKUP_KINDS and self.has_selection:
                 self.mark_selection(self._markup_tool)  # the marker in hand marks it
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802
-        place = self._caret_at(event.position().toPoint())
+        position = event.position().toPoint()
+        note = self.note_under(position)
+        if event.button() == Qt.MouseButton.LeftButton and note is not None and note.ours:
+            self.open_note(note, position)  # a double click on a text opens it
+            return
+        place = self._caret_at(position)
         if event.button() != Qt.MouseButton.LeftButton or place is None:
             return
         page, caret = place
         start, stop = word_at(self._texts[page], caret)
         self.select((page, start), (page, stop))
-        if self._markup_tool:
+        if self._markup_tool in MARKUP_KINDS:
             self.mark_selection(self._markup_tool)  # a double click marks the word
 
     def _extend_selection(self) -> None:
@@ -1126,20 +1305,52 @@ class PdfView(QAbstractScrollArea):
         self._extend_selection()
 
     def _update_pointer(self, position: QPoint) -> None:
-        """An I-beam over text, an arrow elsewhere."""
-        over_text = False
-        point = self._page_point(position)
-        if point is not None:
-            text = self._texts.get(point[0])
-            over_text = text is not None and is_on_text(text, point[1], point[2])
-        shape = Qt.CursorShape.IBeamCursor if over_text else Qt.CursorShape.ArrowCursor
+        """A hand over a note, a cross to put one, an I-beam over text, an arrow elsewhere."""
+        note = self.note_under(position)
+        writing = self._markup_tool in (NOTE, TEXT_BOX)
+        if note is not None and (note.kind == NOTE or writing):
+            shape = Qt.CursorShape.PointingHandCursor
+            tip = note.text[:TIP_LETTERS] + ("…" if len(note.text) > TIP_LETTERS else "")
+            if note.kind == NOTE and tip:
+                QToolTip.showText(self.viewport().mapToGlobal(position), tip, self.viewport())
+        elif writing and self._point_on_page(position) is not None:
+            shape = Qt.CursorShape.CrossCursor
+        else:
+            over_text = False
+            point = self._page_point(position)
+            if point is not None:
+                text = self._texts.get(point[0])
+                over_text = text is not None and is_on_text(text, point[1], point[2])
+            shape = Qt.CursorShape.IBeamCursor if over_text else Qt.CursorShape.ArrowCursor
         if self.viewport().cursor().shape() != shape:
             self.viewport().setCursor(shape)
 
     def contextMenuEvent(self, event) -> None:  # noqa: N802
         if not self.page_count:
             return
+        menu = self.context_menu(event.pos())
+        menu.exec(event.globalPos())
+        menu.deleteLater()
+
+    def context_menu(self, where: QPoint) -> QMenu:
+        """What the right button offers at a place of the window."""
         menu = QMenu(self)
+        note = self.note_under(where)
+        if note is not None:
+            is_note = note.kind == NOTE
+            if note.ours:
+                name = self.tr("Editar la nota…") if is_note else self.tr("Editar el texto…")
+            else:
+                name = self.tr("Leer la nota…") if is_note else self.tr("Leer el texto…")
+            menu.addAction(name).triggered.connect(
+                lambda _checked=False: self.open_note(note, where)
+            )
+            remove = menu.addAction(
+                self.tr("Borrar la nota") if is_note else self.tr("Borrar el texto")
+            )
+            remove.setEnabled(note.ours)
+            remove.triggered.connect(lambda _checked=False: self.remove_note(note))
+            menu.addSeparator()
         copy = menu.addAction(self.tr("Copiar"))
         copy.setEnabled(self.has_selection)
         copy.triggered.connect(self.copy_selection)
@@ -1157,7 +1368,7 @@ class PdfView(QAbstractScrollArea):
         undo = menu.addAction(self.tr("Deshacer"))
         undo.setEnabled(self.can_undo)
         undo.triggered.connect(self.undo)
-        menu.exec(event.globalPos())
+        return menu
 
     def wheelEvent(self, event) -> None:  # noqa: N802
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
