@@ -27,6 +27,11 @@ class DocumentPage(QWidget):
         # False for a document that is only being looked at (an earlier
         # version): it is not a recent file nor a tab to bring back.
         self.remembered = True
+        # How the file was when it was opened or last saved from here, to
+        # notice if another program writes it meanwhile.
+        self.stamp = None
+        # Warnings about saving already answered with "save here anyway".
+        self.accepted_warnings: set[str] = set()
         self.slowest_page = 0.0  # seconds, for the drawing figure of test builds
         self.mode = Mode.READ  # the work mode this document is used in
         self.view = PdfView()

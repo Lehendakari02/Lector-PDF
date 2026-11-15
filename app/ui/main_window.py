@@ -31,7 +31,7 @@ from PySide6.QtWidgets import (
 )
 
 from app import APP_NAME, BUILD_LABEL, __version__
-from app.core import saving
+from app.core import save_checks, saving
 from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
 from app.core.document import PdfDocument, PdfOpenError, engine_version
 from app.core.error_log import running_from_source_or_test_build
@@ -91,6 +91,7 @@ LAST_FOLDER_SETTING = "ultima_carpeta"
 WELCOME_RECENT = 5  # recent documents offered on the welcome page
 # The tools of each mode with their names under the drawing, or only the drawings.
 TOOLBAR_SETTING = "barra_herramientas"
+SAVE_AS, SAVE_HERE = "save_as", "save_here"  # answers to a warning before saving
 RESTORE_TRIES = 6
 RESTORE_PAUSE = 0.25  # seconds
 PLACE_DELAY_MS = 2000  # how long after turning the page it is remembered
@@ -102,6 +103,9 @@ SIDE_PANEL_SETTING = "panel_lateral"  # "", "miniaturas" or "indice"
 
 class MainWindow(QMainWindow):
     """Top-level window of the program."""
+
+    # Off in the automatic tests, whose documents all live in temporary folders.
+    warn_about_temporary_folders = True
 
     def __init__(
         self, settings: Settings | None = None, reporter: ErrorReporter | None = None
@@ -122,6 +126,9 @@ class MainWindow(QMainWindow):
         self.versions = Versions(self.settings.path.parent / VERSIONS_FOLDER)
         self._version_not_kept = False
         self._versioned: set[str] = set()  # files whose version was kept in this session
+        # For the tests: the answer to a warning before saving, without the question
+        # (SAVE_AS, SAVE_HERE or CANCEL).
+        self.save_warning_answer: str | None = None
         # For the tests: the answer to "restore this version?" without the question.
         self.restore_answer: bool | None = None
         # For the tests: the answer to "recover the changes?" without the question.
@@ -1130,8 +1137,10 @@ class MainWindow(QMainWindow):
         self._saving_to_close = list(pages)
         self._after_saving = then
         for page in pages:
-            if not page.view.saving:
-                self._start_saving(page, None)
+            if not page.view.saving and not self._save_checked(page):
+                # Something had to be asked and the answer was not to save.
+                self._saved_before_closing(page, False)
+                return
 
     def _saved_before_closing(self, page: DocumentPage, worked: bool) -> None:
         if page not in self._saving_to_close:
@@ -1160,8 +1169,88 @@ class MainWindow(QMainWindow):
         if not page.view.modified:
             self.statusBar().showMessage(self.tr("No hay cambios que guardar."), STATUS_MESSAGE_MS)
             return False
+        return self._save_checked(page)
+
+    def _save_checked(self, page: DocumentPage) -> bool:
+        """Save a document in its own file, unless something deserves asking first.
+
+        These warnings come up always, whatever the settings say: the PDF is
+        signed, another program has changed the file, or it is in a temporary
+        folder. Returns True if a saving has started.
+        """
+        reasons = [r for r in self._save_warnings(page) if r not in page.accepted_warnings]
+        if reasons:
+            answer = self._ask_save_warning(page, reasons[0])  # the gravest one
+            if answer == SAVE_AS:
+                if page in self.documents:
+                    self.document_tabs.setCurrentIndex(self.documents.index(page))
+                return self.save_document_as()
+            if answer != SAVE_HERE:
+                return False
+            page.accepted_warnings.update(reasons)  # asked once, not at every save
         self._start_saving(page, None)
         return True
+
+    def _save_warnings(self, page: DocumentPage) -> list[str]:
+        if page.path is None:
+            return []
+        document = page.view._document
+        password = document.password if document is not None else None
+        found = save_checks.warnings_for(page.path, page.stamp, password)
+        if not self.warn_about_temporary_folders and save_checks.TEMPORARY in found:
+            found.remove(save_checks.TEMPORARY)
+        return found
+
+    def _ask_save_warning(self, page: DocumentPage, reason: str) -> str:
+        """Explain why saving here deserves a thought, and what the user decides."""
+        name = page.title
+        texts = {
+            save_checks.SIGNED: (
+                self.tr("El documento está firmado"),
+                self.tr(
+                    "«{0}» está firmado con certificado. Si lo guardas con cambios, la firma "
+                    "deja de ser válida.\n\nLo normal es guardar una copia y dejar el "
+                    "original firmado como está."
+                ),
+            ),
+            save_checks.CHANGED_OUTSIDE: (
+                self.tr("Otro programa ha cambiado el archivo"),
+                self.tr(
+                    "«{0}» ha cambiado en el disco desde que lo abriste. Si guardas aquí, se "
+                    "pierde lo que haya hecho ese otro programa (quedaría en Archivo → "
+                    "Versiones anteriores).\n\nLo más seguro es guardar una copia."
+                ),
+            ),
+            save_checks.TEMPORARY: (
+                self.tr("El documento está en una carpeta temporal"),
+                self.tr(
+                    "«{0}» está en una carpeta temporal (por ejemplo, un adjunto abierto "
+                    "desde el correo). Lo que guardes ahí puede borrarse solo.\n\nGuárdalo "
+                    "en una carpeta tuya."
+                ),
+            ),
+        }
+        title, text = texts[reason]
+        text = text.format(name)
+        if self.save_warning_answer is not None:
+            return self.save_warning_answer
+        if not self.show_problem_dialogs:
+            # Nobody to ask: never saved by itself.
+            self.statusBar().showMessage(f"{title}. " + self.tr("No se ha guardado."), 0)
+            return CANCEL
+        box = QMessageBox(QMessageBox.Icon.Warning, title, text, parent=self)
+        save_as = box.addButton(self.tr("Guardar como…"), QMessageBox.ButtonRole.AcceptRole)
+        here = box.addButton(
+            self.tr("Guardar aquí de todos modos"), QMessageBox.ButtonRole.DestructiveRole
+        )
+        box.addButton(self.tr("Cancelar"), QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(save_as)
+        box.exec()
+        clicked = box.clickedButton()
+        box.deleteLater()
+        if clicked is save_as:
+            return SAVE_AS
+        return SAVE_HERE if clicked is here else CANCEL
 
     def save_document_as(self, target: str | Path | None = None) -> bool:
         """Save the document in front as another file and go on working in that one.
@@ -1320,6 +1409,9 @@ class MainWindow(QMainWindow):
         if page.path is not None and file_key(path) != file_key(page.path):
             # "Guardar como": from now on this tab is the new file.
             page.path = path
+            # The copy is the user's own working file: its signature, if it had
+            # one, went with the changes, and the signed original is untouched.
+            page.accepted_warnings = {save_checks.SIGNED}
             self.history.add_recent(path)
             if page in self.documents:
                 index = self.documents.index(page)
@@ -1328,6 +1420,9 @@ class MainWindow(QMainWindow):
                 self._save_session()
             if page is self.current_document:
                 self.setWindowTitle(f"{page.title} – {APP_NAME}")
+        page.stamp = save_checks.stamp_of(path)  # as we left it: ours, not another program's
+        # If another program changes it again, that deserves asking again.
+        page.accepted_warnings.discard(save_checks.CHANGED_OUTSIDE)
         message = self.tr("Guardado en «{0}».").format(path.name)
         if self._version_not_kept:
             self._version_not_kept = False
@@ -1640,6 +1735,8 @@ class MainWindow(QMainWindow):
             return False
         page.path = Path(path).absolute()
         page.remembered = remember
+        page.stamp = save_checks.stamp_of(page.path)
+        page.accepted_warnings = set()
         page.view.journal = self.journal.of(page.path)
         page.slowest_page = 0.0
         # Back to the page and the work mode where this document was left.

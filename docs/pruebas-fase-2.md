@@ -122,3 +122,22 @@ es lo correcto mientras no haya cambios. Lo que ya se puede probar:
    limpio, en la misma página.
 6. Vuelve a Versiones anteriores: lo que tenías justo antes de restaurar está
    ahí como una versión más. Restáurala y vuelven las marcas.
+
+## Tarea 2.6b (final) – Avisos que salen siempre al guardar
+
+Hace falta un PDF firmado con certificado (cualquiera que te hayan enviado
+firmado sirve; trabaja sobre una copia).
+
+1. Abre el PDF firmado, resalta algo y pulsa **Guardar**: avisa de que la firma
+   dejaría de ser válida y ofrece **Guardar como…**, **Guardar aquí de todos
+   modos** y **Cancelar**. Pulsa Cancelar: no se guarda nada.
+2. Pulsa Guardar otra vez y elige **Guardar como…**: guarda una copia con tus
+   marcas. Abre el original en Adobe Reader: la firma sigue siendo válida.
+3. Con un PDF normal abierto y algo resaltado, ábrelo en otro programa que lo
+   cambie (por ejemplo, gira una página en Edge y guarda). Vuelve a Lector-PDF y
+   pulsa Guardar: avisa de que otro programa ha cambiado el archivo.
+4. Abre un PDF adjunto directamente desde el correo (sin descargarlo antes),
+   resalta algo y pulsa Guardar: avisa de que está en una carpeta temporal y
+   ofrece guardarlo en una carpeta tuya.
+5. Con el PDF firmado y cambios pendientes, cierra la pestaña y elige Guardar:
+   sale el mismo aviso; si cancelas, la pestaña no se cierra.
