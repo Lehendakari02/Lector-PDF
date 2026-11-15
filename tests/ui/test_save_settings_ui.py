@@ -224,7 +224,8 @@ def test_the_question_says_the_days_chosen(window, qt_app):
 
 def test_the_settings_window_has_a_tab_for_saving(window):
     dialog = window.open_settings()
-    assert [dialog.tabs.tabText(i) for i in range(dialog.tabs.count())] == ["General", "Guardado"]
+    names = [dialog.tabs.tabText(i) for i in range(dialog.tabs.count())]
+    assert names[:2] == ["General", "Guardado"]
     assert dialog.close_box.currentData() == ss.ASK
     assert not dialog.autosave_box.isChecked()
     assert not dialog.autosave_seconds_box.isEnabled()

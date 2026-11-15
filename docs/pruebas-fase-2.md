@@ -268,3 +268,41 @@ En el modo **Estudiar**.
    está ahí.
 8. Cierra el programa y ábrelo: las favoritas siguen.
 9. Intenta guardar dos veces la misma: avisa de que ya estaba.
+
+## Tarea 2.11 – Lápiz y pantalla táctil
+
+**Hace falta una tableta o un portátil con pantalla táctil y lápiz** (por
+ejemplo una Surface). Esta tarea se ha hecho sin ninguno delante, así que esta
+prueba importa más que las demás: apunta todo lo que resulte raro o incómodo.
+
+Con el dedo, sin haber usado nunca el lápiz en el programa:
+
+1. Arrastra un dedo por la página: la página se mueve. Dale un empujón rápido:
+   sigue deslizándose un poco y se para.
+2. Separa y junta dos dedos: la página se amplía y se reduce, sin saltos.
+3. Toca una nota o un dibujo: se elige, como con un clic.
+4. Deja el dedo quieto medio segundo sobre un texto y arrastra: se selecciona
+   el texto. Deja el dedo quieto y levántalo sin mover: sale el menú del botón
+   derecho.
+5. Modo **Estudiar**, coge **Dibujar** y dibuja con el dedo: dibuja. Con
+   **Resaltar** en la mano, pasa el dedo por una frase: queda resaltada.
+6. ¿Se aciertan bien con el dedo los botones y las pestañas de los modos?
+
+Con el lápiz:
+
+7. Coge **Dibujar** y escribe apretando poco y mucho: el trazo es más fino o
+   más grueso, y ya se ve así mientras lo haces.
+8. Apoya la mano en la pantalla mientras escribes: la mano no pinta ni mueve
+   la página.
+9. Dale la vuelta al lápiz y pasa la goma por un trazo: se borra. Lo mismo
+   con el botón del lápiz apretado.
+10. Después de usar el lápiz, prueba a dibujar con el dedo: ya no dibuja, solo
+    mueve la página. Dos dedos siguen ampliando.
+11. Elige un trazo hecho con presión, muévelo y cámbialo de tamaño: conserva
+    sus partes finas y gruesas. Deshaz: vuelve igual.
+12. Guarda y abre el PDF en Edge y en Adobe Reader: el trazo se ve igual, con
+    sus partes finas y gruesas.
+13. **Ajustes → Lápiz y dedo:** quita "Trazo más grueso al apretar más el
+    lápiz" y dibuja: todo el trazo tiene el mismo grosor. Cambia "El dedo, con
+    una herramienta en la mano" a "Dibuja y marca" y comprueba que el dedo
+    vuelve a dibujar.

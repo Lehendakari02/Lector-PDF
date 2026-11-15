@@ -10,6 +10,7 @@ copies finished images to the screen, which is what keeps scrolling smooth.
 
 import bisect
 import math
+import time
 from collections import OrderedDict
 from enum import Enum
 from pathlib import Path
@@ -17,19 +18,30 @@ from pathlib import Path
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QColor,
+    QContextMenuEvent,
     QCursor,
     QFont,
     QGuiApplication,
     QImage,
+    QInputDevice,
     QPainter,
+    QPainterPath,
     QPalette,
     QPen,
     QPixmap,
+    QPointingDevice,
     QPolygonF,
 )
-from PySide6.QtWidgets import QAbstractScrollArea, QFrame, QMenu, QToolTip, QWidget
+from PySide6.QtWidgets import (
+    QAbstractScrollArea,
+    QApplication,
+    QFrame,
+    QMenu,
+    QToolTip,
+    QWidget,
+)
 
-from app.core import arrange, drawing, notes
+from app.core import arrange, drawing, notes, pen
 from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
 from app.core.document import PageSize, PdfDocument
 from app.core.drawing import ARROW, BOX, DRAW, ERASER, INK, OVAL, SHAPE_TOOL, PageDrawing
@@ -93,6 +105,26 @@ NUDGE, BIG_NUDGE = 1.0, 10.0  # points an arrow key moves what is picked (with S
 ERASER_CURSOR_SIZE = 20
 NOTE_REACH = 3.0  # points around a note that still count as on it
 TIP_LETTERS = 400  # of a note, shown when the pointer rests on it
+# Fingers on a touch screen.
+TOUCH_SLOP = 8.0  # screen units a finger travels before it is moving the page
+DOUBLE_TAP_REACH = 14.0  # screen units between two taps that are a double one
+HOLD_MS = 500  # a finger resting this long acts like the mouse (select, drag)
+FLING_MS = 16  # the page keeps gliding after a quick push, in steps this long
+FLING_START = 0.35  # screen units per millisecond: slower than this, no glide
+FLING_KEEPS = 0.94  # how much of its speed the glide keeps at each step
+FLING_LOOKS_BACK = 0.1  # seconds of the finger's way that tell its speed
+_TABLET = (
+    QEvent.Type.TabletPress,
+    QEvent.Type.TabletMove,
+    QEvent.Type.TabletRelease,
+)
+_TOUCH = (
+    QEvent.Type.TouchBegin,
+    QEvent.Type.TouchUpdate,
+    QEvent.Type.TouchEnd,
+    QEvent.Type.TouchCancel,
+)
+_PEN_BUTTONS = Qt.MouseButton.RightButton | Qt.MouseButton.MiddleButton
 
 
 def _engine_pixels(points: float, zoom: float) -> int:
@@ -131,13 +163,15 @@ def _arrow_head(start: QPointF, end: QPointF, width: float) -> list[QPointF]:
 
 def _sketch_of(order) -> tuple | None:
     """What an order draws, to paint it before the engine does: page, kind,
-    strokes, colour, thickness and opacity. None if it is not a drawing."""
+    strokes, colour, thickness, opacity and, for a stroke made with a pen that
+    feels it, the pressures. None if it is not a drawing."""
     if isinstance(order, drawing.AddInk):
         strokes = [list(stroke) for stroke in order.strokes]
-        return (order.page, INK, strokes, order.color, order.width, order.opacity)
+        pressures = order.pressures if order.pressed else ()
+        return (order.page, INK, strokes, order.color, order.width, order.opacity, pressures)
     if isinstance(order, drawing.AddShape):
         ends = [[order.start, order.end]]
-        return (order.page, order.kind, ends, order.color, order.width, order.opacity)
+        return (order.page, order.kind, ends, order.color, order.width, order.opacity, ())
     return None
 
 
@@ -216,6 +250,7 @@ class PdfView(QAbstractScrollArea):
     _drawings_ready = Signal(int, object)
     picked_changed = Signal()  # an annotation is picked, or not any more
     item_copied = Signal()  # the picked annotation was copied, to paste it
+    pen_seen_changed = Signal()  # a pen touched a page for the first time
     # The annotation copied last, for every document: the order that puts it.
     copied = None
     _changed = Signal(int, object, object, bool)
@@ -313,6 +348,29 @@ class PdfView(QAbstractScrollArea):
         # number while the helper puts it, then by page until it is drawn again.
         self._sent_sketches: dict[int, tuple] = {}
         self._settling: dict[int, list[tuple]] = {}
+        # The pen and the fingers (the window gives what the user chose).
+        self.pen_pressure = True  # a stroke is thicker where the pen presses more
+        self.finger_mode = pen.AUTO
+        self.pen_seen = False
+        # How hard the pen pressed at each point of what is being drawn, if it
+        # is the pen that draws it; and how hard it presses right now.
+        self._sketch_pressures: list[float] | None = None
+        self._pen_pressure: float | None = None
+        self._pen_down = False
+        self._pen_at = float("-inf")  # when the pen was last on or near the screen
+        self._last_tap = (float("-inf"), QPoint())  # when and where it last went down
+        # The fingers on the screen: what they are doing ("wait", "pan", "zoom",
+        # "tool", "mouse" or "ignored") and where each one is.
+        self._touch: dict | None = None
+        self._hold = QTimer(self)
+        self._hold.setSingleShot(True)
+        self._hold.setInterval(HOLD_MS)
+        self._hold.timeout.connect(self._finger_held)
+        self._fling = QTimer(self)
+        self._fling.setInterval(FLING_MS)
+        self._fling.timeout.connect(self._fling_step)
+        self._fling_speed = (0.0, 0.0)
+        self.viewport().setAttribute(Qt.WidgetAttribute.WA_AcceptTouchEvents, True)
         # How the pen and the shapes draw (the window gives what the user chose).
         self.draw_color = drawing.DRAW_COLOR
         self.draw_width = drawing.DEFAULT_WIDTH
@@ -575,6 +633,8 @@ class PdfView(QAbstractScrollArea):
         self._erased.clear()
         self._erasing = False
         self._sketch = None
+        self._drop_touch()
+        self._fling.stop()
         self._sent_sketches.clear()
         self._settling.clear()
         self._grab = None
@@ -1072,7 +1132,10 @@ class PdfView(QAbstractScrollArea):
         waiting = [*self._settling.get(page, ()), *self._sent_sketches.values()]
         if self._sketch is not None:
             kind, color, width, opacity = self._sketch_style(self._sketch[1])
-            waiting.append((self._sketch[0], kind, [self._sketch[2]], color, width, opacity))
+            pressed = (self._sketch_pressures,) if self._sketch_pressures else ()
+            waiting.append(
+                (self._sketch[0], kind, [self._sketch[2]], color, width, opacity, pressed)
+            )
         dragged = self._grab["change"].new if self._grab and self._grab["change"] else None
         if dragged is not None and _sketch_of(dragged) is not None:
             waiting.append(_sketch_of(dragged))
@@ -1081,9 +1144,17 @@ class PdfView(QAbstractScrollArea):
         painter.setClipRect(target)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        for _page, kind, strokes, color, width, opacity in waiting:
+        for _page, kind, strokes, color, width, opacity, pressures in waiting:
             tone = QColor.fromRgbF(*color)
             tone.setAlphaF(max(0.05, min(1.0, opacity)))
+            if len(pressures) == len(strokes) and all(
+                len(pressed) == len(points)
+                for pressed, points in zip(pressures, strokes, strict=True)
+            ):
+                for points, pressed in zip(strokes, pressures, strict=True):
+                    shown = [self._on_screen(page, point, target, zoom) for point in points]
+                    self._paint_pressed(painter, shown, pressed, width * zoom, tone)
+                continue
             pen = QPen(tone, max(1.0, width * zoom))
             round_ends = kind in (INK, ARROW)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap if round_ends else Qt.PenCapStyle.FlatCap)
@@ -1104,6 +1175,22 @@ class PdfView(QAbstractScrollArea):
                         painter.drawPolyline(QPolygonF(head))
         painter.restore()
         self._paint_frame(painter, page, target, zoom)
+
+    @staticmethod
+    def _paint_pressed(painter: QPainter, shown, pressures, width: float, tone: QColor) -> None:
+        """A stroke that is thicker where the pen pressed more, as it will be saved."""
+        if len(shown) < 2:
+            return
+        spots = [(point.x(), point.y()) for point in shown]
+        pieces, discs = drawing.pressed_shape(spots, drawing.half_widths(pressures, width))
+        path = QPainterPath()
+        path.setFillRule(Qt.FillRule.WindingFill)
+        for piece in pieces:
+            path.addPolygon(QPolygonF([QPointF(x, y) for x, y in piece]))
+            path.closeSubpath()
+        for x, y, radius in discs:
+            path.addEllipse(QPointF(x, y), radius, radius)
+        painter.fillPath(path, tone)
 
     def _on_screen(self, page: int, point, target: QRect, zoom: float) -> QPointF:
         x, y = self._shown_point(page, point)
@@ -1413,6 +1500,12 @@ class PdfView(QAbstractScrollArea):
         if tool == DRAW:
             if point != points[-1]:
                 points.append(point)
+                if self._sketch_pressures is not None:
+                    # Lifting the pen tells no pressure: the last one stays.
+                    now = self._pen_pressure
+                    self._sketch_pressures.append(
+                        self._sketch_pressures[-1] if now is None else now
+                    )
         else:
             del points[1:]
             points.append(point)
@@ -1421,20 +1514,38 @@ class PdfView(QAbstractScrollArea):
     def _finish_sketch(self) -> None:
         page, tool, points = self._sketch
         self._sketch = None
+        pressures, self._sketch_pressures = self._sketch_pressures, None
         if tool == DRAW:
-            self.draw_ink(page, [points])
+            self.draw_ink(page, [points], [pressures] if pressures else ())
         elif len(points) == 2:
             self.draw_shape(self.shape_kind, page, points[0], points[1])
         self.viewport().update()
 
-    def draw_ink(self, page: int, strokes) -> bool:
-        """Draw by hand on a page: each stroke, the points it goes through."""
-        strokes = [drawing.thinned(stroke) for stroke in strokes]
-        strokes = [stroke for stroke in strokes if len(stroke) >= 2]
+    def draw_ink(self, page: int, strokes, pressures=()) -> bool:
+        """Draw by hand on a page: each stroke, the points it goes through.
+
+        ``pressures``, from a pen that feels it, has for each stroke how hard
+        the pen pressed at each point (0 to 1): the stroke is thicker there.
+        """
+        strokes, pressures = list(strokes), list(pressures)
+        with_pressure = (
+            len(pressures) == len(strokes)
+            and all(len(a) == len(b) for a, b in zip(strokes, pressures, strict=True))
+            and all(drawing.felt(pressed) for pressed in pressures)
+        )
+        if with_pressure:
+            both = [drawing.thinned_stroke(*pair) for pair in zip(strokes, pressures, strict=True)]
+            both = [(stroke, pressed) for stroke, pressed in both if len(stroke) >= 2]
+            strokes, pressures = [a for a, _ in both], [b for _, b in both]
+        else:
+            strokes = [drawing.thinned(stroke) for stroke in strokes]
+            strokes, pressures = [stroke for stroke in strokes if len(stroke) >= 2], []
         if not strokes or not 0 <= page < self.page_count:
             return False
         return self._do(
-            drawing.new_ink(page, strokes, self.draw_color, self.draw_width, self.draw_opacity)
+            drawing.new_ink(
+                page, strokes, self.draw_color, self.draw_width, self.draw_opacity, pressures
+            )
         )
 
     def draw_shape(self, kind: str, page: int, start, end) -> bool:
@@ -1713,8 +1824,12 @@ class PdfView(QAbstractScrollArea):
         if event.button() != Qt.MouseButton.LeftButton:
             super().mousePressEvent(event)
             return
+        self._press(event.position().toPoint(), event.modifiers())
+
+    def _press(self, position: QPoint, modifiers=Qt.KeyboardModifier.NoModifier) -> None:
+        """The mouse button, the pen or a finger goes down on a place of the window."""
         self.setFocus()
-        position = event.position().toPoint()
+        self._fling.stop()
         if self.note_panel is not None:
             self.close_note_panel(keep=True)  # a click outside keeps what was written
             return
@@ -1723,6 +1838,9 @@ class PdfView(QAbstractScrollArea):
             if point is not None:
                 self.clear_selection()
                 self._sketch = (point[0], self._markup_tool, [point[1:]])
+                feels = self._markup_tool == DRAW and self.pen_pressure
+                feels = feels and self._pen_pressure is not None
+                self._sketch_pressures = [self._pen_pressure] if feels else None
             return
         if self._markup_tool == ERASER:
             self._erasing = True
@@ -1753,7 +1871,7 @@ class PdfView(QAbstractScrollArea):
             if self._is_picture_page(position):
                 self.no_text_to_select.emit()
             return
-        if event.modifiers() & Qt.KeyboardModifier.ShiftModifier and self._anchor is not None:
+        if modifiers & Qt.KeyboardModifier.ShiftModifier and self._anchor is not None:
             self.select(self._anchor, place)  # Shift+click: up to here
         else:
             self.clear_selection()
@@ -1762,7 +1880,10 @@ class PdfView(QAbstractScrollArea):
         self._drag_position = position
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
-        position = event.position().toPoint()
+        self._move(event.position().toPoint())
+
+    def _move(self, position: QPoint) -> None:
+        """The mouse, the pen or a finger moves, held down or not."""
         if self._sketch is not None:
             self._extend_sketch(position)
             return
@@ -1785,34 +1906,275 @@ class PdfView(QAbstractScrollArea):
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.LeftButton:
-            self._erasing = False
-            if self._sketch is not None:
-                self._extend_sketch(event.position().toPoint())
-                self._finish_sketch()
-            if self._grab is not None:
-                self._drag_grab(event.position().toPoint())
-                self._end_grab(event.position().toPoint())
-            was_selecting, self._selecting = self._selecting, False
-            self._autoscroll.stop()
-            if was_selecting and self._markup_tool in MARKUP_KINDS and self.has_selection:
-                self.mark_selection(self._markup_tool)  # the marker in hand marks it
-            elif was_selecting and not self._markup_tool and not self.has_selection:
-                # A plain click on a mark of the text picks it.
-                self.pick(self.item_under(event.position().toPoint()))
+            self._release(event.position().toPoint())
         super().mouseReleaseEvent(event)
 
-    def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802
-        if self._markup_tool in (DRAW, SHAPE_TOOL, ERASER):
-            self.mousePressEvent(event)  # a quick second stroke, not a double click
-            return
+    def _release(self, position: QPoint) -> None:
+        """The mouse button, the pen or a finger is lifted."""
+        self._erasing = False
+        if self._sketch is not None:
+            self._extend_sketch(position)
+            self._finish_sketch()
+        if self._grab is not None:
+            self._drag_grab(position)
+            self._end_grab(position)
+        was_selecting, self._selecting = self._selecting, False
+        self._autoscroll.stop()
+        if was_selecting and self._markup_tool in MARKUP_KINDS and self.has_selection:
+            self.mark_selection(self._markup_tool)  # the marker in hand marks it
+        elif was_selecting and not self._markup_tool and not self.has_selection:
+            # A plain click on a mark of the text picks it.
+            self.pick(self.item_under(position))
+
+    def _let_go(self) -> None:
+        """Drop what the pointer was doing, leaving nothing done."""
+        self._sketch = None
+        self._sketch_pressures = None
+        self._erasing = False
+        self._grab = None
+        if self._selecting:
+            self._selecting = False
+            self.clear_selection()
+        self._autoscroll.stop()
+        self.viewport().update()
+
+    # ---- the pen ------------------------------------------------------------------
+
+    def viewportEvent(self, event) -> bool:  # noqa: N802
+        kind = event.type()
+        if kind in _TABLET:
+            self._pen_event(event)
+            event.accept()
+            return True
+        if kind in _TOUCH and (
+            event.pointingDevice().type() == QInputDevice.DeviceType.TouchScreen
+        ):
+            self._touch_event(event)
+            event.accept()
+            return True
+        return super().viewportEvent(event)
+
+    def _pen_event(self, event) -> None:
+        """The pen does what the mouse does, and tells how hard it presses. Its
+        other end, or its button held down, erases whatever tool is in hand."""
+        kind = event.type()
         position = event.position().toPoint()
+        self._pen_at = time.monotonic()
+        self._drop_touch()  # what touches the screen now is the hand that holds the pen
+        rubber = event.pointerType() == QPointingDevice.PointerType.Eraser or bool(
+            event.buttons() & _PEN_BUTTONS or event.button() & _PEN_BUTTONS
+        )
+        try:
+            if kind == QEvent.Type.TabletPress:
+                if not self.pen_seen:
+                    self.pen_seen = True
+                    self.pen_seen_changed.emit()
+                self._pen_down = True
+                if rubber and self.note_panel is None and self.page_count:
+                    self.setFocus()
+                    self._erasing = True
+                    self.erase_at(position)
+                else:
+                    self._pen_pressure = event.pressure()
+                    if self._second_tap(position):
+                        self._double_press(position, event.modifiers())
+                    else:
+                        self._press(position, event.modifiers())
+            elif kind == QEvent.Type.TabletMove:
+                if self._pen_down:
+                    self._pen_pressure = event.pressure()
+                self._move(position)
+            else:
+                self._pen_down = False
+                self._release(position)
+        finally:
+            self._pen_pressure = None
+
+    # ---- the fingers --------------------------------------------------------------
+
+    def _finger_uses_tool(self) -> bool:
+        return bool(self._markup_tool) and pen.finger_uses_tool(self.finger_mode, self.pen_seen)
+
+    def _drop_touch(self) -> None:
+        """Stop listening to the fingers on the screen until they are lifted."""
+        touch = self._touch
+        self._hold.stop()
+        if touch is None or touch["mode"] == "ignored":
+            return
+        if touch["mode"] in ("tool", "mouse"):
+            self._let_go()
+        touch["mode"] = "ignored"
+
+    def _touch_event(self, event) -> None:
+        kind = event.type()
+        if kind == QEvent.Type.TouchCancel:
+            self._drop_touch()
+            self._touch = None
+            return
+        began = kind == QEvent.Type.TouchBegin
+        if began or self._touch is None:
+            self._drop_touch()
+            self._fling.stop()
+            self._touch = {"mode": "wait", "fingers": {}, "moved": False, "trail": []}
+            if not began or pen.palm(time.monotonic() - self._pen_at, self._pen_down):
+                self._touch["mode"] = "ignored"
+        touch = self._touch
+        fingers = touch["fingers"]
+        lifted = None
+        for point in event.points():
+            state = point.state()
+            if state == point.State.Released:
+                fingers.pop(point.id(), None)
+                lifted = point.position()
+            elif state != point.State.Stationary or point.id() not in fingers:
+                fingers[point.id()] = point.position()
+        if touch["mode"] != "ignored":
+            if kind == QEvent.Type.TouchBegin:
+                self._finger_down(touch)
+            elif kind == QEvent.Type.TouchEnd:
+                self._fingers_up(touch, lifted)
+            else:
+                self._fingers_moved(touch)
+        if kind == QEvent.Type.TouchEnd:
+            self._hold.stop()
+            self._touch = None
+
+    def _finger_down(self, touch: dict) -> None:
+        where = next(iter(touch["fingers"].values()))
+        touch["start"] = touch["last"] = where
+        if self._finger_uses_tool():
+            touch["mode"] = "tool"
+            self._press(where.toPoint())
+        elif not self._markup_tool:
+            self._hold.start()  # resting on a place: like the mouse
+
+    def _finger_held(self) -> None:
+        touch = self._touch
+        if touch is None or touch["mode"] != "wait" or len(touch["fingers"]) != 1:
+            return
+        touch["mode"] = "mouse"
+        self._press(touch["last"].toPoint())
+
+    def _fingers_moved(self, touch: dict) -> None:
+        fingers = list(touch["fingers"].values())
+        if not fingers:
+            return
+        if len(fingers) >= 2:
+            first, second = fingers[0], fingers[1]
+            centre = (first + second) / 2
+            spread = math.hypot(first.x() - second.x(), first.y() - second.y())
+            if touch["mode"] != "zoom":
+                # A second finger: whatever the first was doing, now they move
+                # the page and change its size.
+                self._hold.stop()
+                if touch["mode"] in ("tool", "mouse"):
+                    self._let_go()
+                touch["mode"] = "zoom"
+            else:
+                self._scroll_by(touch["centre"] - centre)
+                if touch["spread"] > 1 and spread > 1:
+                    self.zoom_around(spread / touch["spread"], centre)
+            touch["centre"], touch["spread"], touch["moved"] = centre, spread, True
+            return
+        where = fingers[0]
+        if touch["mode"] == "zoom":
+            touch["mode"], touch["last"], touch["trail"] = "pan", where, []
+            return
+        if touch["mode"] in ("tool", "mouse"):
+            if where != touch["last"]:
+                touch["moved"] = True
+            touch["last"] = where
+            self._move(where.toPoint())
+            return
+        if touch["mode"] == "wait":
+            gone = where - touch["start"]
+            if math.hypot(gone.x(), gone.y()) < TOUCH_SLOP:
+                return
+            self._hold.stop()
+            touch["mode"], touch["moved"] = "pan", True
+        self._scroll_by(touch["last"] - where)
+        touch["last"] = where
+        now = time.monotonic()
+        touch["trail"] = [spot for spot in touch["trail"] if now - spot[0] <= FLING_LOOKS_BACK]
+        touch["trail"].append((now, where))
+
+    def _fingers_up(self, touch: dict, where) -> None:
+        mode = touch["mode"]
+        where = (where or touch.get("last")).toPoint()
+        if mode == "tool":
+            self._release(where)
+        elif mode == "mouse":
+            self._release(where)
+            if not touch["moved"]:
+                # Resting a finger and lifting it is the right button of the mouse.
+                self.setFocus()
+                QApplication.postEvent(
+                    self.viewport(),
+                    QContextMenuEvent(
+                        QContextMenuEvent.Reason.Other, where, self.viewport().mapToGlobal(where)
+                    ),
+                )
+        elif mode == "wait" and not self._markup_tool:
+            if self._second_tap(where):
+                self._double_press(where)  # two taps are a double click
+            else:
+                self._press(where)  # a tap is a click
+            self._release(where)
+        elif mode == "pan" and len(touch["trail"]) >= 2:
+            (then, start), (now, end) = touch["trail"][0], touch["trail"][-1]
+            if time.monotonic() - now < FLING_LOOKS_BACK and now > then:
+                speed = (start - end) / ((now - then) * 1000)
+                if math.hypot(speed.x(), speed.y()) >= FLING_START:
+                    self._fling_speed = (speed.x(), speed.y())
+                    self._fling.start()
+
+    def _scroll_by(self, way) -> None:
+        """Move what is seen by so many screen units."""
+        across, down = self.horizontalScrollBar(), self.verticalScrollBar()
+        across.setValue(across.value() + round(way.x()))
+        down.setValue(down.value() + round(way.y()))
+
+    def _fling_step(self) -> None:
+        x, y = self._fling_speed
+        across, down = self.horizontalScrollBar(), self.verticalScrollBar()
+        before = (across.value(), down.value())
+        self._scroll_by(QPointF(x * FLING_MS, y * FLING_MS))
+        self._fling_speed = (x * FLING_KEEPS, y * FLING_KEEPS)
+        slow = math.hypot(x, y) * FLING_MS < 1
+        if slow or before == (across.value(), down.value()):
+            self._fling.stop()
+
+    def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._double_press(event.position().toPoint(), event.modifiers())
+        elif self._markup_tool in (DRAW, SHAPE_TOOL, ERASER):
+            self.mousePressEvent(event)
+
+    def _second_tap(self, position: QPoint) -> bool:
+        """Whether the pen or a finger goes down a second time on the same
+        place, quickly: what a double click is for the mouse."""
+        now = time.monotonic()
+        then, where = self._last_tap
+        gone = position - where
+        again = (
+            now - then <= QApplication.doubleClickInterval() / 1000
+            and math.hypot(gone.x(), gone.y()) <= DOUBLE_TAP_REACH
+        )
+        self._last_tap = (float("-inf"), position) if again else (now, position)
+        return again
+
+    def _double_press(self, position: QPoint, modifiers=Qt.KeyboardModifier.NoModifier) -> None:
+        """A double click, or the pen or a finger twice on the same place."""
+        if self._markup_tool in (DRAW, SHAPE_TOOL, ERASER):
+            self._press(position, modifiers)  # a quick second stroke, not a double click
+            return
         note = self.note_under(position)
-        if event.button() == Qt.MouseButton.LeftButton and note is not None and note.ours:
+        if note is not None and note.ours:
             self._grab = None
             self.open_note(note, position)  # a double click on a text opens it
             return
         place = self._caret_at(position)
-        if event.button() != Qt.MouseButton.LeftButton or place is None:
+        if place is None:
             return
         page, caret = place
         start, stop = word_at(self._texts[page], caret)
@@ -1950,6 +2312,7 @@ class PdfView(QAbstractScrollArea):
         return menu
 
     def wheelEvent(self, event) -> None:  # noqa: N802
+        self._fling.stop()
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             # A mouse wheel sends whole notches (120); a touchpad pinch and fine
             # wheels send many small movements. The zoom follows the amount moved,
@@ -1980,6 +2343,7 @@ class PdfView(QAbstractScrollArea):
             bar.setValue(bar.value() - bar.singleStep())
         elif key == Qt.Key.Key_Escape and self._sketch is not None:
             self._sketch = None  # what was being drawn is dropped
+            self._sketch_pressures = None
             self.viewport().update()
         elif key == Qt.Key.Key_Escape and self.has_selection:
             self.clear_selection()

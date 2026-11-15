@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.core import file_association, save_settings
+from app.core import file_association, pen, save_settings
 from app.core.history import RESTORE_SETTING
 from app.core.interface_size import NORMAL_SIZE, SIZE_SETTING, SIZES, wanted_size
 from app.core.paths import is_portable
@@ -47,6 +47,7 @@ class SettingsDialog(QDialog):
         general = QWidget()
         self.tabs.addTab(general, self.tr("General"))
         self.tabs.addTab(self._build_saving(), self.tr("Guardado"))
+        self.tabs.addTab(self._build_pen(), self.tr("Lápiz y dedo"))
 
         layout = QVBoxLayout(general)
         layout.setContentsMargins(16, 12, 16, 12)
@@ -184,6 +185,97 @@ class SettingsDialog(QDialog):
             + self.tabs.tabBar().sizeHint().height()
             + 8
         )
+
+    # ---- pen and fingers ---------------------------------------------------
+
+    def _build_pen(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(10)
+        settings = self.settings
+
+        intro = QLabel(
+            self.tr(
+                "Para pantallas táctiles y lápices. No hace falta tocar nada: con dos dedos "
+                "se mueve y se amplía la página, y el lápiz dibuja con la herramienta elegida."
+            )
+        )
+        intro.setObjectName("dialogNote")
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        layout.addWidget(self._heading(self.tr("Lápiz")))
+        self.pressure_box = QCheckBox(self.tr("Trazo más &grueso al apretar más el lápiz"))
+        self.pressure_box.setToolTip(
+            self.tr(
+                "Solo con lápices que notan la presión. Sin esto, todo el trazo tiene "
+                "el grosor elegido."
+            )
+        )
+        self.pressure_box.setChecked(pen.pressure_wanted(settings))
+        self.pressure_box.toggled.connect(lambda on: self._set_pen(pen.PRESSURE_SETTING, on))
+        layout.addWidget(self.pressure_box)
+        pen_note = QLabel(
+            self.tr(
+                "La goma del lápiz, o su botón apretado, borran sin tener que cambiar "
+                "de herramienta."
+            )
+        )
+        pen_note.setObjectName("dialogNote")
+        pen_note.setWordWrap(True)
+        layout.addWidget(pen_note)
+
+        layout.addWidget(self._heading(self.tr("El dedo, con una herramienta en la mano")))
+        self.finger_box = QComboBox()
+        self.finger_box.setAccessibleName(self.tr("El dedo, con una herramienta en la mano"))
+        for choice, name in (
+            (pen.AUTO, self.tr("Automático: dibuja hasta que se use un lápiz")),
+            (pen.DRAWS, self.tr("Dibuja y marca, como el lápiz")),
+            (pen.MOVES, self.tr("Solo mueve la página")),
+        ):
+            self.finger_box.addItem(name, choice)
+        self._choose(self.finger_box, pen.finger_mode(settings))
+        self.finger_box.activated.connect(
+            lambda _index: self._set_pen(pen.FINGER_SETTING, self.finger_box.currentData())
+        )
+        layout.addWidget(self.finger_box)
+        self.finger_note = QLabel()
+        self.finger_note.setObjectName("dialogNote")
+        self.finger_note.setWordWrap(True)
+        layout.addWidget(self.finger_note)
+
+        layout.addStretch(1)
+        self._refresh_pen()
+        return page
+
+    def _set_pen(self, name: str, value) -> None:
+        self.settings.set(name, value)
+        self.window_.apply_pen_settings()
+        self._refresh_pen()
+
+    def _refresh_pen(self) -> None:
+        mode = pen.finger_mode(self.settings)
+        if mode == pen.DRAWS:
+            text = self.tr(
+                "El dedo usa la herramienta elegida. Con dos dedos se mueve y se amplía la página."
+            )
+        elif mode == pen.MOVES:
+            text = self.tr(
+                "El dedo nunca pinta: se puede apoyar la mano en la pantalla al escribir "
+                "con el lápiz."
+            )
+        elif pen.pen_seen(self.settings):
+            text = self.tr(
+                "Ya se ha usado un lápiz en este ordenador: el dedo solo mueve la página, "
+                "para poder apoyar la mano al escribir."
+            )
+        else:
+            text = self.tr(
+                "Todavía no se ha usado ningún lápiz: el dedo usa la herramienta elegida. "
+                "En cuanto se use un lápiz, el dedo solo moverá la página."
+            )
+        self.finger_note.setText(text)
 
     # ---- saving ------------------------------------------------------------
 
