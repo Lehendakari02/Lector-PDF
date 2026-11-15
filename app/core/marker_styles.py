@@ -128,6 +128,7 @@ class MarkerStyles:
     recent: list[Color] = field(default_factory=list)  # the newest first
     text_font: str = SANS  # the text written on the page: one of notes.FONTS
     text_size: float = TEXT_SIZE
+    text_bold: bool = False
     # The pen and the shapes: how thick their line is, and the shape in hand.
     widths: dict[str, float] = field(
         default_factory=lambda: dict.fromkeys(LINE_KINDS, DEFAULT_WIDTH)
@@ -154,6 +155,9 @@ class MarkerStyles:
     def set_text_size(self, size: float) -> None:
         self.text_size = clamp_size(size)
 
+    def set_text_bold(self, bold: object) -> None:
+        self.text_bold = bold is True
+
     def width_of(self, kind: str) -> float:
         return self.widths.get(kind, DEFAULT_WIDTH)
 
@@ -174,7 +178,8 @@ class MarkerStyles:
                 for kind, style in self.styles.items()
             },
             "recent": [to_hex(color) for color in self.recent],
-            "text": {"font": self.text_font, "size": self.text_size},
+            "text": {"font": self.text_font, "size": self.text_size}
+            | ({"bold": True} if self.text_bold else {}),
             "shape": self.shape,
         }
 
@@ -198,6 +203,7 @@ class MarkerStyles:
         if isinstance(text, dict):
             result.set_text_font(text.get("font"))
             result.text_size = clamp_size(text.get("size"))
+            result.set_text_bold(text.get("bold"))
         recent = value.get("recent")
         if isinstance(recent, list):
             for text in recent:

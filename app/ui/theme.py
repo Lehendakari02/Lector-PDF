@@ -453,6 +453,20 @@ QFrame#notePanel {{
     background: {c.surface}; border: 1px solid {c.border}; border-radius: 10px;
 }}
 QLabel#notePanelTitle {{ font-weight: 600; }}
+QFrame#textEditorBar {{
+    background: {c.surface}; border: 1px solid {c.border}; border-radius: 8px;
+}}
+QFrame#textEditorBar QToolButton {{
+    min-width: 26px; min-height: 26px; padding: 0 3px; border-radius: 6px;
+    border: 1px solid transparent; background: transparent; color: {c.text};
+}}
+QFrame#textEditorBar QToolButton:hover {{ background: {c.accent_soft}; }}
+QFrame#textEditorBar QToolButton:checked {{
+    background: {c.accent_soft}; border-color: {c.accent};
+}}
+QFrame#textEditorBar QToolButton#textEditorBold {{ font-weight: 800; }}
+QFrame#textEditorBar QPushButton {{ padding: 3px 10px; }}
+QLabel#textEditorSize {{ color: {c.text}; }}
 QLabel#dialogError {{ color: {c.danger}; font-weight: 600; }}
 """
 

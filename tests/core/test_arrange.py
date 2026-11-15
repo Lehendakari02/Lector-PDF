@@ -71,7 +71,7 @@ def test_what_can_be_moved_and_resized():
     assert handles(note) == [] and handles(MARK) == []
     assert handles(line) == [(60, 70), (200, 150)]
     assert handles(box) == [(60, 70), (200, 70), (200, 150), (60, 150)]
-    assert len(handles(ink)) == 4 and len(handles(text)) == 4
+    assert len(handles(ink)) == 4 and len(handles(text)) == 6, "a text also by its sides"
 
 
 # ---- moving ----------------------------------------------------------------------
@@ -246,3 +246,43 @@ def test_a_pressed_stroke_keeps_its_pressures_when_it_moves_grows_or_is_copied()
     assert moved(ink, 20, 10, PAGE).new.pressures == (pressed,)
     assert resized(ink, BOTTOM_RIGHT, (250, 140), PAGE).new.pressures == (pressed,)
     assert arrange.copy_of(ink, 0, PAGE).pressures == (pressed,)
+
+
+# ---- making a text wider or narrower ---------------------------------------------
+
+SENTENCE = "una frase bastante larga para que haya que cortarla en varias líneas"
+
+
+def test_the_sides_of_a_text_change_its_width_and_keep_its_letter():
+    text = new_text_box(0, (50, 40), SENTENCE, SANS, 12)
+    x0, y0, x1, y1 = bounds(text, PAGE[0])
+    narrower = resized(text, arrange.RIGHT_SIDE, (170, 200), PAGE).new
+    assert narrower.size == 12 and narrower.width == pytest.approx(120)
+    assert narrower.origin == text.origin, "the left side stays"
+    assert bounds(narrower, PAGE[0])[3] > y1, "its lines are cut again: it is taller"
+    from_left = resized(text, arrange.LEFT_SIDE, (x1 - 100, 0), PAGE).new
+    assert from_left.width == pytest.approx(100)
+    assert bounds(from_left, PAGE[0])[2] == pytest.approx(x1), "the right side stays"
+
+
+def test_a_text_is_never_narrower_than_a_word_nor_wider_than_the_page():
+    text = new_text_box(0, (50, 40), SENTENCE, SANS, 12)
+    tiny = resized(text, arrange.RIGHT_SIDE, (52, 40), PAGE).new
+    assert tiny.width == pytest.approx(40)
+    huge = resized(text, arrange.RIGHT_SIDE, (5000, 40), PAGE).new
+    assert bounds(huge, PAGE[0])[2] <= PAGE[0]
+
+
+def test_growing_a_text_with_a_width_keeps_its_lines():
+    text = new_text_box(0, (50, 40), SENTENCE, SANS, 10, width=100)
+    x0, y0, x1, y1 = bounds(text, PAGE[0])
+    bigger = resized(text, BOTTOM_RIGHT, (x0 + 2 * (x1 - x0), y0 + 2 * (y1 - y0)), PAGE).new
+    assert bigger.size == pytest.approx(20) and bigger.width == pytest.approx(200)
+
+
+def test_moving_or_copying_a_text_keeps_its_width_and_weight():
+    text = new_text_box(0, (50, 40), SENTENCE, SANS, 12, width=110, bold=True)
+    there = moved(text, 30, 20, PAGE).new
+    assert (there.width, there.bold) == (110, True)
+    copy = copy_of(text, 0, PAGE)
+    assert (copy.width, copy.bold) == (110, True) and copy.name != text.name

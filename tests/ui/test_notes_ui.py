@@ -229,7 +229,8 @@ def test_writing_text_on_the_page(window, opened, wait_until):
     write(view, "Esquema:\n· igualdad", wait_until)
     (box,) = view.notes_of(0)
     assert (box.kind, box.text, box.font, box.size) == (TEXT_BOX, "Esquema:\n· igualdad", SERIF, 18)
-    assert abs(box.rect[0] - 60) < 1 and abs(box.rect[1] - 300) < 1, "it starts at the click"
+    assert abs(box.rect[0] - 60) < 1, "it starts at the click"
+    assert box.rect[1] < 300 < box.rect[1] + 18, "and its first line is at the height of the click"
     save(window, wait_until)
     assert in_file(path) == [("FreeText", "Esquema:\n· igualdad")]
 

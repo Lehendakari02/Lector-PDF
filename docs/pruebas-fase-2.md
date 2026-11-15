@@ -345,3 +345,35 @@ Con un documento abierto y habiendo hecho clic en la página.
 7. Deja el ratón sobre el botón Resaltar: la ayuda dice "(tecla R)".
 8. **Ajustes → General → Teclado:** quita "Una tecla para cada herramienta".
    Las letras ya no hacen nada en la página.
+
+## Tarea 2.13a – Escribir texto directamente sobre la página
+
+Con un documento abierto, en el modo Estudiar.
+
+1. Coge **Cuadro de texto** (o pulsa **X**) y haz clic en un hueco de la
+   página: aparece el cursor ahí mismo, con una barra pequeña encima. Escribe
+   dos líneas (Intro cambia de línea).
+2. Haz clic en otro sitio: el primer texto se queda en la página, en el mismo
+   lugar y con el mismo aspecto que al escribirlo, y ya puedes escribir el
+   siguiente.
+2b. Sin soltar la herramienta, haz clic sobre el primer texto: se abre otra
+   vez para corregirlo. Cámbialo y haz clic fuera.
+3. Mientras escribes, pulsa **A+** dos veces, **N** (negrita) y el color rojo:
+   el texto cambia al momento. Pulsa "Hecho". El siguiente texto que empieces
+   sale igual.
+4. Escribe una frase larga y arrastra el borde derecho del marco hacia la
+   izquierda: se corta en más líneas. Doble clic en ese borde: vuelve a una
+   línea.
+5. Escribe algo y pulsa **Esc**: no queda nada.
+6. Suelta la herramienta (Esc). Haz clic en un texto: se elige. Arrastra un
+   tirador del lado: cambia el ancho, no la letra. Arrastra una esquina:
+   cambia el tamaño de la letra.
+7. Doble clic en un texto (o Intro con él elegido): se abre para seguir
+   escribiendo. Cámbialo y haz clic fuera. Deshacer lo devuelve.
+8. Abre un texto, bórralo entero y haz clic fuera: el texto desaparece.
+9. Escribe cerca del borde derecho de la página una frase larga: sigue en la
+   línea de abajo, no se sale de la página.
+10. Con un texto a medio escribir, mueve la página con la rueda y cambia el
+    zoom: el texto sigue en su sitio.
+11. Guarda y abre el PDF en Edge y en Adobe Reader: los textos están en el
+    mismo sitio, con su negrita, su color y sus cortes de línea.

@@ -403,6 +403,11 @@ Notas de la Fase 1:
 | 2.11 | Lápiz y pantalla táctil | Subrayo con lápiz en una tableta sin que la mano pinte | ✅ (hecho sin tableta: falta la prueba con un lápiz y una pantalla táctil de verdad) |
 | 2.12 | Mostrar/ocultar anotaciones (también al imprimir/exportar) | Con un botón veo el documento limpio | ✅ (exportar llegará con la Fase 5) |
 | 2.13 | Atajos de teclado para cada herramienta | Cambio de herramienta sin usar el ratón | ✅ |
+| 2.13a | Escribir texto directamente sobre la página (tras la prueba del 15/11) | Hago clic y escribo ahí mismo; elijo tamaño, negrita, color y ancho sin salir del texto | ✅ |
+| 2.13b | Símbolos y flechas dentro del texto | Pongo →, ⇒, ✓, • … mientras escribo, sin buscarlos fuera | ⬜ |
+| 2.13c | Más formas y más cómodas | Hago un esquema con flechas, llaves y recuadros con texto sin volver a coger la herramienta cada vez | ⬜ |
+| 2.13d | Hoja en blanco, de rayas o cuadriculada (adelantada de la 2C) | Añado una hoja entre páginas y hago en ella un esquema | ⬜ |
+| 2.13e | Borrar anotaciones de otros programas | Quito un subrayado hecho con Edge, y Deshacer lo devuelve igual | ⬜ |
 | 2.14 | Versión 0.2 | Estudio un tema completo con el programa durante una sesión real | ⬜ |
 
 
@@ -790,6 +795,44 @@ Notas de la Fase 2A:
     herramienta", activado. Quien pulse teclas sin querer puede quitarlo.
   - Las teclas son fijas; elegir cada uno las suyas queda como idea si se echa
     de menos.
+- **2.13a: escribir texto directamente sobre la página (15/11/2026).**
+  Viene de la prueba de Julen: el cuadro de texto se escribía en un panel
+  aparte, "como una nota", y no dejaba ajustar bien dónde, de qué tamaño ni
+  con qué forma queda. Cambia la decisión de la 2.7 (escribir en un panel).
+  - Con la herramienta de texto, un clic pone el cursor **en la propia
+    página**: lo que se escribe se ve en su sitio, con su letra, su tamaño y su
+    color, encima de lo que haya. La primera línea queda a la altura del clic.
+  - **Intro** es otra línea. **Ctrl+Intro**, el botón "Hecho" o un clic fuera
+    dejan el texto. **Esc** lo deja todo como estaba.
+  - Un clic en otro sitio deja el texto y **empieza el siguiente ahí**: se
+    anota a lo largo de la página sin volver a coger la herramienta.
+  - **Siempre se puede volver a uno anterior:** con la herramienta en la mano,
+    un clic sobre un texto ya puesto lo abre para seguir escribiendo o
+    cambiarle el aspecto (sin la herramienta, doble clic o Intro).
+  - Encima del texto hay una **barra pequeña**: letra más pequeña y más grande
+    (A−, A+), **negrita** (N, o Ctrl+B), cuatro colores para escribir (negro,
+    azul, rojo, verde) y, si el texto ya existía, "Borrar". El resto de colores
+    y el tipo de letra siguen en la flecha del botón de la barra de arriba, y
+    también cambian el texto que se está escribiendo.
+  - Lo que se elige se recuerda: el siguiente texto sale igual, también otro
+    día.
+  - **Ancho a mano:** arrastrando el borde derecho del marco, el texto se
+    estrecha o se ensancha y sus líneas se cortan solas. Doble clic en ese
+    borde: vuelve al ancho de lo escrito. Sin tocarlo, el texto es tan ancho
+    como su línea más larga y nunca se sale de la página.
+  - Con un texto ya puesto y elegido (sin herramienta), además de las cuatro
+    esquinas (que cambian el tamaño de la letra) hay **dos tiradores a los
+    lados** que cambian el ancho sin tocar la letra. Doble clic, o Intro,
+    vuelve a abrirlo para escribir.
+  - **Negrita en PDF estándar:** se usa la variante negrita de las tres letras
+    básicas (Helvetica, Times, Courier), que todos los lectores traen.
+  - Dentro del PDF el texto se guarda tal como se escribió (sin los cortes de
+    línea), y el ancho elegido y la negrita en dos datos propios del cuadro,
+    para poder seguir cambiándolo después. Otros lectores lo ven igual.
+  - Con la página girada (Ver → Girar) se sigue escribiendo en el panel de
+    antes: es raro y así no hay que escribir de lado.
+  - Las notas adhesivas no cambian: se escriben en su panel.
+  - Sin probar en Adobe Reader ni con pantalla táctil real.
 
 ## Fase 2B – Documentos escaneados (OCR)
 | # | Tarea | Terminado cuando… | Estado |

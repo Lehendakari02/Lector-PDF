@@ -139,13 +139,14 @@ def test_a_long_line_never_leaves_the_page(doc):
     new_text_box(0, (250, 40), text.strip(), SANS, 12).apply(doc)
     (found,) = page_notes(doc, 0)
     assert found.rect[2] <= 400
-    assert len(found.text.split("\n")) > 3
+    assert found.rect[3] - found.rect[1] > 3 * 12 * 1.25, "cut into more than three lines"
+    assert found.text == text.strip(), "what was written is kept as it was written"
     assert found.text.replace("\n", " ") == text.strip(), "cut at the spaces, nothing lost"
     with saved_again(doc) as other:
         page = other[0]  # kept: an annotation dies with its page
         (annotation,) = page.annots()
         shown = [line.strip() for line in annotation.get_text().splitlines() if line.strip()]
-        assert shown == found.text.split("\n")
+        assert shown == box_layout(text.strip(), SANS, 12, (250, 40), 400)[0]
 
 
 def test_on_a_turned_page_the_text_box_reads_upright_where_it_was_put(doc):
@@ -257,3 +258,105 @@ def test_finding_what_is_under_a_point(doc):
     assert note_at(found, 105, 105).text == "debajo"
     assert note_at(found, 115, 115).text == "encima"
     assert note_at(found, 300, 200) is None
+
+
+# ---- a width chosen by hand, and bold -------------------------------------------
+
+LONG = "una frase bastante larga para que haya que cortarla en varias líneas seguidas"
+
+
+def dark(document, page: int, rect) -> int:
+    """How many pixels of a part of a page are painted."""
+    pixmap = document[page].get_pixmap(clip=pymupdf.Rect(rect), matrix=pymupdf.Matrix(3, 3))
+    return sum(1 for value in pixmap.samples[1::3] if value < 140)
+
+
+def test_a_box_with_a_width_cuts_its_text_to_fit():
+    lines, rect = box_layout(LONG, SANS, 12, (50, 40), 400, width=120)
+    assert len(lines) > 3 and rect[2] - rect[0] == pytest.approx(120)
+    assert all(notes.text_width(line, SANS, 12) <= 120 - 2 * notes.PADDING for line in lines)
+    assert " ".join(lines) == LONG, "cut at the spaces, with nothing lost"
+    narrow, wide = (box_layout(LONG, SANS, 12, (50, 40), 400, width=w)[1] for w in (90, 200))
+    assert narrow[3] > rect[3] > wide[3], "narrower is taller"
+
+
+def test_a_width_never_takes_the_box_out_of_the_page():
+    _, rect = box_layout(LONG, SANS, 12, (300, 40), 400, width=300)
+    assert rect[2] <= 400
+
+
+@pytest.mark.parametrize("page", [0, 1])
+def test_a_box_with_a_width_is_read_back_as_it_was_put(doc, page):
+    order = new_text_box(page, (50, 40), LONG, SANS, 11, (0.1, 0.2, 0.8), width=130)
+    order.apply(doc)
+    again = saved_again(doc)
+    (found,) = page_notes(again, page)
+    assert found.text == LONG and found.width == pytest.approx(130)
+    assert found.rect[2] - found.rect[0] == pytest.approx(130, abs=0.1)
+    assert found.order() == order or close_to(found.order().origin, order.origin, 0.1)
+    assert box_layout(LONG, SANS, 11, (50, 40), 400, 130)[1][3] == pytest.approx(
+        found.rect[3], abs=0.1
+    )
+
+
+def test_every_line_of_a_narrow_box_is_seen_whole(doc):
+    order = new_text_box(0, (50, 40), LONG, SANS, 12, width=110)
+    order.apply(doc)
+    lines, rect = box_layout(LONG, SANS, 12, (50, 40), 400, 110)
+    again = saved_again(doc)
+    page = again[0]
+    (annotation,) = page.annots()
+    shown = [line.strip() for line in annotation.get_text().splitlines() if line.strip()]
+    assert shown == lines, "the lines cut here are the lines every viewer shows"
+    words = page.get_text("words")
+    assert all(rect[0] <= word[0] and word[2] <= rect[2] for word in words), "inside its box"
+    assert max(word[3] for word in words) <= rect[3] + 3, "the last line is there, whole"
+    assert dark(again, 0, (rect[2] + 1, rect[1], 400, rect[3])) == 0, "nothing past its edge"
+
+
+@pytest.mark.parametrize("font", [SANS, SERIF, MONO])
+def test_bold_is_heavier_and_is_read_back(doc, font):
+    place = (40, 40)
+    new_text_box(0, place, "Muy importante", font, 14).apply(doc)
+    new_text_box(1, place, "Muy importante", font, 14, bold=True).apply(doc)
+    again = saved_again(doc)
+    plain, bold = page_notes(again, 0)[0], page_notes(again, 1)[0]
+    assert not plain.bold and bold.bold and bold.order().bold
+    assert dark(again, 1, bold.rect) > dark(again, 0, plain.rect) * 1.15
+    assert bold.rect[2] - bold.rect[0] >= plain.rect[2] - plain.rect[0]
+    look = again.xref_object(again[1].first_annot.xref, compressed=True)
+    assert "FreeText" in look
+
+
+def test_bold_letters_are_wider_so_the_lines_are_cut_for_them():
+    assert notes.text_width("Muy importante", SANS, 12, bold=True) > notes.text_width(
+        "Muy importante", SANS, 12
+    )
+    plain = wrap_text(LONG, SANS, 12, 150)
+    bold = wrap_text(LONG, SANS, 12, 150, bold=True)
+    assert len(bold) >= len(plain)
+    assert all(notes.text_width(line, SANS, 12, True) <= 150 for line in bold)
+
+
+def test_width_and_bold_go_to_the_journal_and_back():
+    order = new_text_box(0, (50, 40), LONG, SANS, 12, width=130, bold=True)
+    assert command_from_dict(order.to_dict()) == order
+    plain = new_text_box(0, (50, 40), "hola")
+    written = plain.to_dict()
+    assert "width" not in written and "bold" not in written, "old journals read the same"
+    assert command_from_dict(written) == plain
+    odd = written | {"width": "ancho", "bold": "sí"}
+    assert command_from_dict(odd).width == 0 and command_from_dict(odd).bold is False
+
+
+def test_changing_width_or_weight_and_undoing_it(doc):
+    new_text_box(0, (50, 40), LONG, SANS, 12).apply(doc)
+    (note,) = page_notes(doc, 0)
+    before = doc[0].get_pixmap().samples
+    change = changed(note, width=120.0, bold=True)
+    change.apply(doc)
+    (now,) = page_notes(doc, 0)
+    assert now.width == pytest.approx(120) and now.bold and now.name == note.name
+    change.undo(doc)
+    assert doc[0].get_pixmap().samples == before
+    assert page_notes(doc, 0)[0].width == 0

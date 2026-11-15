@@ -16,6 +16,7 @@ from app.core.commands import AddMarkup, Command, new_name
 from app.core.drawing import BOX, MIN_SHAPE, OVAL, AddInk, AddShape
 from app.core.notes import (
     MAX_SIZE,
+    MIN_BOX_WIDTH,
     MIN_SIZE,
     NOTE_SIZE,
     PAGE_MARGIN,
@@ -32,8 +33,10 @@ Size = tuple[float, float]  # width and height of a page, as it is shown
 MIN_SIDE = 4.0  # points; nothing is squeezed smaller than this
 PASTE_STEP = 12.0  # how far from the original a copy lands
 
-# The corners of a frame, in the order the handles are numbered.
+# The corners of a frame, in the order the handles are numbered. A text has
+# two more, in the middle of its sides, that make it wider or narrower.
 TOP_LEFT, TOP_RIGHT, BOTTOM_RIGHT, BOTTOM_LEFT = range(4)
+RIGHT_SIDE, LEFT_SIDE = 4, 5
 
 
 def can_move(order: Command) -> bool:
@@ -51,7 +54,15 @@ def bounds(order: Command, page_width: float = 1e9) -> Rect:
         x, y = order.point
         return (x, y, x + NOTE_SIZE, y + NOTE_SIZE)
     if isinstance(order, AddTextBox):
-        return box_layout(order.text, order.font, order.size, order.origin, page_width)[1]
+        return box_layout(
+            order.text,
+            order.font,
+            order.size,
+            order.origin,
+            page_width,
+            order.width,
+            order.bold,
+        )[1]
     if isinstance(order, AddInk):
         points = [point for stroke in order.strokes for point in stroke]
     elif isinstance(order, AddShape):
@@ -73,14 +84,20 @@ def handles(order: Command, page_width: float = 1e9) -> list[Point]:
     """Where an order can be grabbed to resize it.
 
     A line or an arrow, by its two ends; the rest, by the four corners of its
-    frame (``TOP_LEFT``…). A note has none.
+    frame (``TOP_LEFT``…). A text also by the middle of its right and left
+    sides (``RIGHT_SIDE``, ``LEFT_SIDE``): they change how wide it is, and its
+    lines are cut again to fit. A note has none.
     """
     if not can_resize(order):
         return []
     if isinstance(order, AddShape) and order.kind not in (BOX, OVAL):
         return [order.start, order.end]
     x0, y0, x1, y1 = bounds(order, page_width)
-    return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+    corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+    if isinstance(order, AddTextBox):
+        middle = (y0 + y1) / 2
+        corners += [(x1, middle), (x0, middle)]
+    return corners
 
 
 def _shifted(order: Command, dx: float, dy: float) -> Command:
@@ -146,12 +163,28 @@ def resized(order: Command, handle: int, point: Point, page: Size) -> Replace | 
         new = replace(order, start=ends[0], end=ends[1])
         if abs(ends[0][0] - ends[1][0]) + abs(ends[0][1] - ends[1][1]) < MIN_SHAPE:
             return None
+    elif handle in (RIGHT_SIDE, LEFT_SIDE):
+        new = _widened(order, handle, point[0], bounds(order, page[0]), page)
     else:
         fixed = grips[(handle + 2) % 4]
         new = _stretched(order, fixed, point, bounds(order, page[0]), page)
     if new is None or new == order:
         return None
     return Replace(order, new)
+
+
+def _widened(order: AddTextBox, handle: int, x: float, old: Rect, page: Size) -> AddTextBox:
+    """A text with one of its sides taken to ``x``: the other side stays."""
+    if handle == RIGHT_SIDE:
+        left = old[0]
+        right = min(x, page[0] - (PAGE_MARGIN - 2))
+    else:
+        right = old[2]
+        left = max(0.0, x)
+    width = max(MIN_BOX_WIDTH, right - left)
+    if handle == LEFT_SIDE:
+        left = right - width
+    return replace(order, origin=(max(0.0, left), order.origin[1]), width=round(width, 2))
 
 
 def _stretched(order: Command, fixed: Point, point: Point, old: Rect, page: Size):
@@ -185,7 +218,8 @@ def _stretched(order: Command, fixed: Point, point: Point, old: Rect, page: Size
         size = max(MIN_SIZE, min(MAX_SIZE, round(order.size * grow * 2) / 2))
         if size == order.size:
             return None
-        sized = replace(order, size=size)
+        # A width chosen by hand grows with the letter: the lines stay as they are.
+        sized = replace(order, size=size, width=round(order.width * size / order.size, 2))
         new = bounds(replace(sized, origin=(0.0, 0.0)))
         width, height = new[2] - new[0], new[3] - new[1]
         left = fixed[0] if right else fixed[0] - width

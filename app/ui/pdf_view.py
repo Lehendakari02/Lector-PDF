@@ -12,6 +12,7 @@ import bisect
 import math
 import time
 from collections import OrderedDict
+from dataclasses import replace
 from enum import Enum
 from pathlib import Path
 
@@ -57,6 +58,7 @@ from app.core.search import PageText, SearchHit
 from app.core.selection import caret_at, is_on_text, selection_rects, word_at
 from app.ui import theme
 from app.ui.note_panel import NotePanel
+from app.ui.text_editor import TextEditor
 
 PAGE_GAP = 12  # space between pages, in Qt units
 SIDE_MARGIN = 16
@@ -254,6 +256,7 @@ class PdfView(QAbstractScrollArea):
     annotations_shown_changed = Signal(bool)  # what was put on the pages is seen, or hidden
     # The annotation copied last, for every document: the order that puts it.
     copied = None
+    text_style_chosen = Signal(dict)  # the look given to a text while writing it
     _changed = Signal(int, object, object, bool)
     _change_failed = Signal(int, str)
     saved = Signal(int, object)
@@ -384,11 +387,14 @@ class PdfView(QAbstractScrollArea):
         self.shape_opacity = 1.0
         self._notes: dict[int, list[PageNote]] = {}  # notes and text boxes by page
         self._asked_notes: set[int] = set()
-        self.note_panel: NotePanel | None = None  # where one is being written
+        # Where one is being written: a panel, or the page itself for a text.
+        self.note_panel: NotePanel | TextEditor | None = None
+        self._editor_place: tuple[int, float, float] | None = None  # of that text
         # How new notes and text are made (the window gives what the user chose).
         self.note_color = notes.NOTE_COLOR
         self.text_font = notes.SANS
         self.text_size = notes.TEXT_SIZE
+        self.text_bold = False
         self.text_color = notes.TEXT_COLOR
         self._changed.connect(self._change_done)
         self._change_failed.connect(self._change_did_not_work)
@@ -1013,6 +1019,7 @@ class PdfView(QAbstractScrollArea):
             self._current_page = current
             self.page_changed.emit(current + 1, self.page_count)
         self._request_pages()
+        self._place_editor()
         self.viewport().update()
 
     def _request_pages(self) -> None:
@@ -1455,23 +1462,51 @@ class PdfView(QAbstractScrollArea):
         y = max(0.0, min(size.height - notes.NOTE_SIZE, y - half))
         return self._do(notes.new_note(page, (x, y), text.strip(), self.note_color))
 
-    def put_text_box(self, page: int, x: float, y: float, text: str) -> bool:
-        """Write text on a page, starting at that point."""
+    def put_text_box(
+        self, page: int, x: float, y: float, text: str, width: float = 0.0, **look
+    ) -> bool:
+        """Write text on a page, starting at that point.
+
+        It is written with the letter, size, colour and weight in use, unless
+        ``look`` says otherwise (font, size, color, bold). With ``width`` its
+        lines are cut to fit in that many points.
+        """
         if not text.strip() or not 0 <= page < self.page_count:
             return False
-        size = self._sizes[page]
-        x = max(0.0, min(size.width - notes.MIN_BOX_WIDTH, x))
-        y = max(0.0, min(size.height - self.text_size * notes.LINE_HEIGHT, y))
+        font = look.get("font", self.text_font)
+        size = look.get("size", self.text_size)
+        x, y = self._text_origin(page, x, y, size)
         order = notes.new_text_box(
-            page, (x, y), text.strip(), self.text_font, self.text_size, self.text_color
+            page,
+            (x, y),
+            text.strip(),
+            font,
+            size,
+            look.get("color", self.text_color),
+            width,
+            look.get("bold", self.text_bold),
         )
         return self._do(order)
 
-    def change_note(self, note: PageNote, text: str) -> bool:
-        """Change what a note or a text box says. Only the ones made here."""
-        if not note.ours or not text.strip() or text.strip() == note.text:
+    def _text_origin(self, page: int, x: float, y: float, size: float) -> tuple[float, float]:
+        """Where a text can start so that it begins inside its page."""
+        sheet = self._sizes[page]
+        x = max(0.0, min(sheet.width - notes.MIN_BOX_WIDTH, x))
+        y = max(0.0, min(sheet.height - size * notes.LINE_HEIGHT, y))
+        return x, y
+
+    def change_note(self, note: PageNote, text: str, **look) -> bool:
+        """Change what a note or a text box says. Only the ones made here.
+
+        A text box can also change its look: font, size, color, bold, width.
+        """
+        if not note.ours or not text.strip():
             return False
-        return self._do(notes.changed(note, text=text.strip()))
+        old = self._order_of(note)
+        new = replace(old, text=text.strip(), **look)
+        if new == old:
+            return False
+        return self._do(notes.Replace(old, new))
 
     def remove_note(self, note: PageNote) -> bool:
         """Take a note or a text box away. Only the ones made here."""
@@ -1488,11 +1523,43 @@ class PdfView(QAbstractScrollArea):
 
     def _panel_closed(self) -> None:
         self.note_panel = None
+        self._editor_place = None
         self.setFocus()
 
-    def start_note(self, kind: str, page: int, x: float, y: float, near: QPoint) -> NotePanel:
-        """Open the panel to write a new note or text at a point of a page."""
+    def start_note(
+        self, kind: str, page: int, x: float, y: float, near: QPoint
+    ) -> NotePanel | TextEditor:
+        """Start a new note or text at a point of a page.
+
+        A note is written in a small panel. A text is written on the page
+        itself, its first line at the height of the click. (With the pages
+        turned, the text is written in the panel too.)
+        """
         self.close_note_panel(keep=True)
+        if kind == TEXT_BOX and self._rotation == 0:
+            # The click is where the middle of the first line goes.
+            x, y = self._text_origin(page, x, y - 0.55 * self.text_size, self.text_size)
+            editor = TextEditor(
+                font=self.text_font,
+                size=self.text_size,
+                color=self.text_color,
+                bold=self.text_bold,
+                parent=self.viewport(),
+            )
+            editor.saved.connect(
+                lambda text: self.put_text_box(
+                    page,
+                    x,
+                    y,
+                    text,
+                    editor.width_chosen,
+                    font=editor.font_name,
+                    size=editor.size,
+                    color=editor.color,
+                    bold=editor.bold,
+                )
+            )
+            return self._show_editor(editor, page, x, y)
         panel = NotePanel(kind, parent=self)
         if kind == NOTE:
             panel.saved.connect(lambda text: self.put_note(page, x, y, text))
@@ -1501,9 +1568,35 @@ class PdfView(QAbstractScrollArea):
             panel.saved.connect(lambda text: self.put_text_box(page, x, y, text))
         return self._show_panel(panel, near)
 
-    def open_note(self, note: PageNote, near: QPoint | None = None) -> NotePanel:
+    def open_note(self, note: PageNote, near: QPoint | None = None) -> NotePanel | TextEditor:
         """Open a note or a text box that is on the page: read, change or remove it."""
         self.close_note_panel(keep=True)
+        if note.kind == TEXT_BOX and note.ours and self._rotation == 0:
+            now = self._order_of(note)  # it may have just been moved or changed
+            editor = TextEditor(
+                now.text,
+                existing=True,
+                font=now.font,
+                size=now.size,
+                color=now.color,
+                bold=now.bold,
+                width=now.width,
+                parent=self.viewport(),
+            )
+            editor.saved.connect(
+                lambda text: self.change_note(
+                    note,
+                    text,
+                    font=editor.font_name,
+                    size=editor.size,
+                    color=editor.color,
+                    bold=editor.bold,
+                    width=editor.width_chosen,
+                )
+            )
+            editor.removed.connect(lambda: self.remove_note(note))
+            self.pick(None)
+            return self._show_editor(editor, now.page, *now.origin)
         panel = NotePanel(note.kind, note.text, existing=True, editable=note.ours, parent=self)
         if note.kind == TEXT_BOX:
             panel.show_text_style(note.font, note.size, note.color)
@@ -1517,6 +1610,33 @@ class PdfView(QAbstractScrollArea):
         panel.place_near(self.viewport().mapTo(self, near))
         panel.start()
         return panel
+
+    def _show_editor(self, editor: TextEditor, page: int, x: float, y: float) -> TextEditor:
+        self.note_panel = editor
+        self._editor_place = (page, x, y)
+        editor.closed.connect(self._panel_closed)
+        editor.style_chosen.connect(self.text_style_chosen)
+        self._place_editor()
+        editor.start()
+        return editor
+
+    def _place_editor(self) -> None:
+        """Keep the text being written on its place of the page (scroll, zoom)."""
+        editor = self.note_panel
+        if not isinstance(editor, TextEditor) or self._editor_place is None:
+            return
+        page, x, y = self._editor_place
+        zoom = self._render_zoom()
+        origin = QPoint(
+            self._to_units(self._page_left(page) + x * zoom),
+            self._to_units(self._tops[page] - self._scroll_y() + y * zoom),
+        )
+        editor.put(origin, self._zoom, self._sizes[page].width - x)
+
+    def text_style_given(self, **changed) -> None:
+        """The look of the text tool was changed: the text being written takes it."""
+        if isinstance(self.note_panel, TextEditor):
+            self.note_panel.give_style(**changed)
 
     # ---- drawing and erasing ------------------------------------------------
 
@@ -1870,8 +1990,12 @@ class PdfView(QAbstractScrollArea):
         self.setFocus()
         self._fling.stop()
         if self.note_panel is not None:
-            self.close_note_panel(keep=True)  # a click outside keeps what was written
-            return
+            # A click outside keeps what was written. After a text written on
+            # the page, the same click goes on: the next text starts there.
+            on_page = isinstance(self.note_panel, TextEditor)
+            self.close_note_panel(keep=True)
+            if not (on_page and self._markup_tool == TEXT_BOX):
+                return
         if self._markup_tool in (DRAW, SHAPE_TOOL):
             point = self._point_on_page(position)
             if point is not None:
@@ -2274,6 +2398,9 @@ class PdfView(QAbstractScrollArea):
 
     def _handle_cursor(self, handle: int) -> Qt.CursorShape:
         item = self.picked_item()
+        if handle in (arrange.RIGHT_SIDE, arrange.LEFT_SIDE):
+            sideways = self._rotation in (90, 270)
+            return Qt.CursorShape.SizeVerCursor if sideways else Qt.CursorShape.SizeHorCursor
         if len(arrange.handles(self._order_of(item), self._sizes[item.page].width)) == 2:
             return Qt.CursorShape.CrossCursor  # an end of a line goes anywhere
         falling = handle in (arrange.TOP_LEFT, arrange.BOTTOM_RIGHT)
@@ -2410,6 +2537,10 @@ class PdfView(QAbstractScrollArea):
         elif key == Qt.Key.Key_Escape:
             self._grab = None
             self.pick(None)
+        elif key in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_F2) and getattr(
+            self.picked_item(), "kind", ""
+        ) in (NOTE, TEXT_BOX):
+            self.open_note(self.picked_item())  # Intro on a text: write in it
         elif key in moves and arrange.can_move(self.picked_item().order()):
             self.move_picked(*moves[key])
         else:
