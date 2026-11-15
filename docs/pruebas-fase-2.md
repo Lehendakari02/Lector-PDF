@@ -164,3 +164,28 @@ En **Ajustes → pestaña Guardado**. Sin tocar nada, todo sigue como antes.
    sin preguntar.
 8. Cambia "Se conservan" a 1 día: la pregunta de cerrar dice "1 día".
 9. Desmarca "guardar solo" para dejarlo como estaba.
+
+## Tarea 2.7 – Notas adhesivas y cuadros de texto
+
+En el modo **Estudiar**.
+
+1. Pulsa **Nota** y haz clic en la página: sale un panel. Escribe algo (con
+   ñ, tildes y ¿?) y pulsa **Guardar**: aparece el icono de la nota.
+2. Deja el ratón sobre el icono: se lee la nota. Haz clic en él: se abre para
+   cambiarla. Cámbiala y guarda.
+3. Ábrela otra vez y pulsa **Borrar**. Luego **Deshacer** (Ctrl+Z): vuelve.
+4. En la flecha junto a **Nota**, elige otro color y pon otra nota: sale de ese
+   color.
+5. En la flecha junto a **Cuadro de texto**, elige color rojo, tipo de letra
+   "Con remates" y tamaño 18. Haz clic en un margen y escribe dos líneas:
+   aparecen sobre la página con ese aspecto.
+6. Haz doble clic sobre ese texto: se abre para cambiarlo. Bórralo todo y
+   guarda: el texto desaparece.
+7. Escribe una frase muy larga cerca del borde derecho: se parte en varias
+   líneas y no se sale de la página.
+8. Empieza una nota, escribe algo y haz clic fuera del panel: se guarda sola.
+   Empieza otra y pulsa Esc: no se pone nada.
+9. Guarda el PDF y ábrelo en **Edge** y en **Adobe Reader**: las notas y los
+   textos están en su sitio, con su color y su letra, y la nota se puede leer.
+10. Cierra el programa a la fuerza con una nota sin guardar y ábrelo: ofrece
+    recuperarla.

@@ -8,6 +8,23 @@ chosen, so nobody has to touch anything.
 from dataclasses import dataclass, field
 
 from app.core.commands import DEFAULT_COLORS, MARKUP_KINDS, Color
+from app.core.notes import (
+    FONTS,
+    MAX_SIZE,
+    MIN_SIZE,
+    NOTE,
+    NOTE_COLOR,
+    SANS,
+    TEXT_BOX,
+    TEXT_COLOR,
+    TEXT_SIZE,
+)
+
+# Every tool that has a colour of its own: the markers, the notes and the text.
+STYLED_KINDS = (*MARKUP_KINDS, NOTE, TEXT_BOX)
+START_COLORS: dict[str, Color] = {**DEFAULT_COLORS, NOTE: NOTE_COLOR, TEXT_BOX: TEXT_COLOR}
+# The sizes of letter at hand for the text written on the page.
+TEXT_SIZES = (8, 10, 12, 14, 18, 24, 36)
 
 # The colours at hand in the quick palette: six of marker, four of pen.
 QUICK_COLORS: tuple[Color, ...] = (
@@ -61,6 +78,17 @@ def clamp_opacity(value: object) -> float:
     return max(MIN_OPACITY, min(1.0, number))
 
 
+def clamp_size(value: object) -> float:
+    """A size of letter that can be used, whatever was stored."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return TEXT_SIZE
+    if isinstance(value, bool) or number != number:
+        return TEXT_SIZE
+    return max(MIN_SIZE, min(MAX_SIZE, number))
+
+
 @dataclass(frozen=True)
 class MarkerStyle:
     color: Color
@@ -68,7 +96,7 @@ class MarkerStyle:
 
 
 def _defaults() -> dict[str, MarkerStyle]:
-    return {kind: MarkerStyle(DEFAULT_COLORS[kind]) for kind in MARKUP_KINDS}
+    return {kind: MarkerStyle(START_COLORS[kind]) for kind in STYLED_KINDS}
 
 
 @dataclass
@@ -77,6 +105,8 @@ class MarkerStyles:
 
     styles: dict[str, MarkerStyle] = field(default_factory=_defaults)
     recent: list[Color] = field(default_factory=list)  # the newest first
+    text_font: str = SANS  # the text written on the page: one of notes.FONTS
+    text_size: float = TEXT_SIZE
 
     def of(self, kind: str) -> MarkerStyle:
         return self.styles[kind]
@@ -91,6 +121,13 @@ class MarkerStyles:
     def set_opacity(self, kind: str, opacity: float) -> None:
         self.styles[kind] = MarkerStyle(self.styles[kind].color, clamp_opacity(opacity))
 
+    def set_text_font(self, font: object) -> None:
+        if isinstance(font, str) and font in FONTS:
+            self.text_font = font
+
+    def set_text_size(self, size: float) -> None:
+        self.text_size = clamp_size(size)
+
     def to_setting(self) -> dict:
         """As plain data, for the settings file."""
         return {
@@ -99,6 +136,7 @@ class MarkerStyles:
                 for kind, style in self.styles.items()
             },
             "recent": [to_hex(color) for color in self.recent],
+            "text": {"font": self.text_font, "size": self.text_size},
         }
 
     @classmethod
@@ -109,12 +147,16 @@ class MarkerStyles:
             return result
         tools = value.get("tools")
         if isinstance(tools, dict):
-            for kind in MARKUP_KINDS:
+            for kind in STYLED_KINDS:
                 saved = tools.get(kind)
                 if not isinstance(saved, dict):
                     continue
-                color = from_hex(saved.get("color")) or DEFAULT_COLORS[kind]
+                color = from_hex(saved.get("color")) or START_COLORS[kind]
                 result.styles[kind] = MarkerStyle(color, clamp_opacity(saved.get("opacity", 1.0)))
+        text = value.get("text")
+        if isinstance(text, dict):
+            result.set_text_font(text.get("font"))
+            result.text_size = clamp_size(text.get("size"))
         recent = value.get("recent")
         if isinstance(recent, list):
             for text in recent:

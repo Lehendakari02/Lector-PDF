@@ -11,7 +11,9 @@ PDF annotations that Adobe Reader, Edge and any other viewer show the same.
 """
 
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Protocol
 
 from app.core.search import PageText, Rect
 from app.core.selection import selection_rects
@@ -51,7 +53,7 @@ class Mark:
     name: str
 
 
-def _find_annotation(page, name: str):
+def find_annotation(page, name: str):
     for annotation in page.annots() or ():
         if annotation.info.get("id") == name:
             return annotation
@@ -80,7 +82,7 @@ class AddMarkup:
         try:
             for mark in self.marks:
                 page = doc[mark.page]
-                if _find_annotation(page, mark.name) is not None:
+                if find_annotation(page, mark.name) is not None:
                     continue  # already there (the order is applied only once)
                 # The rectangles come from the page as it is shown; an annotation
                 # is stored in the page's own coordinates, which differ when the
@@ -120,7 +122,7 @@ class AddMarkup:
     @staticmethod
     def _remove(doc, mark: Mark) -> None:
         page = doc[mark.page]
-        annotation = _find_annotation(page, mark.name)
+        annotation = find_annotation(page, mark.name)
         if annotation is not None:
             page.delete_annot(annotation)
 
@@ -150,13 +152,31 @@ class AddMarkup:
         return cls(str(data["kind"]), marks, color, float(data.get("opacity", 1.0)))
 
 
-Command = AddMarkup  # the only kind of order so far; later ones join here
+class Command(Protocol):
+    """What every order knows how to do. The kinds: ``AddMarkup`` here, and the
+    notes and text boxes of ``app.core.notes``."""
 
-_READERS = {"add_markup": AddMarkup.from_dict}
+    def pages(self) -> list[int]: ...
+
+    def apply(self, doc) -> list[int]: ...
+
+    def undo(self, doc) -> list[int]: ...
+
+    def to_dict(self) -> dict: ...
+
+
+_READERS: dict[str, Callable[[dict], Command]] = {"add_markup": AddMarkup.from_dict}
+
+
+def register_reader(what: str, reader: Callable[[dict], Command]) -> None:
+    """Teach ``command_from_dict`` to read one more kind of order."""
+    _READERS[what] = reader
 
 
 def command_from_dict(data: dict) -> Command:
     """Read back an order written with ``to_dict`` (for the recovery journal)."""
+    import app.core.notes  # noqa: F401  (its orders register themselves)
+
     try:
         return _READERS[data["what"]](data)
     except (KeyError, TypeError, ValueError) as error:

@@ -66,7 +66,9 @@ class ColorMenu(QMenu):
     color_chosen = Signal(object)
     opacity_chosen = Signal(float)
 
-    def __init__(self, tool_name: str, parent: QWidget | None = None) -> None:
+    def __init__(
+        self, tool_name: str, parent: QWidget | None = None, with_opacity: bool = True
+    ) -> None:
         super().__init__(parent)
         self._color: Color = QUICK_COLORS[0]
         self._recent: list[Color] = []
@@ -120,6 +122,9 @@ class ColorMenu(QMenu):
         self.opacity_slider.sliderMoved.connect(self._show_opacity)
         self.opacity_slider.valueChanged.connect(self._opacity_set)
         layout.addWidget(self.opacity_slider)
+        # Notes and text have no opacity: only their colour is chosen here.
+        self.opacity_label.setVisible(with_opacity)
+        self.opacity_slider.setVisible(with_opacity)
 
         action = QWidgetAction(self)
         action.setDefaultWidget(panel)

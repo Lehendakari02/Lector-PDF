@@ -446,6 +446,10 @@ QPushButton#bannerMainButton {{
 }}
 QPushButton#bannerMainButton:hover {{ background: {c.accent_hover}; }}
 QLabel#dialogNote {{ color: {c.muted}; }}
+QFrame#notePanel {{
+    background: {c.surface}; border: 1px solid {c.border}; border-radius: 10px;
+}}
+QLabel#notePanelTitle {{ font-weight: 600; }}
 QLabel#dialogError {{ color: {c.danger}; font-weight: 600; }}
 """
 

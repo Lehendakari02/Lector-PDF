@@ -26,6 +26,7 @@ from multiprocessing.connection import Connection
 from pathlib import Path
 
 from app.core.commands import Color, Command, CommandError, markup_for_selection
+from app.core.notes import PageNote, page_notes
 from app.core.outline import OutlineEntry, read_outline
 from app.core.saving import FAILED as SAVE_FAILED
 from app.core.saving import SaveError, put_in_place, write_copy
@@ -304,6 +305,14 @@ def _worker_main(connection: Connection) -> None:
                     except Exception:
                         letters = PageText()  # a page that cannot be read has no text
                     connection.send(("text", token, page_index, letters))
+            elif kind == "notes":
+                _, notes_token, page_index = message
+                if notes_token == token and doc is not None:
+                    try:
+                        found = page_notes(doc, page_index)
+                    except Exception:
+                        found = []  # a page that cannot be read has none
+                    connection.send(("notes", token, page_index, found))
             elif kind == "copy":
                 _, copy_token, copy_id, start, stop = message
                 if copy_token == token and doc is not None:
@@ -422,7 +431,9 @@ class RenderService:
         on_save_failed: Callable[[int, str, str], None] | None = None,
         on_changed: Callable[[int, Command, list[int], bool], None] | None = None,
         on_change_failed: Callable[[int, str], None] | None = None,
+        on_notes: Callable[[int, list[PageNote]], None] | None = None,
     ) -> None:
+        self._on_notes = on_notes or (lambda page, notes: None)
         self._on_changed = on_changed or (lambda number, order, pages, undo: None)
         self._on_change_failed = on_change_failed or (lambda number, details: None)
         self._change_id = 0
@@ -553,6 +564,19 @@ class RenderService:
             if self._ensure_started():
                 self._reopen()
             self._send(("text", self._token, page))
+
+    def want_notes(self, page: int) -> None:
+        """Ask for the notes and text boxes of a page (counting from 0).
+
+        They arrive through ``on_notes(page, notes)``, each an
+        ``app.core.notes.PageNote``, as the document is at that moment.
+        """
+        with self._lock:
+            if self._path is None:
+                return
+            if self._ensure_started():
+                self._reopen()
+            self._send(("notes", self._token, page))
 
     def copy_text(self, start: tuple[int, int], stop: tuple[int, int]) -> int:
         """Ask for the text between two places, each (page, caret).
@@ -774,6 +798,8 @@ class RenderService:
                 self._tell(self._on_text, message[2], message[3])
             elif kind == "copied":
                 self._tell(self._on_copied, message[2], message[3])
+            elif kind == "notes":
+                self._tell(self._on_notes, message[2], message[3])
             elif kind == "page_failed":
                 self._drawing = None
                 self._tell(self._on_page_failed, message[2], message[3], message[4])
