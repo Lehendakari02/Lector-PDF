@@ -35,12 +35,19 @@ from app import APP_NAME, BUILD_LABEL, __version__
 from app.core import save_checks, save_settings, saving
 from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
 from app.core.document import PdfDocument, PdfOpenError, engine_version
+from app.core.drawing import ARROW, BOX, DRAW, ERASER, LINE, OVAL, SHAPE_TOOL, WIDTHS
 from app.core.error_log import running_from_source_or_test_build
 from app.core.history import History, file_key
 from app.core.interface_size import NORMAL_SIZE
 from app.core.journal import FOLDER_NAME as JOURNAL_FOLDER
 from app.core.journal import Journal, Pending
-from app.core.marker_styles import STYLED_KINDS, TEXT_SIZES, MarkerStyles
+from app.core.marker_styles import (
+    LINE_KINDS,
+    SEE_THROUGH_KINDS,
+    STYLED_KINDS,
+    TEXT_SIZES,
+    MarkerStyles,
+)
 from app.core.notes import MONO, NOTE, SANS, SERIF, TEXT_BOX
 from app.core.ocr import OcrError, OcrJob, OcrPage
 from app.core.paths import data_dir, is_portable
@@ -272,6 +279,9 @@ class MainWindow(QMainWindow):
             "strikeout": lambda: self.use_marker(STRIKEOUT),
             "note": lambda: self.use_writing_tool(NOTE),
             "text_box": lambda: self.use_writing_tool(TEXT_BOX),
+            "draw": lambda: self.use_writing_tool(DRAW),
+            "shapes": lambda: self.use_writing_tool(SHAPE_TOOL),
+            "eraser": lambda: self.use_writing_tool(ERASER),
             "undo": self.undo,
             "redo": self.redo,
             "save": self.save_document,
@@ -439,16 +449,21 @@ class MainWindow(QMainWindow):
 
     def _build_color_menus(self) -> None:
         """Each marker carries, in the arrow next to it, its colour and opacity;
-        the notes their colour, and the text its colour, font and size."""
+        the notes their colour; the text its colour, font and size; the pen
+        and the shapes their colour, thickness and opacity."""
         self.marker_styles = MarkerStyles.from_setting(self.settings.get(MARKERS_SETTING))
         self.color_menus: dict[str, ColorMenu] = {}
         toolbar = self.mode_toolbars[Mode.STUDY]
         for kind in STYLED_KINDS:
             action = self.feature_actions[kind]
             name = translate(self._feature_named(kind).name)
-            menu = ColorMenu(name, self, with_opacity=kind in MARKUP_KINDS)
+            menu = ColorMenu(name, self, with_opacity=kind in SEE_THROUGH_KINDS)
             if kind == TEXT_BOX:
                 self._add_text_choices(menu)
+            if kind == SHAPE_TOOL:
+                self._add_shape_choices(menu)
+            if kind in LINE_KINDS:
+                self._add_width_choices(menu, kind)
             menu.color_chosen.connect(lambda color, k=kind: self.set_marker_color(k, color))
             menu.opacity_chosen.connect(lambda value, k=kind: self.set_marker_opacity(k, value))
             self.color_menus[kind] = menu
@@ -484,6 +499,59 @@ class MainWindow(QMainWindow):
             group.addAction(action)
             self.text_size_actions[size] = action
 
+    def _add_shape_choices(self, menu: ColorMenu) -> None:
+        """Which shape is drawn: at the top of the menu of the shapes."""
+        self.shape_actions: dict[str, QAction] = {}
+        group = QActionGroup(menu)
+        first = menu.actions()[0]
+        for shape, name in (
+            (ARROW, self.tr("Flecha")),
+            (LINE, self.tr("Línea")),
+            (BOX, self.tr("Recuadro")),
+            (OVAL, self.tr("Óvalo")),
+        ):
+            action = QAction(name, menu)
+            action.setCheckable(True)
+            action.triggered.connect(lambda _checked=False, k=shape: self.set_shape(k))
+            group.addAction(action)
+            menu.insertAction(first, action)
+            self.shape_actions[shape] = action
+        menu.insertSeparator(first)
+
+    def _add_width_choices(self, menu: ColorMenu, kind: str) -> None:
+        """How thick the line is, under the colours."""
+        if not hasattr(self, "width_actions"):
+            self.width_actions: dict[str, dict[float, QAction]] = {}
+        menu.addSeparator()
+        widths = menu.addMenu(self.tr("Grosor"))
+        group = QActionGroup(widths)
+        names = (self.tr("Fino"), self.tr("Normal"), self.tr("Grueso"), self.tr("Muy grueso"))
+        self.width_actions[kind] = {}
+        for width, name in zip(WIDTHS, names, strict=True):
+            action = widths.addAction(name)
+            action.setCheckable(True)
+            action.triggered.connect(
+                lambda _checked=False, k=kind, w=width: self.set_line_width(k, w)
+            )
+            group.addAction(action)
+            self.width_actions[kind][width] = action
+
+    def set_shape(self, shape: str) -> None:
+        """Choose the shape that is drawn (arrow, line, box or oval) and take it."""
+        self.marker_styles.set_shape(shape)
+        self._line_style_chosen(SHAPE_TOOL)
+
+    def set_line_width(self, kind: str, width: float) -> None:
+        """Choose how thick the pen or the shapes draw, and take that tool."""
+        self.marker_styles.set_width(kind, width)
+        self._line_style_chosen(kind)
+
+    def _line_style_chosen(self, kind: str) -> None:
+        self.settings.set(MARKERS_SETTING, self.marker_styles.to_setting())
+        self._show_marker_styles()
+        if self.pdf_view.page_count and self.pdf_view.markup_tool != kind:
+            self.use_writing_tool(kind)
+
     def set_text_font(self, font: str) -> None:
         self.marker_styles.set_text_font(font)
         self._text_style_chosen()
@@ -504,6 +572,11 @@ class MainWindow(QMainWindow):
             action.setChecked(font == self.marker_styles.text_font)
         for size, action in self.text_size_actions.items():
             action.setChecked(size == self.marker_styles.text_size)
+        for shape, action in self.shape_actions.items():
+            action.setChecked(shape == self.marker_styles.shape)
+        for kind, actions in self.width_actions.items():
+            for width, action in actions.items():
+                action.setChecked(width == self.marker_styles.width_of(kind))
         for kind in STYLED_KINDS:
             style = self.marker_styles.of(kind)
             name = translate(self._feature_named(kind).name)
@@ -532,6 +605,12 @@ class MainWindow(QMainWindow):
         view.text_color = self.marker_styles.of(TEXT_BOX).color
         view.text_font = self.marker_styles.text_font
         view.text_size = self.marker_styles.text_size
+        pen, shapes = self.marker_styles.of(DRAW), self.marker_styles.of(SHAPE_TOOL)
+        view.draw_color, view.draw_opacity = pen.color, pen.opacity
+        view.draw_width = self.marker_styles.width_of(DRAW)
+        view.shape_color, view.shape_opacity = shapes.color, shapes.opacity
+        view.shape_width = self.marker_styles.width_of(SHAPE_TOOL)
+        view.shape_kind = self.marker_styles.shape
 
     def set_marker_color(self, kind: str, color: tuple[float, float, float]) -> None:
         """Choose the colour of a marking tool and use it at once.
@@ -1089,9 +1168,11 @@ class MainWindow(QMainWindow):
         self._refresh_edit_actions()
 
     def use_writing_tool(self, kind: str) -> None:
-        """Notes or text: with it in hand, a click on the page starts one there.
+        """Notes, text, pen, shapes or eraser: taken in hand, to use on the page.
 
-        It stays in hand until the button is pressed again (or Esc).
+        With the notes or the text, a click starts one there; the pen and the
+        shapes draw while the button is held; the eraser takes away what it is
+        passed over. It stays in hand until the button is pressed again (or Esc).
         """
         view = self.pdf_view
         if view.page_count == 0:
@@ -1101,12 +1182,17 @@ class MainWindow(QMainWindow):
         else:
             view.clear_selection()
             view.set_markup_tool(kind)
-            self.statusBar().showMessage(
-                self.tr("Haz clic donde quieras la nota (Esc: dejarlo).")
-                if kind == NOTE
-                else self.tr("Haz clic donde quieras escribir (Esc: dejarlo)."),
-                STATUS_MESSAGE_MS,
-            )
+            hints = {
+                NOTE: self.tr("Haz clic donde quieras la nota (Esc: dejarlo)."),
+                TEXT_BOX: self.tr("Haz clic donde quieras escribir (Esc: dejarlo)."),
+                DRAW: self.tr("Dibuja sobre la página con el botón pulsado (Esc: dejarlo)."),
+                SHAPE_TOOL: self.tr("Arrastra sobre la página para poner la forma (Esc: dejarlo)."),
+                ERASER: self.tr(
+                    "Pasa por encima de un dibujo, una marca o una nota para borrarlo "
+                    "(Esc: dejarlo)."
+                ),
+            }
+            self.statusBar().showMessage(hints[kind], STATUS_MESSAGE_MS)
         self._refresh_edit_actions()
 
     @staticmethod
@@ -1151,7 +1237,7 @@ class MainWindow(QMainWindow):
         for action in (self.redo_action, self.feature_actions["redo"]):
             action.setEnabled(view.can_redo)
         self.revert_action.setEnabled(view.can_undo)
-        for kind in STYLED_KINDS:
+        for kind in (*STYLED_KINDS, ERASER):
             action = self.feature_actions[kind]
             action.setCheckable(True)
             action.setChecked(view.markup_tool == kind)

@@ -397,7 +397,7 @@ Notas de la Fase 1:
 | 2.6b | **Versiones anteriores** y avisos que salen siempre (firmado, cambios fuertes, no se puede guardar, cambiado por otro programa) | Vuelvo a como estaba el PDF esta mañana; un PDF firmado nunca se guarda solo | ✅ (el aviso de cambios fuertes llega con cada herramienta que borra páginas, tapa datos o cambia el texto) |
 | 2.6c | **Ajustes de guardado**: qué hacer al cerrar (preguntar / guardar siempre), guardar solo mientras trabajo (desactivado por defecto), versiones y días que se conservan | Activo "guardar solo" y ya no me pregunta al cerrar | ✅ |
 | 2.7 | Notas adhesivas y cuadros de texto | Escribo notas y texto con la fuente, tamaño y color que quiero | ✅ (tres tipos de letra; mover y cambiar de tamaño llega con la 2.9) |
-| 2.8 | Dibujo a mano alzada, flechas, formas, borrador | Dibujo y borro sobre la página | ⬜ |
+| 2.8 | Dibujo a mano alzada, flechas, formas, borrador | Dibujo y borro sobre la página | ✅ (con ratón; lápiz y dedo llegan con la 2.11) |
 | 2.9 | Seleccionar, mover, redimensionar, copiar y borrar anotaciones | Corrijo una anotación mal puesta sin rehacerla | ⬜ |
 | 2.10 | Herramientas favoritas | Guardo "rotulador amarillo fino" y lo uso con un clic | ⬜ |
 | 2.11 | Lápiz y pantalla táctil | Subrayo con lápiz en una tableta sin que la mano pinte | ⬜ |
@@ -635,6 +635,33 @@ Notas de la Fase 2A:
   - Mover una nota o un texto ya puesto y cambiarle el tamaño llega con la 2.9.
   - El cuadro de texto nunca se sale de la página: si una línea no cabe, se
     parte por los espacios.
+- **2.8: dibujo a mano, flechas, formas y borrador (15/11/2026).**
+  - **Dibujar:** con el botón en la mano, se dibuja sobre la página con el
+    ratón pulsado. El trazo se ve mientras se hace y no parpadea al soltarlo.
+    Cada trazo es un paso de Deshacer. Un trazo no se sale de su página.
+  - **Formas:** flecha, línea, recuadro y óvalo. Se elige cuál en la flecha del
+    botón (empieza en "Flecha") y se pone arrastrando. Una forma diminuta (un
+    clic sin querer) no se pone.
+  - **Color, grosor y opacidad** de dibujo y de formas, cada uno el suyo, en la
+    flecha de su botón: grosor Fino, Normal, Grueso o Muy grueso (1, 2, 4 y
+    8 puntos). Se recuerdan. Con esto queda hecho el grosor aplazado en la 2.3.
+  - **Borrador:** quita **entero** lo que toca (un trazo, una forma, un
+    subrayado, una nota o un texto), con un clic o pasando por encima de
+    varios. No borra trocitos de un trazo: en un PDF estándar eso obligaría a
+    partirlo en pedazos, y con Deshacer se recupera cualquier cosa borrada.
+    En un recuadro o un óvalo hay que tocar el borde, no el hueco, para no
+    borrar sin querer lo que rodea.
+  - El borrador solo quita lo hecho con este programa; lo dibujado con otros
+    se respeta, como las notas (se revisará en la 2.9). De un subrayado que
+    ocupa dos páginas quita la parte de la página que se toca.
+  - Son anotaciones PDF estándar ("Ink", "Line", "Square" y "Circle").
+    Comprobado que se ven igual en el motor de Chrome/Edge
+    (`capturas/dibujo-en-chrome.png`); en Adobe Reader, pendiente de la prueba
+    manual.
+  - Con el dibujo, las formas o el borrador en la mano no se selecciona texto.
+    Esc suelta la herramienta (y, a medio trazo, descarta ese trazo).
+  - Pendiente para la 2.11: presión del lápiz, palma de la mano y dedos. Para
+    la 2.9: mover o cambiar de tamaño un dibujo ya hecho.
 
 ## Fase 2B – Documentos escaneados (OCR)
 | # | Tarea | Terminado cuando… | Estado |

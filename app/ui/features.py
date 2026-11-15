@@ -119,7 +119,7 @@ FEATURES: list[Feature] = [
         "shapes",
         STUDY,
         "Formas",
-        "Añadir flechas, líneas y recuadros",
+        "Añadir flechas, líneas, recuadros y óvalos",
         "rectángulo círculo",
     ),
     _f("eraser", STUDY, "Borrador", "Borrar dibujos y anotaciones", "goma eliminar quitar"),

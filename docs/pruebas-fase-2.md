@@ -189,3 +189,31 @@ En el modo **Estudiar**.
    textos están en su sitio, con su color y su letra, y la nota se puede leer.
 10. Cierra el programa a la fuerza con una nota sin guardar y ábrelo: ofrece
     recuperarla.
+
+## Tarea 2.8 – Dibujo, flechas, formas y borrador
+
+En el modo **Estudiar**.
+
+1. Pulsa **Dibujar** y dibuja en la página con el ratón pulsado: el trazo se
+   ve mientras lo haces y se queda al soltar, sin parpadear.
+2. En la flecha junto a **Dibujar**, elige color verde y grosor "Grueso".
+   Dibuja otra vez: sale verde y grueso. Baja la opacidad a la mitad y dibuja
+   sobre texto: el texto se lee a través.
+3. Pulsa **Deshacer** tres veces: los trazos se van de uno en uno. **Rehacer**
+   los devuelve.
+4. En la flecha junto a **Formas**, elige "Flecha" y arrastra: la punta queda
+   donde sueltas. Repite con "Línea", "Recuadro" y "Óvalo".
+5. Rodea un párrafo con un recuadro: el texto de dentro se sigue leyendo.
+6. Pulsa **Borrador**. Haz clic sobre un trazo: desaparece entero. Pasa con
+   el botón pulsado por encima de varias cosas: se borran todas. Haz clic en
+   el hueco de un recuadro: no se borra; en su borde: sí.
+7. Con el borrador, borra también un subrayado y una nota. **Deshacer** los
+   devuelve.
+8. A medio trazo pulsa Esc: el trazo no se pone. Pulsa Esc otra vez: sueltas
+   la herramienta.
+9. Gira la vista (Leer → Girar) y dibuja: el trazo queda donde lo dibujas.
+10. Guarda el PDF y ábrelo en **Edge** y en **Adobe Reader**: dibujos, flechas
+    y formas están en su sitio, con su color y su grosor.
+11. Cierra el programa a la fuerza con un dibujo sin guardar y ábrelo: ofrece
+    recuperarlo.
+12. Abre un PDF con dibujos hechos en otro programa: el borrador no los quita.
