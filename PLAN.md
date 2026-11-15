@@ -395,7 +395,7 @@ Notas de la Fase 1:
 | 2.5 | **Diario de recuperación** | Apago el ordenador a la fuerza mientras subrayo, lo enciendo y no he perdido nada | ✅ |
 | 2.6 | **Preguntar al cerrar** (Guardar / No guardar / Cancelar), "Volver a como estaba al abrirlo", recuperar cambios descartados, e indicador "Guardado / Cambios sin guardar" | Subrayo, cierro y me pregunta; si le doy a "No guardar" con prisa, aún puedo recuperarlo | ✅ |
 | 2.6b | **Versiones anteriores** y avisos que salen siempre (firmado, cambios fuertes, no se puede guardar, cambiado por otro programa) | Vuelvo a como estaba el PDF esta mañana; un PDF firmado nunca se guarda solo | ✅ (el aviso de cambios fuertes llega con cada herramienta que borra páginas, tapa datos o cambia el texto) |
-| 2.6c | **Ajustes de guardado**: qué hacer al cerrar (preguntar / guardar siempre), guardar solo mientras trabajo (desactivado por defecto), versiones y días que se conservan | Activo "guardar solo" y ya no me pregunta al cerrar | ⬜ |
+| 2.6c | **Ajustes de guardado**: qué hacer al cerrar (preguntar / guardar siempre), guardar solo mientras trabajo (desactivado por defecto), versiones y días que se conservan | Activo "guardar solo" y ya no me pregunta al cerrar | ✅ |
 | 2.7 | Notas adhesivas y cuadros de texto | Escribo notas y texto con la fuente, tamaño y color que quiero | ⬜ |
 | 2.8 | Dibujo a mano alzada, flechas, formas, borrador | Dibujo y borro sobre la página | ⬜ |
 | 2.9 | Seleccionar, mover, redimensionar, copiar y borrar anotaciones | Corrijo una anotación mal puesta sin rehacerla | ⬜ |
@@ -584,6 +584,30 @@ Notas de la Fase 2A:
     (borrar páginas, tapar datos, cambiar el texto) se hará con cada una de
     esas herramientas (Fases 5 y 6). El archivo de solo lectura ya ofrecía
     "Guardar como" desde la 2.1.
+- **2.6c: ajustes de guardado (14/11/2026).**
+  - La ventana de Ajustes tiene ahora dos pestañas, "General" y "Guardado",
+    para que quepa en pantallas pequeñas.
+  - **Al cerrar con cambios:** *Preguntar* (por defecto), *Guardar siempre* o
+    *No guardar nunca sin que lo pida*. Con "No guardar nunca" cierra sin tocar
+    el PDF y los cambios quedan en "Recuperar cambios descartados".
+  - **Guardar solo mientras trabajo:** desactivado por defecto. Activado,
+    guarda tras un rato sin cambios (10 s, 30 s, 1, 2 o 5 minutos; por defecto
+    30 s) y al cambiar de pestaña. Cada cambio vuelve a empezar la cuenta, así
+    que nunca guarda mientras se edita, ni mientras hay una pregunta abierta.
+  - Con "guardar solo" activado, al cerrar también guarda sin preguntar (la
+    otra opción queda apagada mientras tanto).
+  - **Nunca se guarda solo** un PDF firmado, uno que otro programa ha cambiado
+    o uno en carpeta temporal: lo dice abajo y espera a que el usuario pulse
+    Guardar, que es cuando sale el aviso. "Guardar siempre" al cerrar también
+    pasa por ese aviso.
+  - Si un guardado automático falla (archivo bloqueado…), la ventana que lo
+    explica sale una sola vez; luego lo reintenta tras el siguiente cambio y
+    solo lo dice abajo. Los cambios siguen en el diario.
+  - **Versiones anteriores:** cuántas por documento (3, 5, 10, 20 o 50) y
+    cuánto pueden ocupar entre todas (250 MB a 5 GB). Bajar el límite no borra
+    nada en el momento: se aplica en el siguiente guardado.
+  - **Cambios descartados:** 1, 3, 7, 14 o 30 días.
+  - Un valor raro en el archivo de ajustes cuenta como el valor por defecto.
 
 ## Fase 2B – Documentos escaneados (OCR)
 | # | Tarea | Terminado cuando… | Estado |

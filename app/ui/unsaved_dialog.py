@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.core.journal import KEEP_DISCARDED_DAYS
+from app.ui.when import days_text
 
 SAVE = "save"
 DISCARD = "discard"
@@ -22,7 +23,12 @@ class UnsavedDialog(QDialog):
     ``choice`` holds the answer; closing the dialog any other way is "Cancelar".
     """
 
-    def __init__(self, names: list[str], parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        names: list[str],
+        parent: QWidget | None = None,
+        days: int = KEEP_DISCARDED_DAYS,
+    ) -> None:
         super().__init__(parent)
         self.choice = CANCEL
         self.setWindowTitle(self.tr("Cambios sin guardar"))
@@ -52,8 +58,8 @@ class UnsavedDialog(QDialog):
         note = QLabel(
             self.tr(
                 "Si no los guardas, el PDF se queda como estaba. Los cambios se conservan "
-                "{0} días en Archivo → Recuperar cambios descartados."
-            ).format(KEEP_DISCARDED_DAYS)
+                "{0} en Archivo → Recuperar cambios descartados."
+            ).format(days_text(days))
         )
         note.setObjectName("dialogNote")
         note.setWordWrap(True)

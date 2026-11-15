@@ -3,6 +3,8 @@
 Every change is applied and saved at once; there is nothing to accept. The
 only exception is the size of the interface, which needs a restart: the window
 says so and offers to do it.
+
+Two tabs, so that the window fits in a small screen: "General" and "Guardado".
 """
 
 from PySide6.QtCore import Qt
@@ -15,16 +17,18 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from app.core import file_association
+from app.core import file_association, save_settings
 from app.core.history import RESTORE_SETTING
 from app.core.interface_size import NORMAL_SIZE, SIZE_SETTING, SIZES, wanted_size
 from app.core.paths import is_portable
 from app.core.updates import CHECK_SETTING
 from app.ui.theme import Paper, Theme
+from app.ui.when import days_text
 
 
 class SettingsDialog(QDialog):
@@ -35,8 +39,17 @@ class SettingsDialog(QDialog):
         self.setWindowTitle(self.tr("Ajustes"))
         self.setMinimumWidth(460)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(22, 18, 22, 18)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(14, 12, 14, 12)
+        outer.setSpacing(10)
+        self.tabs = QTabWidget()
+        outer.addWidget(self.tabs, 1)
+        general = QWidget()
+        self.tabs.addTab(general, self.tr("General"))
+        self.tabs.addTab(self._build_saving(), self.tr("Guardado"))
+
+        layout = QVBoxLayout(general)
+        layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(10)
 
         # ---- appearance ----
@@ -158,8 +171,197 @@ class SettingsDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.button(QDialogButtonBox.StandardButton.Close).setText(self.tr("Cerrar"))
         buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        outer.addWidget(buttons)
         self._refresh_restart_row()
+        # Notes that take several lines make a page taller than it says: give
+        # the tabs the height the tallest one really needs.
+        inside = self.minimumWidth() - 40
+        self.tabs.setMinimumHeight(
+            max(
+                self.tabs.widget(index).layout().minimumHeightForWidth(inside)
+                for index in range(self.tabs.count())
+            )
+            + self.tabs.tabBar().sizeHint().height()
+            + 8
+        )
+
+    # ---- saving ------------------------------------------------------------
+
+    def _build_saving(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(10)
+        settings = self.settings
+
+        intro = QLabel(
+            self.tr(
+                "No hace falta tocar nada: tal como viene, el programa nunca cambia un PDF "
+                "sin que se lo pidas, y lo que haces no se pierde aunque se vaya la luz."
+            )
+        )
+        intro.setObjectName("dialogNote")
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        layout.addWidget(self._heading(self.tr("Al cerrar con cambios sin guardar")))
+        self.close_box = QComboBox()
+        self.close_box.setAccessibleName(self.tr("Al cerrar con cambios sin guardar"))
+        for choice, name in (
+            (save_settings.ASK, self.tr("Preguntar qué hacer")),
+            (save_settings.SAVE, self.tr("Guardar siempre, sin preguntar")),
+            (save_settings.DISCARD, self.tr("No guardar nunca sin que lo pida")),
+        ):
+            self.close_box.addItem(name, choice)
+        self.close_box.setCurrentIndex(
+            self.close_box.findData(save_settings.close_choice(settings))
+        )
+        self.close_box.activated.connect(
+            lambda _index: self._set(save_settings.CLOSE_SETTING, self.close_box.currentData())
+        )
+        layout.addWidget(self.close_box)
+        self.close_note = QLabel()
+        self.close_note.setObjectName("dialogNote")
+        self.close_note.setWordWrap(True)
+        layout.addWidget(self.close_note)
+
+        layout.addWidget(self._heading(self.tr("Guardar solo mientras trabajo")))
+        self.autosave_box = QCheckBox(self.tr("&Guardar solo en el PDF cuando paro de editar"))
+        self.autosave_box.setToolTip(
+            self.tr(
+                "Guarda tras un rato sin hacer cambios y al cambiar de pestaña; nunca "
+                "mientras editas. Un PDF firmado no se guarda solo nunca."
+            )
+        )
+        self.autosave_box.setChecked(save_settings.autosave_wanted(settings))
+        self.autosave_box.toggled.connect(lambda on: self._set(save_settings.AUTOSAVE_SETTING, on))
+        layout.addWidget(self.autosave_box)
+        form = QFormLayout()
+        form.setHorizontalSpacing(14)
+        form.setVerticalSpacing(10)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.autosave_seconds_box = QComboBox()
+        self.autosave_seconds_box.setAccessibleName(self.tr("Tiempo sin editar antes de guardar"))
+        for seconds in save_settings.AUTOSAVE_SECONDS_CHOICES:
+            name = (
+                self.tr("{0} segundos").format(seconds)
+                if seconds < 60
+                else self.tr("1 minuto")
+                if seconds == 60
+                else self.tr("{0} minutos").format(seconds // 60)
+            )
+            self.autosave_seconds_box.addItem(name, seconds)
+        self._choose(self.autosave_seconds_box, save_settings.autosave_seconds(settings))
+        self.autosave_seconds_box.activated.connect(
+            lambda _index: self._set(
+                save_settings.AUTOSAVE_SECONDS_SETTING, self.autosave_seconds_box.currentData()
+            )
+        )
+        form.addRow(self.tr("Guardar tras estar sin &editar:"), self.autosave_seconds_box)
+        layout.addLayout(form)
+
+        layout.addWidget(self._heading(self.tr("Versiones anteriores")))
+        form = QFormLayout()
+        form.setHorizontalSpacing(14)
+        form.setVerticalSpacing(10)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.versions_count_box = QComboBox()
+        self.versions_count_box.setAccessibleName(self.tr("Versiones de cada documento"))
+        for count in save_settings.VERSIONS_COUNT_CHOICES:
+            self.versions_count_box.addItem(self.tr("{0} versiones").format(count), count)
+        self._choose(self.versions_count_box, save_settings.versions_count(settings))
+        self.versions_count_box.activated.connect(
+            lambda _index: self._set(
+                save_settings.VERSIONS_COUNT_SETTING, self.versions_count_box.currentData()
+            )
+        )
+        form.addRow(self.tr("De cada &documento se conservan:"), self.versions_count_box)
+        self.versions_room_box = QComboBox()
+        self.versions_room_box.setAccessibleName(self.tr("Espacio para las versiones"))
+        for megabytes in save_settings.VERSIONS_ROOM_CHOICES:
+            name = (
+                self.tr("{0} MB").format(megabytes)
+                if megabytes < 1024
+                else self.tr("{0} GB").format(megabytes // 1024)
+            )
+            self.versions_room_box.addItem(name, megabytes)
+        self._choose(self.versions_room_box, save_settings.versions_room_mb(settings))
+        self.versions_room_box.activated.connect(
+            lambda _index: self._set(
+                save_settings.VERSIONS_ROOM_SETTING, self.versions_room_box.currentData()
+            )
+        )
+        form.addRow(self.tr("Entre todas pueden &ocupar:"), self.versions_room_box)
+        layout.addLayout(form)
+        versions_note = QLabel(
+            self.tr("Cuando se pasa de ahí, se borran las más antiguas la próxima vez que guardes.")
+        )
+        versions_note.setObjectName("dialogNote")
+        versions_note.setWordWrap(True)
+        layout.addWidget(versions_note)
+
+        layout.addWidget(self._heading(self.tr("Cambios descartados")))
+        form = QFormLayout()
+        form.setHorizontalSpacing(14)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.discarded_days_box = QComboBox()
+        self.discarded_days_box.setAccessibleName(
+            self.tr("Días que se conservan los cambios descartados")
+        )
+        self.discarded_days_box.setToolTip(
+            self.tr(
+                "Lo que dejas sin guardar al cerrar sigue en Archivo → Recuperar cambios "
+                "descartados durante este tiempo."
+            )
+        )
+        for days in save_settings.DISCARDED_DAYS_CHOICES:
+            self.discarded_days_box.addItem(days_text(days), days)
+        self._choose(self.discarded_days_box, save_settings.discarded_days(settings))
+        self.discarded_days_box.activated.connect(
+            lambda _index: self._set(
+                save_settings.DISCARDED_DAYS_SETTING, self.discarded_days_box.currentData()
+            )
+        )
+        form.addRow(self.tr("Se &conservan:"), self.discarded_days_box)
+        layout.addLayout(form)
+
+        layout.addStretch(1)
+        self._refresh_saving()
+        return page
+
+    @staticmethod
+    def _choose(box: QComboBox, value) -> None:
+        box.setCurrentIndex(box.findData(value))
+
+    def _set(self, name: str, value) -> None:
+        """A saving preference has been chosen: keep it and follow it at once."""
+        self.settings.set(name, value)
+        self.window_.apply_save_settings()
+        self._refresh_saving()
+
+    def _refresh_saving(self) -> None:
+        autosave = self.autosave_box.isChecked()
+        # With saving by itself, closing saves too: there is nothing to choose.
+        self.close_box.setEnabled(not autosave)
+        self.autosave_seconds_box.setEnabled(autosave)
+        days = days_text(save_settings.discarded_days(self.settings))
+        if autosave:
+            note = self.tr(
+                "Con «Guardar solo» activado, al cerrar también se guarda sin preguntar."
+            )
+        elif self.close_box.currentData() == save_settings.SAVE:
+            note = self.tr(
+                "Si no querías guardar algo, está en Archivo → Versiones anteriores. "
+                "Un PDF firmado sigue preguntando antes."
+            )
+        elif self.close_box.currentData() == save_settings.DISCARD:
+            note = self.tr(
+                "Cierra sin preguntar y sin tocar el PDF. Los cambios se conservan {0} en "
+                "Archivo → Recuperar cambios descartados."
+            ).format(days)
+        else:
+            note = self.tr("Te pregunta: Guardar / No guardar / Cancelar.")
+        self.close_note.setText(note)
 
     def _heading(self, text: str) -> QLabel:
         label = QLabel(text)

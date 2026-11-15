@@ -141,3 +141,26 @@ firmado sirve; trabaja sobre una copia).
    ofrece guardarlo en una carpeta tuya.
 5. Con el PDF firmado y cambios pendientes, cierra la pestaña y elige Guardar:
    sale el mismo aviso; si cancelas, la pestaña no se cierra.
+
+## Tarea 2.6c – Ajustes de guardado
+
+En **Ajustes → pestaña Guardado**. Sin tocar nada, todo sigue como antes.
+
+1. En "Al cerrar con cambios sin guardar" elige **Guardar siempre**. Resalta
+   algo y cierra la pestaña: se guarda y se cierra sin preguntar.
+2. Elige **No guardar nunca sin que lo pida**. Resalta algo y cierra la pestaña:
+   se cierra sin preguntar y el PDF queda como estaba. En **Archivo → Recuperar
+   cambios descartados** están los cambios.
+3. Vuelve a **Preguntar qué hacer** y marca **Guardar solo en el PDF cuando paro
+   de editar**, con 10 segundos. Resalta algo y no toques nada: a los 10
+   segundos el indicador pasa de "Cambios sin guardar" a "Guardado".
+4. Resalta varias cosas seguidas, sin parar más de 10 segundos: no guarda hasta
+   que paras.
+5. Con dos PDFs abiertos, resalta en uno y cambia a la otra pestaña: el primero
+   se guarda al momento (se va el punto ● de su pestaña).
+6. Con "guardar solo" activado, abre un PDF firmado y resalta algo: no se guarda
+   solo y lo dice abajo. Al pulsar Guardar sale el aviso de la firma.
+7. Con "guardar solo" activado, cierra una pestaña con cambios: guarda y cierra
+   sin preguntar.
+8. Cambia "Se conservan" a 1 día: la pregunta de cerrar dice "1 día".
+9. Desmarca "guardar solo" para dejarlo como estaba.
