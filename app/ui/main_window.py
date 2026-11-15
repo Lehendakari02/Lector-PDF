@@ -62,6 +62,7 @@ from app.core.ocr import OcrError, OcrJob, OcrPage
 from app.core.paths import data_dir, is_portable
 from app.core.settings import Settings
 from app.core.signing import PasswordProtected, SigningError, sign_pdf
+from app.core.tool_keys import FAVOURITE_KEYS, TOOL_KEYS, tool_keys_wanted
 from app.core.updates import Release
 from app.core.versions import FOLDER_NAME as VERSIONS_FOLDER
 from app.core.versions import Version, VersionError, Versions
@@ -198,6 +199,7 @@ class MainWindow(QMainWindow):
         self.restart_wanted = False
 
         self._build_feature_actions()
+        self._build_tool_keys()
         self._build_mode_bar()
         self._build_tool_bars()
         self._build_menus()
@@ -325,6 +327,49 @@ class MainWindow(QMainWindow):
         open_action = self.feature_actions["open"]
         open_action.setShortcut(QKeySequence(QKeySequence.StandardKey.Open))
         open_action.setToolTip(f"{open_action.toolTip()} (Ctrl+O)")
+
+    def _build_tool_keys(self) -> None:
+        """A key for each tool and a digit for each favourite, while the page
+        has the keyboard (every page gets them in ``_new_page``)."""
+        self.tool_key_actions: dict[str, QAction] = {}
+        for feature_id in TOOL_KEYS:
+            action = QAction(translate(self._feature_named(feature_id).name), self)
+            action.setShortcutContext(Qt.ShortcutContext.WidgetShortcut)
+            action.triggered.connect(lambda _checked=False, f=feature_id: self.use_tool_key(f))
+            self.tool_key_actions[feature_id] = action
+        self.favourite_key_actions: list[QAction] = []
+        for index, _key in enumerate(FAVOURITE_KEYS):
+            action = QAction(self.tr("Herramienta favorita {0}").format(index + 1), self)
+            action.setShortcutContext(Qt.ShortcutContext.WidgetShortcut)
+            action.triggered.connect(lambda _checked=False, i=index: self.use_favourite_key(i))
+            self.favourite_key_actions.append(action)
+        self.apply_tool_keys()
+
+    def apply_tool_keys(self) -> None:
+        """Follow what the settings say now about the keys of the tools."""
+        wanted = tool_keys_wanted(self.settings)
+        for feature_id, key in TOOL_KEYS.items():
+            self.tool_key_actions[feature_id].setShortcut(QKeySequence(key if wanted else ""))
+            tip = translate(self._feature_named(feature_id).description)
+            # The key is said where the tool is, so nobody has to learn a list.
+            tip = self.tr("{0} (tecla {1})").format(tip, key) if wanted else tip
+            self.feature_actions[feature_id].setToolTip(tip)
+        for action, key in zip(self.favourite_key_actions, FAVOURITE_KEYS, strict=True):
+            action.setShortcut(QKeySequence(key if wanted else ""))
+
+    def use_tool_key(self, feature_id: str) -> None:
+        """The key of a tool was pressed on the page: the same as its button,
+        which is shown (the tools of Estudiar come to sight)."""
+        if self.documents and self._mode is not Mode.STUDY:
+            self.set_mode(Mode.STUDY)
+        self.feature_handlers[feature_id]()
+
+    def use_favourite_key(self, index: int) -> None:
+        if index >= len(self.favourites):
+            return
+        if self.documents and self._mode is not Mode.STUDY:
+            self.set_mode(Mode.STUDY)
+        self.use_favourite(index)
 
     def _mark_pending_features(self) -> None:
         """Functions that are not built yet look fainter and say so."""
@@ -2176,6 +2221,7 @@ class MainWindow(QMainWindow):
         ):
             action.setShortcutContext(Qt.ShortcutContext.WidgetShortcut)
             view.addAction(action)
+        view.addActions([*self.tool_key_actions.values(), *self.favourite_key_actions])
         view.history_changed.connect(lambda p=page: self._edit_state_changed(p))
         view.history_changed.connect(self._schedule_autosave)
         view.modified_changed.connect(lambda _modified: self._schedule_autosave())

@@ -328,3 +328,20 @@ algún dibujo.
    anotaciones a la vista, la casilla sale marcada.
 9. También está en **Menú → Ver** y en el buscador de funciones (Ctrl+K,
    escribe "ocultar").
+
+## Tarea 2.13 – Una tecla para cada herramienta
+
+Con un documento abierto y habiendo hecho clic en la página.
+
+1. Pulsa **D**: se coge Dibujar (su botón queda pulsado). Pulsa **B**: el
+   borrador. Pulsa **B** otra vez, o **Esc**: se suelta.
+2. Prueba las demás: **R** resaltar, **S** subrayar, **T** tachar, **N** nota,
+   **X** cuadro de texto, **F** formas, **O** ocultar y mostrar anotaciones.
+3. Selecciona una frase y pulsa **R**: queda resaltada.
+4. Desde el modo Leer pulsa **S**: pasa a Estudiar con Subrayar en la mano.
+5. Guarda dos herramientas favoritas y pulsa **1** y **2**: se coge cada una.
+6. Haz clic en el buscador y escribe "dibujar": se escriben las letras, no se
+   coge ninguna herramienta. Lo mismo escribiendo una nota.
+7. Deja el ratón sobre el botón Resaltar: la ayuda dice "(tecla R)".
+8. **Ajustes → General → Teclado:** quita "Una tecla para cada herramienta".
+   Las letras ya no hacen nada en la página.

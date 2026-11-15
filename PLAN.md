@@ -402,7 +402,7 @@ Notas de la Fase 1:
 | 2.10 | Herramientas favoritas | Guardo "rotulador amarillo fino" y lo uso con un clic | ✅ |
 | 2.11 | Lápiz y pantalla táctil | Subrayo con lápiz en una tableta sin que la mano pinte | ✅ (hecho sin tableta: falta la prueba con un lápiz y una pantalla táctil de verdad) |
 | 2.12 | Mostrar/ocultar anotaciones (también al imprimir/exportar) | Con un botón veo el documento limpio | ✅ (exportar llegará con la Fase 5) |
-| 2.13 | Atajos de teclado para cada herramienta | Cambio de herramienta sin usar el ratón | ⬜ |
+| 2.13 | Atajos de teclado para cada herramienta | Cambio de herramienta sin usar el ratón | ✅ |
 | 2.14 | Versión 0.2 | Estudio un tema completo con el programa durante una sesión real | ⬜ |
 
 
@@ -770,6 +770,26 @@ Notas de la Fase 2A:
   - Las miniaturas del panel lateral siguen enseñando las anotaciones.
   - Pendiente: lo mismo al **exportar** páginas como imagen, cuando exista la
     exportación (Fase 5).
+- **2.13: una tecla para cada herramienta (15/11/2026).**
+  - Con el documento delante, una sola tecla coge cada herramienta: **R**
+    resaltar, **S** subrayar, **T** tachar, **N** nota, **X** cuadro de texto
+    (la T ya es de tachar), **D** dibujar, **F** formas, **B** borrador y
+    **O** ocultar o mostrar las anotaciones. Es la inicial del nombre siempre
+    que estaba libre.
+  - Hacen lo mismo que su botón: con texto seleccionado, R, S y T lo marcan
+    directamente; la misma tecla otra vez suelta la herramienta, igual que Esc.
+  - Los **números 1 a 9** cogen las herramientas favoritas, en el orden de su
+    barra.
+  - Si se pulsan desde otro modo, se pasa a Estudiar para que se vea qué
+    herramienta se lleva en la mano.
+  - Solo valen cuando el teclado está en el documento: en el buscador o
+    escribiendo una nota, una letra sigue siendo una letra.
+  - La tecla de cada herramienta se dice en la ayuda que sale al dejar el ratón
+    sobre su botón ("tecla R"), para no tener que aprenderse una lista.
+  - **Ajuste nuevo** (Ajustes → General → Teclado): "Una tecla para cada
+    herramienta", activado. Quien pulse teclas sin querer puede quitarlo.
+  - Las teclas son fijas; elegir cada uno las suyas queda como idea si se echa
+    de menos.
 
 ## Fase 2B – Documentos escaneados (OCR)
 | # | Tarea | Terminado cuando… | Estado |
