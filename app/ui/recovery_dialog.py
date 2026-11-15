@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.core.journal import KEEP_DISCARDED_DAYS, Pending
-from app.ui.when import when_text
+from app.ui.when import days_text, when_text
 
 
 class RecoveryDialog(QDialog):
@@ -27,7 +27,13 @@ class RecoveryDialog(QDialog):
     ``chosen`` holds what has to be recovered (empty if nothing).
     """
 
-    def __init__(self, items: list[Pending], crashed: bool, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        items: list[Pending],
+        crashed: bool,
+        parent: QWidget | None = None,
+        days: int = KEEP_DISCARDED_DAYS,
+    ) -> None:
         super().__init__(parent)
         self.items = list(items)
         self.crashed = crashed
@@ -82,13 +88,10 @@ class RecoveryDialog(QDialog):
         layout.addWidget(note)
         self.keep_note = QLabel(
             self.tr(
-                "Si eliges «Ahora no», se conservan {0} días en "
-                "Archivo → Recuperar cambios descartados."
-            ).format(KEEP_DISCARDED_DAYS)
+                "Si eliges «Ahora no», se conservan {0} en Archivo → Recuperar cambios descartados."
+            ).format(days_text(days))
             if crashed
-            else self.tr("Los cambios descartados se conservan {0} días.").format(
-                KEEP_DISCARDED_DAYS
-            )
+            else self.tr("Los cambios descartados se conservan {0}.").format(days_text(days))
         )
         self.keep_note.setObjectName("dialogNote")
         self.keep_note.setWordWrap(True)

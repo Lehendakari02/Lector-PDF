@@ -10,6 +10,7 @@ from PySide6.QtCore import QEvent, QSize, Qt, QTimer, qVersion
 from PySide6.QtGui import QAction, QActionGroup, QGuiApplication, QKeyEvent, QKeySequence
 from PySide6.QtPrintSupport import QPrinter, QPrinterInfo
 from PySide6.QtWidgets import (
+    QApplication,
     QFileDialog,
     QFrame,
     QGridLayout,
@@ -31,7 +32,7 @@ from PySide6.QtWidgets import (
 )
 
 from app import APP_NAME, BUILD_LABEL, __version__
-from app.core import save_checks, saving
+from app.core import save_checks, save_settings, saving
 from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
 from app.core.document import PdfDocument, PdfOpenError, engine_version
 from app.core.error_log import running_from_source_or_test_build
@@ -124,6 +125,13 @@ class MainWindow(QMainWindow):
         self.journal = Journal(self.settings.path.parent / JOURNAL_FOLDER)
         # The safety net under "Guardar": how each PDF was before it was saved.
         self.versions = Versions(self.settings.path.parent / VERSIONS_FOLDER)
+        # Saving by itself, only for whoever turns it on: after a while without
+        # changes, never while editing.
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.setSingleShot(True)
+        self._autosave_timer.timeout.connect(self._autosave)
+        self._front_page: DocumentPage | None = None  # the one a tab change leaves
+        self.apply_save_settings()
         self._version_not_kept = False
         self._versioned: set[str] = set()  # files whose version was kept in this session
         # For the tests: the answer to a warning before saving, without the question
@@ -1116,12 +1124,23 @@ class MainWindow(QMainWindow):
     # ---- closing with changes not saved ------------------------------------
 
     def _ask_unsaved(self, pages: list[DocumentPage]) -> str:
-        """Guardar / No guardar / Cancelar for these documents: what the user answers."""
+        """Guardar / No guardar / Cancelar for these documents: what the user answers.
+
+        Whoever chose in the settings to save always, or never to be asked, is
+        not asked. The warnings before saving (a signed PDF…) come up all the same.
+        """
         if self.unsaved_answer is not None:
             return self.unsaved_answer
+        wanted = save_settings.when_closing(self.settings)
+        if wanted == save_settings.SAVE:
+            return SAVE
+        if wanted == save_settings.DISCARD:
+            return DISCARD  # kept some days in "Recuperar cambios descartados"
         if not self.show_problem_dialogs:
             return DISCARD  # nobody to ask (automatic checks)
-        dialog = UnsavedDialog([page.title for page in pages], self)
+        dialog = UnsavedDialog(
+            [page.title for page in pages], self, save_settings.discarded_days(self.settings)
+        )
         try:
             dialog.exec()
             return dialog.choice
@@ -1287,7 +1306,66 @@ class MainWindow(QMainWindow):
         self._start_saving(page, target)
         return True
 
-    def _start_saving(self, page: DocumentPage, target: Path | None) -> None:
+    # ---- the saving settings ---------------------------------------------------
+
+    def apply_save_settings(self) -> None:
+        """Follow what the settings say now about versions and saving by itself."""
+        self.versions.max_per_document = save_settings.versions_count(self.settings)
+        self.versions.max_total_bytes = save_settings.versions_room_bytes(self.settings)
+        self._autosave_timer.setInterval(save_settings.autosave_seconds(self.settings) * 1000)
+        if not save_settings.autosave_wanted(self.settings):
+            self._autosave_timer.stop()
+        elif any(page.view.modified for page in getattr(self, "documents", [])):
+            self._autosave_timer.start()
+
+    def _schedule_autosave(self) -> None:
+        """A change has just been made: count the quiet time again from now."""
+        if save_settings.autosave_wanted(self.settings):
+            self._autosave_timer.start()
+
+    def _autosave(self) -> None:
+        """The quiet time has passed: save what is pending, without asking anything."""
+        if QApplication.activeModalWidget() is not None or self._saving_to_close:
+            self._autosave_timer.start()  # a question is open: later
+            return
+        for page in list(self.documents):
+            self._autosave_page(page)
+
+    def _autosave_page(self, page: DocumentPage) -> bool:
+        """Save this document by itself if it is wanted and nothing advises against it.
+
+        A signed PDF, a file changed by another program or one in a temporary
+        folder is never saved by itself: that is asked when the user saves.
+        """
+        if not save_settings.autosave_wanted(self.settings):
+            return False
+        if page not in self.documents or page.path is None:
+            return False
+        if not page.view.modified or page.view.saving:
+            return False
+        reasons = [r for r in self._save_warnings(page) if r not in page.accepted_warnings]
+        if reasons:
+            if not page.autosave_told:
+                page.autosave_told = True
+                why = {
+                    save_checks.SIGNED: self.tr("está firmado"),
+                    save_checks.CHANGED_OUTSIDE: self.tr("otro programa ha cambiado el archivo"),
+                    save_checks.TEMPORARY: self.tr("está en una carpeta temporal"),
+                }[reasons[0]]
+                self.statusBar().showMessage(
+                    self.tr("«{0}» no se guarda solo: {1}. Guárdalo tú con Guardar.").format(
+                        page.title, why
+                    ),
+                    0,
+                )
+            return False
+        self._start_saving(page, None, by_itself=True)
+        return True
+
+    def _start_saving(
+        self, page: DocumentPage, target: Path | None, by_itself: bool = False
+    ) -> None:
+        page.saving_by_itself = by_itself
         self._keep_version(target if target is not None else page.path)
         self.statusBar().showMessage(self.tr("Guardando…"))
         page.view.save(target)
@@ -1420,6 +1498,7 @@ class MainWindow(QMainWindow):
                 self._save_session()
             if page is self.current_document:
                 self.setWindowTitle(f"{page.title} – {APP_NAME}")
+        page.saving_by_itself = page.autosave_failed = page.autosave_told = False
         page.stamp = save_checks.stamp_of(path)  # as we left it: ours, not another program's
         # If another program changes it again, that deserves asking again.
         page.accepted_warnings.discard(save_checks.CHANGED_OUTSIDE)
@@ -1456,6 +1535,13 @@ class MainWindow(QMainWindow):
         text = self.tr("{0}\n\nNo se ha perdido nada: tus cambios siguen aquí.").format(reason)
         title = self.tr("No se ha podido guardar")
         self.statusBar().showMessage(f"{title}. {reason}", STATUS_MESSAGE_MS)
+        if page.saving_by_itself:
+            # Saving by itself tries again after the next change; the window
+            # explaining it comes up the first time only.
+            page.saving_by_itself = False
+            again, page.autosave_failed = page.autosave_failed, True
+            if again:
+                return
         if not self.show_problem_dialogs:
             return
         box = QMessageBox(QMessageBox.Icon.Warning, title, text, parent=self)
@@ -1686,6 +1772,8 @@ class MainWindow(QMainWindow):
             action.setShortcutContext(Qt.ShortcutContext.WidgetShortcut)
             view.addAction(action)
         view.history_changed.connect(lambda p=page: self._edit_state_changed(p))
+        view.history_changed.connect(self._schedule_autosave)
+        view.modified_changed.connect(lambda _modified: self._schedule_autosave())
         view.markup_tool_changed.connect(lambda _kind, p=page: self._edit_state_changed(p))
         view.selection_changed.connect(lambda _has, p=page: self._edit_state_changed(p))
         view.edit_failed.connect(self._edit_failed)
@@ -1837,7 +1925,7 @@ class MainWindow(QMainWindow):
         Called when the program starts. Returns how many documents got their
         changes back. Saying no does not lose them: they are set aside some days.
         """
-        self.journal.forget_old()
+        self.journal.forget_old(save_settings.discarded_days(self.settings))
         pending = self.journal.pending()
         if not pending:
             return 0
@@ -1846,7 +1934,12 @@ class MainWindow(QMainWindow):
         elif not self.show_problem_dialogs:
             return 0  # nobody to ask (automatic checks): they stay where they are
         else:
-            dialog = RecoveryDialog(pending, crashed=True, parent=self)
+            dialog = RecoveryDialog(
+                pending,
+                crashed=True,
+                parent=self,
+                days=save_settings.discarded_days(self.settings),
+            )
             try:
                 dialog.exec()
                 wanted = bool(dialog.chosen)
@@ -1866,8 +1959,13 @@ class MainWindow(QMainWindow):
 
     def choose_discarded_changes(self) -> None:
         """ "Archivo → Recuperar cambios descartados": choose one and bring it back."""
-        self.journal.forget_old()
-        dialog = RecoveryDialog(self.journal.discarded(), crashed=False, parent=self)
+        self.journal.forget_old(save_settings.discarded_days(self.settings))
+        dialog = RecoveryDialog(
+            self.journal.discarded(),
+            crashed=False,
+            parent=self,
+            days=save_settings.discarded_days(self.settings),
+        )
         try:
             dialog.exec()
             chosen = list(dialog.chosen)
@@ -2047,6 +2145,9 @@ class MainWindow(QMainWindow):
     def _tab_changed(self, _index: int) -> None:
         """Another document is in front (or none): show it and follow it."""
         page = self.current_document
+        left, self._front_page = self._front_page, page if self.documents else None
+        if left is not None and left is not page:
+            self._autosave_page(left)  # "guardar solo" also saves when leaving a tab
         if self.documents:
             self.pages.setCurrentWidget(page)
             self.setWindowTitle(f"{page.title} – {APP_NAME}")
@@ -2445,6 +2546,7 @@ class MainWindow(QMainWindow):
             self._print_run.cancel()
         self.updater.cancel()
         self._place_timer.stop()
+        self._autosave_timer.stop()
         for page in self.documents:
             self._remember_place(page)
             self._set_changes_aside(page)  # "No guardar": recoverable for some days

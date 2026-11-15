@@ -32,6 +32,12 @@ class DocumentPage(QWidget):
         self.stamp = None
         # Warnings about saving already answered with "save here anyway".
         self.accepted_warnings: set[str] = set()
+        # Saving by itself ("guardar solo"): whether the saving going on was
+        # started by the program, whether the last one failed (said once, not
+        # at every try) and whether it has been said why it is not done.
+        self.saving_by_itself = False
+        self.autosave_failed = False
+        self.autosave_told = False
         self.slowest_page = 0.0  # seconds, for the drawing figure of test builds
         self.mode = Mode.READ  # the work mode this document is used in
         self.view = PdfView()

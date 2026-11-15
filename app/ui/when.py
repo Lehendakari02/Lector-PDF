@@ -21,6 +21,13 @@ def when_text(moment: float, now: float | None = None) -> str:
     )
 
 
+def days_text(days: int) -> str:
+    """A number of days in words: "1 día", "7 días"."""
+    if days == 1:
+        return QCoreApplication.translate("When", "1 día")
+    return QCoreApplication.translate("When", "{0} días").format(days)
+
+
 def size_text(size: int) -> str:
     """A file size in words: "850 KB", "1,2 MB"."""
     if size < 1024 * 1024:
