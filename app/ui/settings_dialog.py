@@ -26,6 +26,7 @@ from app.core import file_association, pen, save_settings
 from app.core.history import RESTORE_SETTING
 from app.core.interface_size import NORMAL_SIZE, SIZE_SETTING, SIZES, wanted_size
 from app.core.paths import is_portable
+from app.core.tool_keys import TOOL_KEYS_SETTING, tool_keys_wanted
 from app.core.updates import CHECK_SETTING
 from app.ui.theme import Paper, Theme
 from app.ui.when import days_text
@@ -134,6 +135,20 @@ class SettingsDialog(QDialog):
         restart_layout.addWidget(self.restart_button)
         layout.addWidget(self.restart_row)
 
+        # ---- keys ----
+        layout.addWidget(self._heading(self.tr("Teclado")))
+        self.tool_keys_box = QCheckBox(self.tr("Una &tecla para cada herramienta (R, S, T…)"))
+        self.tool_keys_box.setToolTip(
+            self.tr(
+                "Con el documento delante: R resalta, S subraya, T tacha, N nota, X texto, "
+                "D dibuja, F formas, B borrador, O oculta las anotaciones y los números "
+                "cogen las favoritas. Esc suelta la herramienta."
+            )
+        )
+        self.tool_keys_box.setChecked(tool_keys_wanted(self.settings))
+        self.tool_keys_box.toggled.connect(self._tool_keys_chosen)
+        layout.addWidget(self.tool_keys_box)
+
         # ---- when the program opens ----
         layout.addWidget(self._heading(self.tr("Al abrir el programa")))
         self.restore_box = QCheckBox(self.tr("&Volver a las pestañas de la última vez"))
@@ -185,6 +200,10 @@ class SettingsDialog(QDialog):
             + self.tabs.tabBar().sizeHint().height()
             + 8
         )
+
+    def _tool_keys_chosen(self, on: bool) -> None:
+        self.settings.set(TOOL_KEYS_SETTING, on)
+        self.window_.apply_tool_keys()
 
     # ---- pen and fingers ---------------------------------------------------
 
