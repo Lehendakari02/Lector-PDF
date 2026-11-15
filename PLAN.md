@@ -398,7 +398,7 @@ Notas de la Fase 1:
 | 2.6c | **Ajustes de guardado**: qué hacer al cerrar (preguntar / guardar siempre), guardar solo mientras trabajo (desactivado por defecto), versiones y días que se conservan | Activo "guardar solo" y ya no me pregunta al cerrar | ✅ |
 | 2.7 | Notas adhesivas y cuadros de texto | Escribo notas y texto con la fuente, tamaño y color que quiero | ✅ (tres tipos de letra; mover y cambiar de tamaño llega con la 2.9) |
 | 2.8 | Dibujo a mano alzada, flechas, formas, borrador | Dibujo y borro sobre la página | ✅ (con ratón; lápiz y dedo llegan con la 2.11) |
-| 2.9 | Seleccionar, mover, redimensionar, copiar y borrar anotaciones | Corrijo una anotación mal puesta sin rehacerla | ⬜ |
+| 2.9 | Seleccionar, mover, redimensionar, copiar y borrar anotaciones | Corrijo una anotación mal puesta sin rehacerla | ✅ (solo las hechas con este programa) |
 | 2.10 | Herramientas favoritas | Guardo "rotulador amarillo fino" y lo uso con un clic | ⬜ |
 | 2.11 | Lápiz y pantalla táctil | Subrayo con lápiz en una tableta sin que la mano pinte | ⬜ |
 | 2.12 | Mostrar/ocultar anotaciones (también al imprimir/exportar) | Con un botón veo el documento limpio | ⬜ |
@@ -662,6 +662,34 @@ Notas de la Fase 2A:
     Esc suelta la herramienta (y, a medio trazo, descarta ese trazo).
   - Pendiente para la 2.11: presión del lápiz, palma de la mano y dedos. Para
     la 2.9: mover o cambiar de tamaño un dibujo ya hecho.
+- **2.9: elegir, mover, cambiar de tamaño, copiar y borrar (15/11/2026).**
+  - **Elegir:** sin ninguna herramienta en la mano, un clic sobre una nota, un
+    texto, un dibujo o una forma lo elige: sale un marco de puntos con
+    tiradores en las esquinas. Un clic fuera (o Esc) lo suelta.
+  - **Mover:** arrastrándolo, o con las flechas del teclado (un punto cada
+    vez; diez con Mayús). Nunca se sale de su página.
+  - **Cambiar de tamaño:** arrastrando un tirador. En una línea o una flecha,
+    los tiradores son sus dos extremos. Un dibujo a mano se estira con su
+    marco. Un texto cambia el tamaño de su letra. Una nota es un icono de
+    tamaño fijo: se mueve, no se agranda.
+  - **Borrar:** Supr (o Retroceso), o "Editar → Borrar anotación".
+  - **Copiar, pegar y duplicar:** Ctrl+C, Ctrl+V y Ctrl+D. Pegar pone la copia
+    donde está el ratón, o un poco más abajo del original; también vale en
+    otro documento. Con nada elegido, Ctrl+C sigue copiando el texto
+    seleccionado.
+  - El botón derecho ofrece Copiar, Duplicar, Borrar y "Pegar aquí".
+  - **Subrayados, resaltados y tachados:** un clic los elige y Supr los borra,
+    pero no se mueven ni se copian, porque van con sus palabras. Arrastrar
+    sobre ellos sigue seleccionando texto.
+  - **Notas:** un clic sigue abriéndola; arrastrarla la mueve.
+  - Cada movimiento es un paso de Deshacer y se apunta en el diario.
+  - **Anotaciones de otros programas** (revisado, como se dijo en la 2.7):
+    siguen sin poder moverse ni borrarse. Para deshacer bien un borrado hay
+    que poder reconstruir la anotación exacta, y las de otros programas llevan
+    datos que este no conoce. Se podría añadir un "borrar anotación ajena"
+    más limitado si se echa de menos; queda apuntado como idea.
+  - Pendiente: cambiar el color de una anotación ya puesta (ahora: borrar y
+    volver a poner) y elegir varias a la vez.
 
 ## Fase 2B – Documentos escaneados (OCR)
 | # | Tarea | Terminado cuando… | Estado |

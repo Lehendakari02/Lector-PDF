@@ -7,7 +7,14 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QSize, Qt, QTimer, qVersion
-from PySide6.QtGui import QAction, QActionGroup, QGuiApplication, QKeyEvent, QKeySequence
+from PySide6.QtGui import (
+    QAction,
+    QActionGroup,
+    QCursor,
+    QGuiApplication,
+    QKeyEvent,
+    QKeySequence,
+)
 from PySide6.QtPrintSupport import QPrinter, QPrinterInfo
 from PySide6.QtWidgets import (
     QApplication,
@@ -269,7 +276,7 @@ class MainWindow(QMainWindow):
             "rotate_view": lambda: self.pdf_view.rotate_view(),
             "fullscreen": self.toggle_full_screen,
             "go_to_page": self.go_to_page,
-            "copy": lambda: self.pdf_view.copy_selection(),
+            "copy": self.copy,
             "thumbnails": lambda: self.toggle_side_panel(Tab.THUMBNAILS),
             "outline": lambda: self.toggle_side_panel(Tab.OUTLINE),
             "reading_mode": self.toggle_reading_mode,
@@ -758,8 +765,20 @@ class MainWindow(QMainWindow):
         edit_menu.addSeparator()
         self.copy_action = QAction(self.tr("&Copiar"), self)
         self.copy_action.setShortcut(QKeySequence(QKeySequence.StandardKey.Copy))
-        self.copy_action.triggered.connect(lambda _checked=False: self.pdf_view.copy_selection())
+        self.copy_action.triggered.connect(lambda _checked=False: self.copy())
         edit_menu.addAction(self.copy_action)
+        self.paste_action = QAction(self.tr("&Pegar anotación"), self)
+        self.paste_action.setShortcut(QKeySequence(QKeySequence.StandardKey.Paste))
+        self.paste_action.triggered.connect(lambda _checked=False: self.paste())
+        edit_menu.addAction(self.paste_action)
+        self.duplicate_action = QAction(self.tr("D&uplicar anotación"), self)
+        self.duplicate_action.setShortcut(QKeySequence("Ctrl+D"))
+        self.duplicate_action.triggered.connect(lambda _checked=False: self.duplicate_picked())
+        edit_menu.addAction(self.duplicate_action)
+        self.delete_action = QAction(self.tr("&Borrar anotación"), self)
+        self.delete_action.setShortcut(QKeySequence(QKeySequence.StandardKey.Delete))
+        self.delete_action.triggered.connect(lambda _checked=False: self.delete_picked())
+        edit_menu.addAction(self.delete_action)
         self.select_all_action = QAction(self.tr("&Seleccionar todo"), self)
         self.select_all_action.setShortcut(QKeySequence(QKeySequence.StandardKey.SelectAll))
         self.select_all_action.triggered.connect(lambda _checked=False: self.pdf_view.select_all())
@@ -1195,6 +1214,41 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(hints[kind], STATUS_MESSAGE_MS)
         self._refresh_edit_actions()
 
+    def copy(self) -> None:
+        """Copy the annotation that is picked or, without one, the selected text."""
+        view = self.pdf_view
+        if view.picked_item() is None:
+            view.copy_selection()
+        elif not view.copy_picked():
+            self.statusBar().showMessage(
+                self.tr("Una marca sobre el texto no se puede copiar: va con sus palabras."),
+                STATUS_MESSAGE_MS,
+            )
+        self._refresh_edit_actions()
+
+    def paste(self) -> None:
+        """Put the annotation copied last where the pointer is, or on the page in sight."""
+        view = self.pdf_view
+        pointer = view.viewport().mapFromGlobal(QCursor.pos())
+        at = pointer if view.viewport().underMouse() else None
+        if not view.paste(at):
+            self.statusBar().showMessage(
+                self.tr("No hay ninguna anotación copiada."), STATUS_MESSAGE_MS
+            )
+
+    def duplicate_picked(self) -> None:
+        if not self.pdf_view.duplicate_picked():
+            self.statusBar().showMessage(
+                self.tr("Elige antes una nota, un texto o un dibujo haciendo clic en él."),
+                STATUS_MESSAGE_MS,
+            )
+
+    def delete_picked(self) -> None:
+        if not self.pdf_view.remove_picked():
+            self.statusBar().showMessage(
+                self.tr("Elige antes una anotación haciendo clic en ella."), STATUS_MESSAGE_MS
+            )
+
     @staticmethod
     def _feature_named(feature_id: str) -> Feature:
         return next(feature for feature in FEATURES if feature.id == feature_id)
@@ -1237,6 +1291,10 @@ class MainWindow(QMainWindow):
         for action in (self.redo_action, self.feature_actions["redo"]):
             action.setEnabled(view.can_redo)
         self.revert_action.setEnabled(view.can_undo)
+        picked = view.picked_item()
+        self.delete_action.setEnabled(picked is not None)
+        self.duplicate_action.setEnabled(picked is not None and picked.kind not in MARKUP_KINDS)
+        self.paste_action.setEnabled(PdfView.copied is not None and view.page_count > 0)
         for kind in (*STYLED_KINDS, ERASER):
             action = self.feature_actions[kind]
             action.setCheckable(True)
@@ -1931,6 +1989,9 @@ class MainWindow(QMainWindow):
         # The same goes for Ctrl+Z: in a text box it undoes what was typed there.
         for action in (
             self.copy_action,
+            self.paste_action,
+            self.duplicate_action,
+            self.delete_action,
             self.select_all_action,
             self.undo_action,
             self.redo_action,
@@ -1942,6 +2003,14 @@ class MainWindow(QMainWindow):
         view.modified_changed.connect(lambda _modified: self._schedule_autosave())
         view.markup_tool_changed.connect(lambda _kind, p=page: self._edit_state_changed(p))
         view.selection_changed.connect(lambda _has, p=page: self._edit_state_changed(p))
+        view.picked_changed.connect(lambda p=page: self._edit_state_changed(p))
+        view.item_copied.connect(self._refresh_edit_actions)
+        view.item_copied.connect(
+            lambda: self.statusBar().showMessage(
+                self.tr("Anotación copiada. Pégala con Ctrl+V, aquí o en otro documento."),
+                STATUS_MESSAGE_MS,
+            )
+        )
         view.edit_failed.connect(self._edit_failed)
         self.pages.addWidget(page)
         return page

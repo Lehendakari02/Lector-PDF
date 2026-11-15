@@ -217,3 +217,34 @@ En el modo **Estudiar**.
 11. Cierra el programa a la fuerza con un dibujo sin guardar y ábrelo: ofrece
     recuperarlo.
 12. Abre un PDF con dibujos hechos en otro programa: el borrador no los quita.
+
+## Tarea 2.9 – Elegir, mover, cambiar de tamaño, copiar y borrar
+
+En el modo **Estudiar**, sin ninguna herramienta pulsada (Esc las suelta).
+Pon antes un dibujo, una flecha, un recuadro, un texto y una nota.
+
+1. Haz clic sobre el borde del recuadro: aparece un marco de puntos con
+   cuatro cuadraditos. Haz clic fuera: desaparece.
+2. Arrastra el recuadro: se mueve con el ratón y se queda donde lo sueltas.
+   **Deshacer** lo devuelve a su sitio.
+3. Elígelo y arrastra un cuadradito de una esquina: cambia de tamaño.
+4. Elige la flecha y arrastra el cuadradito de la punta: la punta va donde la
+   lleves y el otro extremo no se mueve.
+5. Elige el dibujo a mano y arrastra una esquina: se estira.
+6. Elige el texto y arrastra una esquina: la letra se hace más grande o más
+   pequeña. Doble clic sobre él: se abre para cambiar lo escrito.
+7. Arrastra la nota: se mueve. Haz clic en ella sin arrastrar: se abre.
+8. Con algo elegido, pulsa las flechas del teclado: se mueve poco a poco. Con
+   Mayús, a saltos más grandes.
+9. Pulsa **Supr**: se borra. **Deshacer**: vuelve.
+10. Elige algo y pulsa **Ctrl+D**: sale una copia al lado, ya elegida.
+11. Elige algo, pulsa **Ctrl+C**, lleva el ratón a otro sitio de la página y
+    pulsa **Ctrl+V**: la copia aparece bajo el ratón. Abre otro PDF y pulsa
+    **Ctrl+V**: también aparece allí.
+12. Intenta sacar algo de la página arrastrándolo: se queda en el borde.
+13. Haz clic sobre un subrayado: queda elegido; **Supr** lo borra. Arrastra
+    sobre un subrayado: se selecciona el texto, como siempre.
+14. Selecciona texto y pulsa **Ctrl+C** sin nada elegido: copia el texto.
+15. Botón derecho sobre un dibujo: ofrece Copiar, Duplicar y Borrar.
+16. Mueve varias cosas, guarda y abre el PDF en **Edge** y en **Adobe
+    Reader**: todo está donde lo dejaste.

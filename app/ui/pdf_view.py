@@ -29,7 +29,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QAbstractScrollArea, QFrame, QMenu, QToolTip, QWidget
 
-from app.core import drawing, notes
+from app.core import arrange, drawing, notes
 from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
 from app.core.document import PageSize, PdfDocument
 from app.core.drawing import ARROW, BOX, DRAW, ERASER, INK, OVAL, SHAPE_TOOL, PageDrawing
@@ -85,6 +85,11 @@ AUTOSCROLL_MS = 40  # while dragging a selection past the edge of the window
 # or the eraser.
 TOOLS = (*MARKUP_KINDS, NOTE, TEXT_BOX, DRAW, SHAPE_TOOL, ERASER)
 ERASER_REACH = 5.0  # screen units around the pointer that the eraser takes
+PICK_REACH = 4.0  # screen units around the pointer that count as on a drawing
+HANDLE_SIZE = 9.0  # side of the little squares that resize, in screen units
+HANDLE_REACH = 8.0  # how near a handle the pointer grabs it
+DRAG_START = 3.0  # screen units the pointer travels before a click becomes a drag
+NUDGE, BIG_NUDGE = 1.0, 10.0  # points an arrow key moves what is picked (with Shift)
 ERASER_CURSOR_SIZE = 20
 NOTE_REACH = 3.0  # points around a note that still count as on it
 TIP_LETTERS = 400  # of a note, shown when the pointer rests on it
@@ -122,6 +127,18 @@ def _arrow_head(start: QPointF, end: QPointF, width: float) -> list[QPointF]:
         end,
         QPointF(back.x() + uy * side, back.y() - ux * side),
     ]
+
+
+def _sketch_of(order) -> tuple | None:
+    """What an order draws, to paint it before the engine does: page, kind,
+    strokes, colour, thickness and opacity. None if it is not a drawing."""
+    if isinstance(order, drawing.AddInk):
+        strokes = [list(stroke) for stroke in order.strokes]
+        return (order.page, INK, strokes, order.color, order.width, order.opacity)
+    if isinstance(order, drawing.AddShape):
+        ends = [[order.start, order.end]]
+        return (order.page, order.kind, ends, order.color, order.width, order.opacity)
+    return None
 
 
 _ERASER_CURSOR: QCursor | None = None
@@ -197,6 +214,10 @@ class PdfView(QAbstractScrollArea):
     notes_changed = Signal(int)  # the notes and text boxes of a page are known or different
     _notes_ready = Signal(int, object)
     _drawings_ready = Signal(int, object)
+    picked_changed = Signal()  # an annotation is picked, or not any more
+    item_copied = Signal()  # the picked annotation was copied, to paste it
+    # The annotation copied last, for every document: the order that puts it.
+    copied = None
     _changed = Signal(int, object, object, bool)
     _change_failed = Signal(int, str)
     saved = Signal(int, object)
@@ -278,7 +299,15 @@ class PdfView(QAbstractScrollArea):
         self._drawings: dict[int, list[PageDrawing]] = {}
         self._erased: dict[int, set[str]] = {}  # taken away, until the page is read again
         self._erasing = False
-        # What is being drawn right now: (page, kind, points), all as the page is shown.
+        # The annotation picked to move, resize, copy or remove: (page, name).
+        self._picked: tuple[int, str] | None = None
+        # While it is dragged: what it was, from where, by which handle, and
+        # the order that would leave it where the pointer is now.
+        self._grab: dict | None = None
+        # Orders just sent that leave an annotation somewhere else, by its name:
+        # where it is now, until its page is read again.
+        self._latest: dict[str, object] = {}
+        # What is being drawn right now: (page, tool, points), all as the page is shown.
         self._sketch: tuple[int, str, list[tuple[float, float]]] | None = None
         # Drawn and sent, still to appear in the picture of its page: by change
         # number while the helper puts it, then by page until it is drawn again.
@@ -354,6 +383,9 @@ class PdfView(QAbstractScrollArea):
         if kind != self._markup_tool:
             self._sketch = None
             self._erasing = False
+            self._grab = None
+            if kind:
+                self.pick(None)
             self._markup_tool = kind
             self.markup_tool_changed.emit(kind)
             self._update_pointer(self.viewport().mapFromGlobal(QCursor.pos()))
@@ -453,6 +485,7 @@ class PdfView(QAbstractScrollArea):
     def _change_did_not_work(self, number: int, details: str) -> None:
         if self._sent_sketches.pop(number, None) is not None:
             self.viewport().update()
+        self._latest.clear()
         if self._changing.pop(number, None) is not None:
             self.history_changed.emit()
             self.edit_failed.emit(details)
@@ -544,6 +577,9 @@ class PdfView(QAbstractScrollArea):
         self._sketch = None
         self._sent_sketches.clear()
         self._settling.clear()
+        self._grab = None
+        self._latest.clear()
+        self.pick(None)
         self.close_note_panel()
         self._selecting = False
         self._autoscroll.stop()
@@ -1030,20 +1066,22 @@ class PdfView(QAbstractScrollArea):
             self._paint_sketches(painter, page, target, zoom)
 
     def _paint_sketches(self, painter: QPainter, page: int, target: QRect, zoom: float) -> None:
-        """What is being drawn on a page, and what was just drawn and is not
-        in its picture yet (so that the line never blinks when it is let go)."""
+        """What is being drawn or dragged on a page, and what was just put and
+        is not in its picture yet (so that the line never blinks when it is
+        let go). Then, the frame of what is picked."""
         waiting = [*self._settling.get(page, ()), *self._sent_sketches.values()]
         if self._sketch is not None:
             kind, color, width, opacity = self._sketch_style(self._sketch[1])
-            waiting.append((self._sketch[0], kind, self._sketch[2], color, width, opacity))
-        waiting = [sketch for sketch in waiting if sketch[0] == page and len(sketch[2]) >= 2]
-        if not waiting:
-            return
+            waiting.append((self._sketch[0], kind, [self._sketch[2]], color, width, opacity))
+        dragged = self._grab["change"].new if self._grab and self._grab["change"] else None
+        if dragged is not None and _sketch_of(dragged) is not None:
+            waiting.append(_sketch_of(dragged))
+        waiting = [sketch for sketch in waiting if sketch[0] == page]
         painter.save()
         painter.setClipRect(target)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        for _page, kind, points, color, width, opacity in waiting:
+        for _page, kind, strokes, color, width, opacity in waiting:
             tone = QColor.fromRgbF(*color)
             tone.setAlphaF(max(0.05, min(1.0, opacity)))
             pen = QPen(tone, max(1.0, width * zoom))
@@ -1051,18 +1089,57 @@ class PdfView(QAbstractScrollArea):
             pen.setCapStyle(Qt.PenCapStyle.RoundCap if round_ends else Qt.PenCapStyle.FlatCap)
             pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin if round_ends else Qt.PenJoinStyle.MiterJoin)
             painter.setPen(pen)
-            shown = [
-                QPointF(target.left() + x * zoom, target.top() + y * zoom)
-                for x, y in (self._shown_point(page, point) for point in points)
-            ]
-            if kind == BOX:
-                painter.drawRect(QRectF(shown[0], shown[-1]).normalized())
-            elif kind == OVAL:
-                painter.drawEllipse(QRectF(shown[0], shown[-1]).normalized())
-            else:
-                painter.drawPolyline(QPolygonF(shown))
-                if kind == ARROW:
-                    painter.drawPolyline(QPolygonF(_arrow_head(shown[0], shown[-1], width * zoom)))
+            for points in strokes:
+                if len(points) < 2:
+                    continue
+                shown = [self._on_screen(page, point, target, zoom) for point in points]
+                if kind == BOX:
+                    painter.drawRect(QRectF(shown[0], shown[-1]).normalized())
+                elif kind == OVAL:
+                    painter.drawEllipse(QRectF(shown[0], shown[-1]).normalized())
+                else:
+                    painter.drawPolyline(QPolygonF(shown))
+                    if kind == ARROW:
+                        head = _arrow_head(shown[0], shown[-1], width * zoom)
+                        painter.drawPolyline(QPolygonF(head))
+        painter.restore()
+        self._paint_frame(painter, page, target, zoom)
+
+    def _on_screen(self, page: int, point, target: QRect, zoom: float) -> QPointF:
+        x, y = self._shown_point(page, point)
+        return QPointF(target.left() + x * zoom, target.top() + y * zoom)
+
+    def _paint_frame(self, painter: QPainter, page: int, target: QRect, zoom: float) -> None:
+        """A dashed frame around what is picked, with its handles."""
+        if self._picked is None or self._picked[0] != page:
+            return
+        order = self._picked_order()
+        if order is None:
+            return
+        width = self._sizes[page].width
+        x0, y0, x1, y1 = arrange.bounds(order, width)
+        frame = QRectF(
+            self._on_screen(page, (x0, y0), target, zoom),
+            self._on_screen(page, (x1, y1), target, zoom),
+        ).normalized()
+        scale = self._scale()
+        accent = QColor(theme.colours().accent)
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        margin = 3 * scale
+        for color, style in (
+            (QColor("white"), Qt.PenStyle.SolidLine),
+            (accent, Qt.PenStyle.DashLine),
+        ):
+            painter.setPen(QPen(color, max(1.0, scale), style))
+            painter.drawRect(frame.adjusted(-margin, -margin, margin, margin))
+        half = HANDLE_SIZE * scale / 2
+        painter.setPen(QPen(accent, max(1.0, 1.5 * scale)))
+        painter.setBrush(QColor("white"))
+        for grip in arrange.handles(order, width):
+            centre = self._on_screen(page, grip, target, zoom)
+            painter.drawRect(QRectF(centre.x() - half, centre.y() - half, 2 * half, 2 * half))
         painter.restore()
 
     def _sketch_style(self, tool: str):
@@ -1186,6 +1263,11 @@ class PdfView(QAbstractScrollArea):
         self._asked_notes.discard(page)
         self._notes[page] = list(found)
         self.notes_changed.emit(page)
+        if not self._changing:
+            self._latest.clear()  # what was read is how things are now
+        if self._picked is not None and self._picked[0] == page:
+            self.picked_changed.emit()  # it may have come, gone or changed
+            self.viewport().update()
 
     def notes_of(self, page: int) -> list[PageNote]:
         """The notes and text boxes known of a page (asked for if not yet)."""
@@ -1226,7 +1308,16 @@ class PdfView(QAbstractScrollArea):
     def _do(self, order) -> bool:
         if self._document is None:
             return False
-        self._changing[self.service.apply(order)] = "do"
+        number = self.service.apply(order)
+        self._changing[number] = "do"
+        # A drawing put or moved is painted on top until its page is drawn again.
+        new = getattr(order, "new", None)
+        if new is not None:
+            self._latest[new.name] = new
+        sketch = _sketch_of(new or order)
+        if sketch is not None:
+            self._sent_sketches[number] = sketch
+            self.viewport().update()
         return True
 
     def put_note(self, page: int, x: float, y: float, text: str) -> bool:
@@ -1340,32 +1431,20 @@ class PdfView(QAbstractScrollArea):
         """Draw by hand on a page: each stroke, the points it goes through."""
         strokes = [drawing.thinned(stroke) for stroke in strokes]
         strokes = [stroke for stroke in strokes if len(stroke) >= 2]
-        if not strokes or not 0 <= page < self.page_count or self._document is None:
+        if not strokes or not 0 <= page < self.page_count:
             return False
-        order = drawing.new_ink(page, strokes, self.draw_color, self.draw_width, self.draw_opacity)
-        return self._send_sketch(order, INK, strokes[0])
+        return self._do(
+            drawing.new_ink(page, strokes, self.draw_color, self.draw_width, self.draw_opacity)
+        )
 
     def draw_shape(self, kind: str, page: int, start, end) -> bool:
         """Put a line, an arrow, a box or an oval. False if it is too small."""
-        if not 0 <= page < self.page_count or self._document is None:
+        if not 0 <= page < self.page_count:
             return False
         order = drawing.new_shape(
             kind, page, start, end, self.shape_color, self.shape_width, self.shape_opacity
         )
-        return order is not None and self._send_sketch(order, kind, [order.start, order.end])
-
-    def _send_sketch(self, order, kind: str, points) -> bool:
-        number = self.service.apply(order)
-        self._changing[number] = "do"
-        self._sent_sketches[number] = (
-            order.page,
-            kind,
-            list(points),
-            order.color,
-            order.width,
-            order.opacity,
-        )
-        return True
+        return order is not None and self._do(order)
 
     def erase_at(self, position: QPoint) -> bool:
         """Take away what is under a place of the window, if it was made here:
@@ -1385,6 +1464,179 @@ class PdfView(QAbstractScrollArea):
                 gone.add(item.name)
                 return self._do(notes.Remove(item.order()))
         return False
+
+    # ---- picking, moving, resizing and copying -------------------------------
+
+    def _item(self, page: int, name: str):
+        for item in (*self._notes.get(page, ()), *self._drawings.get(page, ())):
+            if item.name == name:
+                return item
+        return None
+
+    def picked_item(self):
+        """The annotation that is picked (a ``PageNote`` or a ``PageDrawing``), or None."""
+        return self._item(*self._picked) if self._picked is not None else None
+
+    def _picked_order(self):
+        """The order of what is picked, where the pointer is taking it."""
+        if self._grab is not None and self._grab["change"] is not None:
+            return self._grab["change"].new
+        item = self.picked_item()
+        return self._order_of(item) if item is not None else None
+
+    def _order_of(self, item):
+        """The order that puts an annotation where it is now (it may have just
+        been moved, and its page not read again yet)."""
+        return self._latest.get(item.name) or item.order()
+
+    def pick(self, item) -> None:
+        """Pick an annotation made here (or none), to move, copy or remove it."""
+        chosen = (item.page, item.name) if item is not None and item.ours else None
+        if chosen != self._picked:
+            self._picked = chosen
+            self.picked_changed.emit()
+            self.viewport().update()
+
+    def item_under(self, position: QPoint, marks: bool = True):
+        """The annotation made here that is under a place of the window.
+
+        With ``marks`` false, the marks on the text do not count (a press on
+        them starts selecting text).
+        """
+        note = self.note_under(position)
+        if note is not None and note.ours:
+            return note
+        point = self._point_on_page(position, reach=NOTE_REACH)
+        if point is None:
+            return None
+        page, x, y = point
+        reach = PICK_REACH / self._zoom
+        for item in reversed(self._drawings.get(page, ())):
+            if not item.ours or (item.kind in MARKUP_KINDS and not marks):
+                continue
+            if item.touches(x, y, reach):
+                return item
+        return None
+
+    def _handle_under(self, position: QPoint) -> int | None:
+        """The handle of what is picked that is under a place of the window."""
+        item = self.picked_item()
+        if item is None:
+            return None
+        _, x, y = self._page_point(position, item.page)
+        reach = HANDLE_REACH / self._zoom
+        grips = arrange.handles(self._order_of(item), self._sizes[item.page].width)
+        near = [
+            (math.hypot(x - gx, y - gy), index)
+            for index, (gx, gy) in enumerate(grips)
+            if abs(x - gx) <= reach and abs(y - gy) <= reach
+        ]
+        return min(near)[1] if near else None
+
+    def _page_size(self, page: int) -> tuple[float, float]:
+        size = self._sizes[page]
+        return (size.width, size.height)
+
+    def _start_grab(self, item, handle: int | None, position: QPoint) -> None:
+        self.clear_selection()
+        self.pick(item)
+        _, x, y = self._page_point(position, item.page)
+        self._grab = {
+            "item": item,
+            "order": self._order_of(item),
+            "handle": handle,
+            "from": (x, y),
+            "moved": False,
+            "change": None,
+        }
+
+    def _drag_grab(self, position: QPoint) -> None:
+        grab = self._grab
+        item = grab["item"]
+        _, x, y = self._page_point(position, item.page)
+        from_x, from_y = grab["from"]
+        if not grab["moved"]:
+            if math.hypot(x - from_x, y - from_y) * self._zoom < DRAG_START:
+                return
+            grab["moved"] = True
+        size = self._page_size(item.page)
+        if grab["handle"] is None:
+            change = arrange.moved(grab["order"], x - from_x, y - from_y, size)
+        else:
+            change = arrange.resized(grab["order"], grab["handle"], (x, y), size)
+        grab["change"] = change
+        self.viewport().update()
+
+    def _end_grab(self, position: QPoint) -> None:
+        grab, self._grab = self._grab, None
+        if grab["change"] is not None:
+            self._do(grab["change"])
+        elif not grab["moved"] and grab["item"].kind == NOTE:
+            self.open_note(grab["item"], position)  # a plain click on a note opens it
+        self.viewport().update()
+
+    def move_picked(self, dx: float, dy: float) -> bool:
+        """Move what is picked by so many points. False if it cannot move."""
+        item = self.picked_item()
+        if item is None:
+            return False
+        change = arrange.moved(self._order_of(item), dx, dy, self._page_size(item.page))
+        return change is not None and self._do(change)
+
+    def resize_picked(self, handle: int, x: float, y: float) -> bool:
+        """Take a handle of what is picked to a point of its page."""
+        item = self.picked_item()
+        if item is None:
+            return False
+        change = arrange.resized(self._order_of(item), handle, (x, y), self._page_size(item.page))
+        return change is not None and self._do(change)
+
+    def remove_picked(self) -> bool:
+        """Take away what is picked."""
+        item = self.picked_item()
+        if item is None:
+            return False
+        self.pick(None)
+        return self._do(notes.Remove(self._order_of(item)))
+
+    def copy_picked(self) -> bool:
+        """Keep a copy of what is picked, to paste it here or in another document."""
+        item = self.picked_item()
+        if item is None or not arrange.can_move(item.order()):
+            return False
+        PdfView.copied = self._order_of(item)
+        self.item_copied.emit()
+        return True
+
+    def paste(self, at: QPoint | None = None) -> bool:
+        """Put the annotation copied last: centred on a place of the window or,
+        without one, on the page being read, a little away from the original."""
+        if PdfView.copied is None or self._document is None or not self.page_count:
+            return False
+        point = self._point_on_page(at) if at is not None else None
+        if point is not None:
+            page, x, y = point
+            copy = arrange.copy_of(PdfView.copied, page, self._page_size(page), (x, y))
+        else:
+            page = max(0, self._current_page)
+            copy = arrange.copy_of(PdfView.copied, page, self._page_size(page))
+            PdfView.copied = copy  # the next one, a little further still
+        return self._put_copy(copy)
+
+    def duplicate_picked(self) -> bool:
+        """Put a copy of what is picked next to it."""
+        item = self.picked_item()
+        if item is None:
+            return False
+        size = self._page_size(item.page)
+        return self._put_copy(arrange.copy_of(self._order_of(item), item.page, size))
+
+    def _put_copy(self, copy) -> bool:
+        if copy is None or not self._do(copy):
+            return False
+        self._picked = (copy.page, copy.name)  # picked as soon as it is on the page
+        self.picked_changed.emit()
+        return True
 
     def _want_text(self, page: int) -> None:
         if page not in self._texts and page not in self._asked_texts:
@@ -1476,6 +1728,15 @@ class PdfView(QAbstractScrollArea):
             self._erasing = True
             self.erase_at(position)
             return
+        if not self._markup_tool:
+            # With nothing in hand, what is on the page can be picked and dragged.
+            handle = self._handle_under(position)
+            item = self.picked_item() if handle is not None else None
+            item = item or self.item_under(position, marks=False)
+            if item is not None:
+                self._start_grab(item, handle, position)
+                return
+            self.pick(None)
         note = self.note_under(position)
         writing = self._markup_tool in (NOTE, TEXT_BOX)
         if note is not None and (note.kind == NOTE or writing):
@@ -1508,6 +1769,9 @@ class PdfView(QAbstractScrollArea):
         if self._erasing:
             self.erase_at(position)
             return
+        if self._grab is not None:
+            self._drag_grab(position)
+            return
         if not self._selecting:
             self._update_pointer(position)
             return
@@ -1525,10 +1789,16 @@ class PdfView(QAbstractScrollArea):
             if self._sketch is not None:
                 self._extend_sketch(event.position().toPoint())
                 self._finish_sketch()
+            if self._grab is not None:
+                self._drag_grab(event.position().toPoint())
+                self._end_grab(event.position().toPoint())
             was_selecting, self._selecting = self._selecting, False
             self._autoscroll.stop()
             if was_selecting and self._markup_tool in MARKUP_KINDS and self.has_selection:
                 self.mark_selection(self._markup_tool)  # the marker in hand marks it
+            elif was_selecting and not self._markup_tool and not self.has_selection:
+                # A plain click on a mark of the text picks it.
+                self.pick(self.item_under(event.position().toPoint()))
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802
@@ -1538,6 +1808,7 @@ class PdfView(QAbstractScrollArea):
         position = event.position().toPoint()
         note = self.note_under(position)
         if event.button() == Qt.MouseButton.LeftButton and note is not None and note.ours:
+            self._grab = None
             self.open_note(note, position)  # a double click on a text opens it
             return
         place = self._caret_at(position)
@@ -1572,6 +1843,15 @@ class PdfView(QAbstractScrollArea):
             else:
                 self.viewport().setCursor(Qt.CursorShape.CrossCursor)
             return
+        if not self._markup_tool:
+            handle = self._handle_under(position)
+            item = self.item_under(position, marks=False) if handle is None else None
+            if handle is not None:
+                self.viewport().setCursor(self._handle_cursor(handle))
+                return
+            if item is not None and item.kind != NOTE:
+                self.viewport().setCursor(Qt.CursorShape.SizeAllCursor)
+                return
         note = self.note_under(position)
         writing = self._markup_tool in (NOTE, TEXT_BOX)
         if note is not None and (note.kind == NOTE or writing):
@@ -1590,6 +1870,15 @@ class PdfView(QAbstractScrollArea):
             shape = Qt.CursorShape.IBeamCursor if over_text else Qt.CursorShape.ArrowCursor
         if self.viewport().cursor().shape() != shape:
             self.viewport().setCursor(shape)
+
+    def _handle_cursor(self, handle: int) -> Qt.CursorShape:
+        item = self.picked_item()
+        if len(arrange.handles(self._order_of(item), self._sizes[item.page].width)) == 2:
+            return Qt.CursorShape.CrossCursor  # an end of a line goes anywhere
+        falling = handle in (arrange.TOP_LEFT, arrange.BOTTOM_RIGHT)
+        if self._rotation in (90, 270):
+            falling = not falling
+        return Qt.CursorShape.SizeFDiagCursor if falling else Qt.CursorShape.SizeBDiagCursor
 
     def contextMenuEvent(self, event) -> None:  # noqa: N802
         if not self.page_count:
@@ -1616,6 +1905,30 @@ class PdfView(QAbstractScrollArea):
             )
             remove.setEnabled(note.ours)
             remove.triggered.connect(lambda _checked=False: self.remove_note(note))
+        item = self.item_under(where)
+        if item is not None:
+            self.pick(item)
+            if arrange.can_move(item.order()):
+                menu.addAction(self.tr("Copiar la anotación")).triggered.connect(
+                    lambda _checked=False: self.copy_picked()
+                )
+                menu.addAction(self.tr("Duplicar")).triggered.connect(
+                    lambda _checked=False: self.duplicate_picked()
+                )
+            if note is None:
+                name = (
+                    self.tr("Borrar la marca")
+                    if item.kind in MARKUP_KINDS
+                    else self.tr("Borrar el dibujo")
+                    if item.kind == INK
+                    else self.tr("Borrar la forma")
+                )
+                menu.addAction(name).triggered.connect(lambda _checked=False: self.remove_picked())
+        if PdfView.copied is not None and self._point_on_page(where) is not None:
+            menu.addAction(self.tr("Pegar aquí")).triggered.connect(
+                lambda _checked=False: self.paste(where)
+            )
+        if not menu.isEmpty():
             menu.addSeparator()
         copy = menu.addAction(self.tr("Copiar"))
         copy.setEnabled(self.has_selection)
@@ -1651,6 +1964,8 @@ class PdfView(QAbstractScrollArea):
     def keyPressEvent(self, event) -> None:  # noqa: N802
         bar = self.verticalScrollBar()
         key = event.key()
+        if self.picked_item() is not None and self._picked_key(event):
+            return
         if key in (Qt.Key.Key_PageDown, Qt.Key.Key_Space):
             bar.setValue(bar.value() + bar.pageStep() - 40)
         elif key == Qt.Key.Key_PageUp:
@@ -1672,6 +1987,31 @@ class PdfView(QAbstractScrollArea):
             self.set_markup_tool("")  # put the marker down
         else:
             super().keyPressEvent(event)
+
+    def _picked_key(self, event) -> bool:
+        """What the keys do while an annotation is picked. False: not one of them."""
+        key = event.key()
+        step = BIG_NUDGE if event.modifiers() & Qt.KeyboardModifier.ShiftModifier else NUDGE
+        # As the page is seen; a turned view turns the arrows with it.
+        seen = {
+            Qt.Key.Key_Left: (-step, 0.0),
+            Qt.Key.Key_Right: (step, 0.0),
+            Qt.Key.Key_Up: (0.0, -step),
+            Qt.Key.Key_Down: (0.0, step),
+        }
+        turn = {0: lambda x, y: (x, y), 90: lambda x, y: (y, -x)}
+        turn |= {180: lambda x, y: (-x, -y), 270: lambda x, y: (-y, x)}
+        moves = {arrow: turn[self._rotation](*way) for arrow, way in seen.items()}
+        if key in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            self.remove_picked()
+        elif key == Qt.Key.Key_Escape:
+            self._grab = None
+            self.pick(None)
+        elif key in moves and arrange.can_move(self.picked_item().order()):
+            self.move_picked(*moves[key])
+        else:
+            return False
+        return True
 
     def scroll_to_page(self, page: int) -> None:
         """Put the top of ``page`` (counting from 0) at the top of the window."""
