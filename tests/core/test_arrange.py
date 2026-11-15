@@ -238,3 +238,11 @@ def test_original_and_copy_live_together(doc):
     ink.apply(doc)
     copy_of(ink, 0, PAGE).apply(doc)
     assert len(page_drawings(doc, 0)) == 2
+
+
+def test_a_pressed_stroke_keeps_its_pressures_when_it_moves_grows_or_is_copied():
+    pressed = (0.1, 0.4, 0.9, 0.5)
+    ink = new_ink(0, [STROKE], pressures=[pressed])
+    assert moved(ink, 20, 10, PAGE).new.pressures == (pressed,)
+    assert resized(ink, BOTTOM_RIGHT, (250, 140), PAGE).new.pressures == (pressed,)
+    assert arrange.copy_of(ink, 0, PAGE).pressures == (pressed,)

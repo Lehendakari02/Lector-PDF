@@ -21,14 +21,20 @@ from app.core.drawing import (
     LINE,
     OVAL,
     SHAPES,
+    THICKEST,
+    THINNEST,
     AddInk,
     AddShape,
     clamp_width,
     drawing_at,
+    felt,
+    half_widths,
     new_ink,
     new_shape,
     page_drawings,
+    pressed_shape,
     thinned,
+    thinned_stroke,
 )
 from app.core.notes import Remove
 
@@ -368,3 +374,125 @@ def test_the_last_one_drawn_is_the_one_on_top(doc):
 def test_ink_orders_keep_their_strokes_as_plain_numbers():
     order = AddInk.from_dict(new_ink(0, [[(1, 2), (3, 4)]]).to_dict())
     assert order.strokes == (((1.0, 2.0), (3.0, 4.0)),)
+
+
+# ---- strokes that are thicker where the pen pressed more ------------------------
+
+PRESSED = (0.1, 0.4, 0.9, 0.5)
+
+
+def dark_rows(document, page: int, x: float) -> int:
+    """How many pixels of a column of the page are painted: how thick a stroke is there."""
+    pixmap = document[page].get_pixmap(matrix=pymupdf.Matrix(4, 4))
+    column = int(x * 4)
+    return sum(1 for y in range(pixmap.height) if pixmap.pixel(column, y)[1] < 200)
+
+
+@pytest.mark.parametrize("page", [0, 1])
+def test_a_pressed_stroke_is_still_a_standard_one_and_keeps_its_pressures(doc, page):
+    order = new_ink(page, [STROKE], RED, 4.0, 0.8, [PRESSED])
+    assert order.pressed
+    order.apply(doc)
+    again = saved_again(doc)
+    sheet = again[page]
+    (annotation,) = sheet.annots()
+    assert annotation.type[1] == "Ink" and annotation.border["width"] == pytest.approx(4.0)
+    (found,) = page_drawings(again, page)
+    assert same_points(found.strokes[0], STROKE)
+    assert found.pressures == (PRESSED,)
+    assert found.order().pressures == order.pressures and found.order().pressed
+
+
+def test_a_pressed_stroke_is_thicker_where_the_pen_pressed_more(doc):
+    flat = ((50.0, 100.0), (100.0, 100.0), (150.0, 100.0), (200.0, 100.0), (250.0, 100.0))
+    new_ink(0, [flat], RED, 6.0, 1.0, [(0.0, 0.0, 0.5, 1.0, 1.0)]).apply(doc)
+    again = saved_again(doc)
+    soft, middle, hard = (dark_rows(again, 0, x) for x in (60, 150, 240))
+    assert soft < middle < hard
+    assert middle == pytest.approx(6.0 * 4, abs=3), "half the pressure: the thickness chosen"
+    assert soft == pytest.approx(6.0 * THINNEST * 4, abs=3)
+    assert hard == pytest.approx(6.0 * THICKEST * 4, abs=3)
+
+
+def test_a_pressed_stroke_has_no_holes_where_its_pieces_overlap(doc):
+    zigzag = ((100.0, 100.0), (130.0, 100.0), (100.0, 102.0), (130.0, 104.0))
+    new_ink(0, [zigzag], (0.0, 0.0, 0.0), 8.0, 1.0, [(0.2, 0.9, 0.9, 0.2)]).apply(doc)
+    pixmap = saved_again(doc)[0].get_pixmap()
+    assert all(pixmap.pixel(x, 102)[0] < 60 for x in range(104, 127))
+
+
+def test_a_pressed_stroke_keeps_its_colour_and_opacity(doc):
+    new_ink(0, [STROKE], RED, 6.0, 0.5, [PRESSED]).apply(doc)
+    red, green, _blue = saved_again(doc)[0].get_pixmap().pixel(120, 40)
+    assert red > 200 and 100 < green < 180, "half see-through red on white"
+
+
+def test_pressures_that_do_not_fit_the_points_are_left_aside(doc):
+    order = new_ink(0, [STROKE], RED, 4.0, 1.0, [(0.2, 0.9)])
+    assert not order.pressed
+    order.apply(doc)
+    assert page_drawings(doc, 0)[0].pressures == ()
+
+
+def test_erasing_a_pressed_stroke_and_undoing_leaves_it_as_it_was(doc):
+    order = new_ink(0, [STROKE], RED, 4.0, 1.0, [PRESSED])
+    order.apply(doc)
+    before = doc[0].get_pixmap().samples
+    remove = Remove(page_drawings(doc, 0)[0].order())
+    remove.apply(doc)
+    assert page_drawings(doc, 0) == []
+    remove.undo(doc)
+    assert doc[0].get_pixmap().samples == before
+    assert page_drawings(doc, 0)[0].pressures == (PRESSED,)
+
+
+def test_a_pressed_stroke_is_written_in_the_journal_with_its_pressures():
+    order = new_ink(0, [STROKE], RED, 4.0, 1.0, [PRESSED])
+    assert command_from_dict(order.to_dict()) == order
+    plain = new_ink(0, [STROKE])
+    assert "pressures" not in plain.to_dict(), "old journals and new ones read the same"
+    assert command_from_dict(plain.to_dict()) == plain
+
+
+def test_pressures_are_thinned_with_their_points():
+    points = [(0.0, 0.0), (0.1, 0.0), (0.2, 0.0), (5.0, 0.0), (5.1, 0.0), (9.0, 0.0)]
+    kept, pressed = thinned_stroke(points, [0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
+    assert kept == ((0.0, 0.0), (5.0, 0.0), (9.0, 0.0))
+    assert pressed == (0.1, 0.4, 0.6)
+    assert thinned_stroke(points, [0.5])[1] == (), "pressures that do not fit are dropped"
+
+
+def test_the_thickness_follows_the_pressure_between_its_limits():
+    soft, hard = half_widths([0.0] * 3, 4.0)[1], half_widths([1.0] * 3, 4.0)[1]
+    assert soft == pytest.approx(2.0 * THINNEST) and hard == pytest.approx(2.0 * THICKEST)
+    assert half_widths([0.5] * 3, 4.0)[1] == pytest.approx(2.0)
+    assert max(half_widths([7, -3, 2], 4.0)) <= 2.0 * THICKEST, "odd values never break it"
+    lump = half_widths([0.2, 1.0, 0.2], 4.0)
+    assert lump[1] < 2.0 * THICKEST, "one jump of pressure is evened out"
+
+
+def test_a_pen_that_feels_no_pressure_says_nothing():
+    assert not felt([1.0, 1.0, 1.0]) and not felt([0.5]) and not felt([])
+    assert felt([0.2, 0.6, 0.4])
+
+
+def test_the_pieces_of_a_pressed_stroke_all_go_round_the_same_way():
+    points = [(0.0, 0.0), (10.0, 0.0), (0.0, 1.0), (-10.0, -5.0)]
+    pieces, discs = pressed_shape(points, [1.0, 2.0, 3.0, 1.0])
+    assert len(pieces) == 3 and len(discs) == 4
+
+    def area(corners):
+        return sum(
+            a[0] * b[1] - b[0] * a[1]
+            for a, b in zip(corners, (*corners[1:], corners[0]), strict=True)
+        )
+
+    assert all(area(piece) > 0 for piece in pieces)
+
+
+def test_a_pressed_stroke_is_touched_where_it_is_thick(doc):
+    flat = ((50.0, 100.0), (150.0, 100.0), (250.0, 100.0))
+    new_ink(0, [flat], RED, 10.0, 1.0, [(1.0, 1.0, 1.0)]).apply(doc)
+    (found,) = page_drawings(doc, 0)
+    assert found.touches(150, 107.5, reach=0.5), "thicker than the thickness it says"
+    assert not found.touches(150, 112, reach=0.5)

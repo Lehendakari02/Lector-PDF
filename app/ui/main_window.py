@@ -40,7 +40,7 @@ from PySide6.QtWidgets import (
 )
 
 from app import APP_NAME, BUILD_LABEL, __version__
-from app.core import save_checks, save_settings, saving
+from app.core import pen, save_checks, save_settings, saving
 from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
 from app.core.document import PdfDocument, PdfOpenError, engine_version
 from app.core.drawing import ARROW, BOX, DRAW, ERASER, LINE, OVAL, SHAPE_TOOL, WIDTHS
@@ -1666,6 +1666,25 @@ class MainWindow(QMainWindow):
 
     # ---- the saving settings ---------------------------------------------------
 
+    def apply_pen_settings(self) -> None:
+        """Follow what the settings say now about the pen and the fingers."""
+        pages = [*getattr(self, "documents", []), getattr(self, "_spare", None)]
+        for page in pages:
+            if page is not None:
+                self._give_pen_settings(page.view)
+
+    def _give_pen_settings(self, view: PdfView) -> None:
+        view.pen_pressure = pen.pressure_wanted(self.settings)
+        view.finger_mode = pen.finger_mode(self.settings)
+        view.pen_seen = pen.pen_seen(self.settings)
+
+    def _pen_was_seen(self) -> None:
+        """A pen has been used: from now on the fingers leave the drawing to it
+        (unless the settings say otherwise)."""
+        if not pen.pen_seen(self.settings):
+            self.settings.set(pen.PEN_SEEN_SETTING, True)
+        self.apply_pen_settings()
+
     def apply_save_settings(self) -> None:
         """Follow what the settings say now about versions and saving by itself."""
         self.versions.max_per_document = save_settings.versions_count(self.settings)
@@ -2102,6 +2121,8 @@ class MainWindow(QMainWindow):
         page = DocumentPage()
         view = page.view
         self._give_marker_styles(view)
+        self._give_pen_settings(view)
+        view.pen_seen_changed.connect(self._pen_was_seen)
         view.page_changed.connect(self._update_position)
         view.page_changed.connect(lambda *_args: self._place_timer.start())
         view.zoom_changed.connect(self._update_position)

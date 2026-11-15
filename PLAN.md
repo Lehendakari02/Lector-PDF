@@ -400,7 +400,7 @@ Notas de la Fase 1:
 | 2.8 | Dibujo a mano alzada, flechas, formas, borrador | Dibujo y borro sobre la página | ✅ (con ratón; lápiz y dedo llegan con la 2.11) |
 | 2.9 | Seleccionar, mover, redimensionar, copiar y borrar anotaciones | Corrijo una anotación mal puesta sin rehacerla | ✅ (solo las hechas con este programa) |
 | 2.10 | Herramientas favoritas | Guardo "rotulador amarillo fino" y lo uso con un clic | ✅ |
-| 2.11 | Lápiz y pantalla táctil | Subrayo con lápiz en una tableta sin que la mano pinte | ⬜ |
+| 2.11 | Lápiz y pantalla táctil | Subrayo con lápiz en una tableta sin que la mano pinte | ✅ (hecho sin tableta: falta la prueba con un lápiz y una pantalla táctil de verdad) |
 | 2.12 | Mostrar/ocultar anotaciones (también al imprimir/exportar) | Con un botón veo el documento limpio | ⬜ |
 | 2.13 | Atajos de teclado para cada herramienta | Cambio de herramienta sin usar el ratón | ⬜ |
 | 2.14 | Versión 0.2 | Estudio un tema completo con el programa durante una sesión real | ⬜ |
@@ -707,6 +707,47 @@ Notas de la Fase 2A:
   - Se guardan en los ajustes del programa (no en el PDF) y valen para todos
     los documentos.
   - No trae ninguna favorita de fábrica: cada persona guarda las suyas.
+- **2.11: lápiz y pantalla táctil (15/11/2026).**
+  - **Aviso importante:** se ha hecho y probado sin tableta, fabricando a mano
+    las señales que mandan un lápiz y unos dedos. Falta probarlo con un lápiz
+    y una pantalla táctil de verdad (lista de pruebas a mano); es probable que
+    ahí salgan ajustes finos.
+  - **El lápiz hace todo lo que hace el ratón** (dibujar, formas, subrayar,
+    notas, elegir y mover).
+  - **Presión:** con la herramienta Dibujar, el trazo sale más grueso donde se
+    aprieta más (entre un tercio y algo más de vez y media del grosor
+    elegido; apretando a medias, el grosor elegido). Se ve así ya mientras se
+    dibuja. Un lápiz que no nota la presión dibuja trazos normales.
+  - **Cómo se guarda:** sigue siendo un trazo estándar ("Ink") con su grosor
+    normal, y además lleva dibujado su aspecto con el grosor variable, que es
+    lo que enseñan los demás lectores. Comprobado en el motor de Chrome/Edge;
+    en Adobe Reader, pendiente de la prueba manual. La presión de cada punto
+    se guarda también dentro de la anotación, para que al moverlo, cambiarlo
+    de tamaño, copiarlo o deshacer un borrado vuelva idéntico.
+  - **Borrar con el lápiz:** la goma del otro extremo, o el botón del lápiz
+    apretado, borran sin cambiar de herramienta.
+  - **Dedos:** un dedo mueve la página (y sigue deslizándose un poco si se
+    empuja rápido); dos dedos la mueven y la amplían o reducen. Un toque es un
+    clic. Dejar el dedo quieto medio segundo hace de ratón: arrastrar
+    selecciona texto o mueve lo elegido, y levantarlo sin mover abre el menú
+    del botón derecho.
+  - **Dedo con una herramienta en la mano** (Ajustes → Lápiz y dedo):
+    - *Automático* (de fábrica): el dedo usa la herramienta mientras no se
+      haya usado nunca un lápiz en el programa. Desde la primera vez que se usa
+      un lápiz, el dedo solo mueve la página.
+    - *Dibuja y marca, como el lápiz*, o *Solo mueve la página*.
+    - Si mientras un dedo dibuja se apoya un segundo dedo, ese trazo se
+      descarta y los dos dedos mueven y amplían.
+  - **La palma no pinta:** mientras el lápiz toca o está cerca de la pantalla,
+    y durante 0,7 segundos después, lo que toque la pantalla se ignora hasta
+    que se levante. Si un dedo estaba dibujando y llega el lápiz, manda el
+    lápiz.
+  - **Ajustes nuevos** (pestaña "Lápiz y dedo"): "Trazo más grueso al apretar
+    más el lápiz" (activado) y qué hace el dedo.
+  - Dos toques seguidos con el dedo o el lápiz son un doble clic (seleccionan
+    la palabra, abren un texto).
+  - Sin hacer: inclinación del lápiz. La fila de modos sigue midiendo 34 puntos de alto (lo recomendado
+    para el dedo son 40): se decide al probarla con el dedo.
 
 ## Fase 2B – Documentos escaneados (OCR)
 | # | Tarea | Terminado cuando… | Estado |

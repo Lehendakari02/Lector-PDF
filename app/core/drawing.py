@@ -8,9 +8,17 @@ take it away (and undo can bring it back exactly as it was).
 
 ``page_drawings`` also reads the highlights, underlines and strike-outs, for
 the same eraser.
+
+A stroke made with a pen that feels pressure is thicker where the hand
+pressed more. A standard "Ink" annotation has one thickness only, so such a
+stroke is still a standard one (with its points and its usual thickness) that
+also carries its look drawn: the "appearance" every viewer shows. How hard the
+pen pressed at each point is kept in the annotation too, under a key of this
+program, to put the stroke again just the same after moving or erasing it.
 """
 
 import math
+import re
 from dataclasses import dataclass
 
 from app.core.commands import (
@@ -50,6 +58,12 @@ MIN_WIDTH, MAX_WIDTH = 0.5, 24.0
 MIN_SHAPE = 3.0  # points; a shape smaller than this is a slip of the hand
 # PyMuPDF keeps a box or an oval in a rectangle this much bigger all round.
 _BOX_PADDING = 1.0
+# With pressure, a stroke goes from this much to this much of its thickness.
+THINNEST, THICKEST = 0.35, 1.65
+PRESSURE_KEY = "LectorPDFPressure"  # where the annotation keeps the pressures
+_CIRCLE = 0.5523  # how far the handles of a Bézier quarter of circle go
+_NUMBER = re.compile(r"-?\d*\.?\d+")
+_LIST = re.compile(r"\[([^\[\]]*)\]")
 
 
 def clamp_width(value: object) -> float:
@@ -101,9 +115,20 @@ class AddInk:
     width: float
     opacity: float
     name: str
+    # How hard the pen pressed at each point of each stroke, from 0 to 1.
+    # Empty: drawn with a mouse, or with pressure turned off.
+    pressures: tuple[tuple[float, ...], ...] = ()
 
     def pages(self) -> list[int]:
         return [self.page]
+
+    @property
+    def pressed(self) -> bool:
+        """Whether it has a pressure for every point (and so a thickness that varies)."""
+        return len(self.pressures) == len(self.strokes) and all(
+            len(pressed) == len(stroke)
+            for pressed, stroke in zip(self.pressures, self.strokes, strict=True)
+        )
 
     def apply(self, doc) -> list[int]:
         import pymupdf
@@ -111,10 +136,13 @@ class AddInk:
         try:
             page = doc[self.page]
             if find_annotation(page, self.name) is None:
+                kept = [index for index, stroke in enumerate(self.strokes) if len(stroke) >= 2]
                 turned = [
-                    [tuple(pymupdf.Point(point) * page.derotation_matrix) for point in stroke]
-                    for stroke in self.strokes
-                    if len(stroke) >= 2
+                    [
+                        tuple(pymupdf.Point(point) * page.derotation_matrix)
+                        for point in self.strokes[index]
+                    ]
+                    for index in kept
                 ]
                 if not turned:
                     raise CommandError("there is nothing drawn")
@@ -124,6 +152,9 @@ class AddInk:
                 annotation.set_opacity(max(0.05, _unit(self.opacity)))
                 annotation.update()
                 _name_it(doc, annotation, self.name)
+                if self.pressed:
+                    pressures = [self.pressures[index] for index in kept]
+                    _draw_pressed(doc, annotation, pressures, clamp_width(self.width), self.color)
         except CommandError:
             raise
         except Exception as error:  # PyMuPDF raises several unrelated error types
@@ -142,7 +173,7 @@ class AddInk:
             "width": self.width,
             "opacity": self.opacity,
             "name": self.name,
-        }
+        } | ({"pressures": [list(pressed) for pressed in self.pressures]} if self.pressures else {})
 
     @classmethod
     def from_dict(cls, data: dict) -> "AddInk":
@@ -153,6 +184,9 @@ class AddInk:
             float(data["width"]),
             float(data.get("opacity", 1.0)),
             str(data["name"]),
+            tuple(
+                tuple(_unit(value) for value in pressed) for pressed in data.get("pressures", ())
+            ),
         )
 
 
@@ -248,9 +282,13 @@ def new_ink(
     color: Color = DRAW_COLOR,
     width: float = DEFAULT_WIDTH,
     opacity: float = 1.0,
+    pressures=(),
 ) -> AddInk:
+    """The order for a drawing. ``pressures``, if given, has one list per
+    stroke with how hard the pen pressed at each of its points (0 to 1)."""
     kept = tuple(_points(stroke) for stroke in strokes)
-    return AddInk(page, kept, color, clamp_width(width), opacity, new_name())
+    pressed = tuple(tuple(_unit(value) for value in stroke) for stroke in pressures)
+    return AddInk(page, kept, color, clamp_width(width), opacity, new_name(), pressed)
 
 
 def new_shape(
@@ -286,6 +324,144 @@ def thinned(points, apart: float = 0.7) -> tuple[Point, ...]:
     return tuple(kept)
 
 
+def thinned_stroke(points, pressures, apart: float = 0.7):
+    """Like ``thinned``, for a stroke with a pressure at each point: both come
+    back with the same points dropped."""
+    points = _points(points)
+    pressures = [_unit(value) for value in pressures]
+    if len(points) != len(pressures):
+        return thinned(points, apart), ()
+    if len(points) < 3:
+        return points, tuple(pressures)
+    kept = [0]
+    for index in range(1, len(points) - 1):
+        if math.dist(points[index], points[kept[-1]]) >= apart:
+            kept.append(index)
+    kept.append(len(points) - 1)
+    return tuple(points[i] for i in kept), tuple(pressures[i] for i in kept)
+
+
+# ---- a stroke that is thicker where the pen pressed more ---------------------------
+
+
+FELT = 0.03  # less difference of pressure than this along a stroke is none at all
+
+
+def felt(pressures) -> bool:
+    """Whether the pen really told how hard it pressed along a stroke.
+
+    A pen that does not feel pressure says the same number all the time: its
+    strokes are plain ones, with the thickness that was chosen.
+    """
+    values = [_unit(value) for value in pressures]
+    return len(values) >= 2 and max(values) - min(values) >= FELT
+
+
+def half_widths(pressures, width: float) -> list[float]:
+    """Half the thickness of a stroke at each point, from how hard the pen pressed.
+
+    Neighbours are evened out a little, so a trembling pressure does not
+    leave lumps.
+    """
+    pressed = [_unit(value) for value in pressures]
+    smooth = []
+    for index, value in enumerate(pressed):
+        around = pressed[max(0, index - 1) : index + 2]
+        smooth.append((value + sum(around)) / (1 + len(around)))
+    return [width / 2 * (THINNEST + (THICKEST - THINNEST) * value) for value in smooth]
+
+
+def pressed_shape(points, radii) -> tuple[list[tuple[Point, Point, Point, Point]], list]:
+    """What a stroke of varying thickness is made of: a four-sided piece from
+    each point to the next and a disc ``(x, y, radius)`` on each point.
+
+    Filled all together they are the stroke. Every piece goes round the same
+    way, so that where they overlap they add up instead of leaving a hole.
+    """
+    points = _points(points)
+    pieces = []
+    for index in range(len(points) - 1):
+        first, second = points[index], points[index + 1]
+        r0, r1 = radii[index], radii[index + 1]
+        length = math.dist(first, second)
+        if length < 1e-6:
+            continue
+        nx, ny = -(second[1] - first[1]) / length, (second[0] - first[0]) / length
+        piece = (
+            (first[0] + nx * r0, first[1] + ny * r0),
+            (second[0] + nx * r1, second[1] + ny * r1),
+            (second[0] - nx * r1, second[1] - ny * r1),
+            (first[0] - nx * r0, first[1] - ny * r0),
+        )
+        if _area(piece) < 0:
+            piece = piece[::-1]
+        pieces.append(piece)
+    discs = [(x, y, radius) for (x, y), radius in zip(points, radii, strict=True)]
+    return pieces, discs
+
+
+def _area(corners) -> float:
+    """Twice the area inside, positive when the corners go round one way."""
+    return sum(
+        x0 * y1 - x1 * y0
+        for (x0, y0), (x1, y1) in zip(corners, (*corners[1:], corners[0]), strict=True)
+    )
+
+
+def _draw_pressed(doc, annotation, pressures, width: float, color: Color) -> None:
+    """Give an ink annotation the look of a stroke of varying thickness, and
+    keep in it the pressures it was made with."""
+    written = doc.xref_get_key(annotation.xref, "InkList")[1]
+    look = doc.xref_get_key(annotation.xref, "AP/N")
+    strokes = [
+        [float(number) for number in _NUMBER.findall(stroke)] for stroke in _LIST.findall(written)
+    ]
+    if look[0] != "xref" or len(strokes) != len(pressures):
+        return  # not the annotation that was expected: its plain look stays
+    parts = ["q", "/H gs", "{:g} {:g} {:g} rg".format(*color)]
+    for numbers, pressed in zip(strokes, pressures, strict=True):
+        points = list(zip(numbers[0::2], numbers[1::2], strict=True))
+        if len(points) != len(pressed):
+            return
+        pieces, discs = pressed_shape(points, half_widths(pressed, width))
+        for piece in pieces:
+            (x0, y0), *others = piece
+            parts.append(
+                f"{x0:.2f} {y0:.2f} m " + " ".join(f"{x:.2f} {y:.2f} l" for x, y in others) + " h"
+            )
+        for x, y, r in discs:
+            k = r * _CIRCLE
+            parts.append(
+                f"{x + r:.2f} {y:.2f} m "
+                f"{x + r:.2f} {y + k:.2f} {x + k:.2f} {y + r:.2f} {x:.2f} {y + r:.2f} c "
+                f"{x - k:.2f} {y + r:.2f} {x - r:.2f} {y + k:.2f} {x - r:.2f} {y:.2f} c "
+                f"{x - r:.2f} {y - k:.2f} {x - k:.2f} {y - r:.2f} {x:.2f} {y - r:.2f} c "
+                f"{x + k:.2f} {y - r:.2f} {x + r:.2f} {y - k:.2f} {x + r:.2f} {y:.2f} c h"
+            )
+    parts += ["f", "Q", ""]
+    doc.update_stream(int(look[1].split()[0]), "\n".join(parts).encode("ascii"))
+    kept = " ".join(
+        "[" + " ".join(f"{value:.2f}" for value in stroke) + "]" for stroke in pressures
+    )
+    doc.xref_set_key(annotation.xref, PRESSURE_KEY, f"[{kept}]")
+
+
+def _read_pressures(doc, xref: int, strokes) -> tuple[tuple[float, ...], ...]:
+    """The pressures an ink annotation keeps, if they fit its strokes."""
+    kind, written = doc.xref_get_key(xref, PRESSURE_KEY)
+    if kind != "array":
+        return ()
+    found = tuple(
+        tuple(_unit(float(number)) for number in _NUMBER.findall(stroke))
+        for stroke in _LIST.findall(written)
+    )
+    if len(found) != len(strokes):
+        return ()
+    if any(len(pressed) != len(stroke) for pressed, stroke in zip(found, strokes, strict=True)):
+        return ()
+    return found
+
+
 # ---- reading them back ----------------------------------------------------------
 
 
@@ -302,6 +478,7 @@ class PageDrawing:
     width: float = DEFAULT_WIDTH
     opacity: float = 1.0
     rects: tuple[Rect, ...] = ()  # a text mark: one rectangle per line
+    pressures: tuple[tuple[float, ...], ...] = ()  # ink drawn with a pen that feels it
 
     @property
     def ours(self) -> bool:
@@ -314,7 +491,15 @@ class PageDrawing:
             mark = Mark(self.page, self.rects, self.name)
             return AddMarkup(self.kind, (mark,), self.color, self.opacity)
         if self.kind == INK:
-            return AddInk(self.page, self.strokes, self.color, self.width, self.opacity, self.name)
+            return AddInk(
+                self.page,
+                self.strokes,
+                self.color,
+                self.width,
+                self.opacity,
+                self.name,
+                self.pressures,
+            )
         start, end = self.strokes[0]
         return AddShape(
             self.kind, self.page, start, end, self.color, self.width, self.opacity, self.name
@@ -322,7 +507,7 @@ class PageDrawing:
 
     def touches(self, x: float, y: float, reach: float = 3.0) -> bool:
         """Whether a point of the page is on it (on its line, not in its hollow)."""
-        near = reach + self.width / 2
+        near = reach + self.width / 2 * (THICKEST if self.pressures else 1.0)
         if self.kind in MARKUP_KINDS:
             return any(x0 <= x <= x1 and y0 <= y <= y1 for x0, y0, x1, y1 in self.rects)
         x0, y0, x1, y1 = self.rect
@@ -395,7 +580,12 @@ def page_drawings(doc, page_number: int) -> list[PageDrawing]:
         vertices = annotation.vertices or []
         if kind == "Ink":
             strokes = tuple(tuple(_shown(page, p) for p in stroke) for stroke in vertices)
-            found.append(PageDrawing(INK, page_number, name, rect, strokes, color, width, opacity))
+            pressures = _read_pressures(doc, annotation.xref, strokes)
+            found.append(
+                PageDrawing(
+                    INK, page_number, name, rect, strokes, color, width, opacity, (), pressures
+                )
+            )
         elif kind == "Line" and len(vertices) == 2:
             ends = (_shown(page, vertices[0]), _shown(page, vertices[1]))
             arrow = annotation.line_ends[1] != pymupdf.PDF_ANNOT_LE_NONE
