@@ -248,3 +248,23 @@ Pon antes un dibujo, una flecha, un recuadro, un texto y una nota.
 15. Botón derecho sobre un dibujo: ofrece Copiar, Duplicar y Borrar.
 16. Mueve varias cosas, guarda y abre el PDF en **Edge** y en **Adobe
     Reader**: todo está donde lo dejaste.
+
+## Tarea 2.10 – Herramientas favoritas
+
+En el modo **Estudiar**.
+
+1. En la flecha junto a **Dibujar**, elige color rojo y grosor "Grueso", y
+   pulsa **Guardar en favoritas**: aparece una barra fina debajo con
+   "Dibujar · rojo · grueso".
+2. Guarda otras dos: un resaltador verde y una flecha azul.
+3. Cambia el color de Dibujar a negro. Pulsa la favorita roja: Dibujar vuelve
+   a rojo y grueso, y queda en la mano. Dibuja: sale así.
+4. Selecciona texto y pulsa el resaltador verde favorito: queda resaltado en
+   verde.
+5. Botón derecho sobre una favorita → **Cambiar el nombre…**: ponle "Mi boli".
+   Déjalo vacío otra vez: vuelve el nombre de antes.
+6. Botón derecho → **Mover a la derecha** y **Quitar de favoritas**.
+7. Pasa al modo Leer: la barra de favoritas desaparece. Vuelve a Estudiar:
+   está ahí.
+8. Cierra el programa y ábrelo: las favoritas siguen.
+9. Intenta guardar dos veces la misma: avisa de que ya estaba.
