@@ -251,6 +251,7 @@ class PdfView(QAbstractScrollArea):
     picked_changed = Signal()  # an annotation is picked, or not any more
     item_copied = Signal()  # the picked annotation was copied, to paste it
     pen_seen_changed = Signal()  # a pen touched a page for the first time
+    annotations_shown_changed = Signal(bool)  # what was put on the pages is seen, or hidden
     # The annotation copied last, for every document: the order that puts it.
     copied = None
     _changed = Signal(int, object, object, bool)
@@ -348,6 +349,8 @@ class PdfView(QAbstractScrollArea):
         # number while the helper puts it, then by page until it is drawn again.
         self._sent_sketches: dict[int, tuple] = {}
         self._settling: dict[int, list[tuple]] = {}
+        # False: the pages are seen clean, without marks, notes or drawings.
+        self._annotations_shown = True
         # The pen and the fingers (the window gives what the user chose).
         self.pen_pressure = True  # a stroke is thicker where the pen presses more
         self.finger_mode = pen.AUTO
@@ -453,6 +456,7 @@ class PdfView(QAbstractScrollArea):
         chosen = self.selection()
         if chosen is None or kind not in MARKUP_KINDS or self._document is None:
             return False
+        self.set_annotations_shown(True)  # what is put now must be seen
         number = self.service.mark_text(
             kind,
             chosen[0],
@@ -472,10 +476,36 @@ class PdfView(QAbstractScrollArea):
     def can_redo(self) -> bool:
         return bool(self._redo)
 
+    @property
+    def annotations_shown(self) -> bool:
+        return self._annotations_shown
+
+    def set_annotations_shown(self, shown: bool) -> None:
+        """See the pages with what was put on them, or clean.
+
+        Nothing is taken away: hidden, the marks, notes and drawings stay in
+        the document, they are just not drawn (and cannot be picked or erased).
+        """
+        shown = bool(shown)
+        if shown == self._annotations_shown:
+            return
+        self._annotations_shown = shown
+        if not shown:
+            self.close_note_panel(keep=True)
+            self._let_go()
+            self.pick(None)
+        # Every picture is of the other kind: they stay until the new ones come.
+        self._stale.update(range(self.page_count))
+        self._settling.clear()
+        self._request_pages()
+        self.viewport().update()
+        self.annotations_shown_changed.emit(shown)
+
     def undo(self) -> bool:
         """Take back the last change. False if there is nothing to take back."""
         if not self._undo:
             return False
+        self.set_annotations_shown(True)  # a change that is not seen would be a trap
         order = self._undo.pop()
         self._changing[self.service.apply(order, undo=True)] = "undo"
         self.history_changed.emit()
@@ -495,6 +525,7 @@ class PdfView(QAbstractScrollArea):
         """Carry out again the last change taken back."""
         if not self._redo:
             return False
+        self.set_annotations_shown(True)
         order = self._redo.pop()
         self._changing[self.service.apply(order)] = "redo"
         self.history_changed.emit()
@@ -601,6 +632,9 @@ class PdfView(QAbstractScrollArea):
             self._document.close()
             self.service.close_document()
         was_modified = self.modified
+        if not self._annotations_shown:  # the next document opens with everything in sight
+            self._annotations_shown = True
+            self.annotations_shown_changed.emit(True)
         self._changes = self._saved_changes = 0
         self._saves.clear()
         self.journal = None
@@ -661,15 +695,15 @@ class PdfView(QAbstractScrollArea):
         """Sizes of the pages as the document has them (the view's turn not applied)."""
         return list(self._sizes)
 
-    def want_print_pages(self, pages: list[int], zoom: float) -> None:
+    def want_print_pages(self, pages: list[int], zoom: float, annotations: bool = True) -> None:
         """Ask for ``pages`` drawn for a printer (an empty list cancels).
 
         They are drawn as the document is: the turn of the view and the tone of
-        the paper are only for the screen.
+        the paper are only for the screen. Without ``annotations``, clean.
         """
         if self._document is None:
             return
-        self.service.want_prints([RenderRequest(page, zoom, 0) for page in pages])
+        self.service.want_prints([RenderRequest(page, zoom, 0, annotations) for page in pages])
 
     def want_thumbnails(self, pages: list[int], width: int, height: int) -> None:
         """Ask for small pictures of ``pages`` that fit in ``width`` x ``height`` pixels.
@@ -1003,7 +1037,9 @@ class PdfView(QAbstractScrollArea):
             if page in self._failed_pages:
                 continue  # it cannot be drawn: asking again would only fail again
             if page not in self._cache or self._cache[page][0] != zoom or page in self._stale:
-                self._wanted.append(RenderRequest(page, zoom, self._rotation))
+                self._wanted.append(
+                    RenderRequest(page, zoom, self._rotation, self._annotations_shown)
+                )
         self.service.want(self._wanted)
         for page in visible:
             self._want_notes(page)
@@ -1032,6 +1068,8 @@ class PdfView(QAbstractScrollArea):
             return
         if result.rotation != self._rotation:
             return  # drawn before the view was turned
+        if result.annotations != self._annotations_shown:
+            return  # drawn before the annotations were hidden or shown
         image = QImage(
             result.samples,
             result.width,
@@ -1364,7 +1402,7 @@ class PdfView(QAbstractScrollArea):
     def note_under(self, position: QPoint) -> PageNote | None:
         """The note or text box under a place of the window."""
         point = self._point_on_page(position, reach=NOTE_REACH)
-        if point is None:
+        if point is None or not self._annotations_shown:
             return None
         page, x, y = point
         found = self._notes.get(page, ())
@@ -1395,6 +1433,7 @@ class PdfView(QAbstractScrollArea):
     def _do(self, order) -> bool:
         if self._document is None:
             return False
+        self.set_annotations_shown(True)  # what is put now must be seen
         number = self.service.apply(order)
         self._changing[number] = "do"
         # A drawing put or moved is painted on top until its page is drawn again.
@@ -1561,8 +1600,8 @@ class PdfView(QAbstractScrollArea):
         """Take away what is under a place of the window, if it was made here:
         a drawing, a shape, a mark on the text, a note or a text box."""
         point = self._point_on_page(position)
-        if point is None or self._document is None:
-            return False
+        if point is None or self._document is None or not self._annotations_shown:
+            return False  # what is not seen is not erased
         page, x, y = point
         gone = self._erased.setdefault(page, set())
         note = self.note_under(position)
@@ -1618,7 +1657,7 @@ class PdfView(QAbstractScrollArea):
         if note is not None and note.ours:
             return note
         point = self._point_on_page(position, reach=NOTE_REACH)
-        if point is None:
+        if point is None or not self._annotations_shown:
             return None
         page, x, y = point
         reach = PICK_REACH / self._zoom

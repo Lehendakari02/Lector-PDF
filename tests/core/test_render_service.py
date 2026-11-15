@@ -543,3 +543,82 @@ def test_an_empty_list_cancels_the_printing(printer, sample):
     printer.service.want([RenderRequest(0, 0.5)])
     printer.wait(lambda: printer.pages)
     assert len(printer.printed) < 200
+
+
+# ---- pages drawn clean, without what was put on them --------------------------
+
+
+def annotated(tmp_path, turned: bool = False):
+    """A page with text, a form field with something written, a highlight, a
+    note and a drawing."""
+    path = tmp_path / "anotado.pdf"
+    with pymupdf.open() as doc:
+        page = doc.new_page(width=300, height=200)
+        page.insert_text((20, 30), "hola")
+        field = pymupdf.Widget()
+        field.field_name, field.field_type = "nombre", pymupdf.PDF_WIDGET_TYPE_TEXT
+        field.rect, field.field_value = pymupdf.Rect(20, 50, 200, 80), "VALOR"
+        field.fill_color = (0.6, 0.8, 1)
+        page.add_widget(field)
+        page.add_highlight_annot(pymupdf.Rect(20, 100, 200, 130))
+        page.add_text_annot((220, 100), "una nota")
+        page.add_ink_annot([[(20, 150), (120, 180), (200, 150)]])
+        if turned:
+            page.set_rotation(90)
+        doc.save(path)
+    return path
+
+
+def colour_at(result, x: int, y: int) -> tuple[int, int, int]:
+    start = y * result.stride + x * 3
+    return tuple(result.samples[start : start + 3])
+
+
+def test_a_page_can_be_drawn_without_its_annotations(tmp_path):
+    with pymupdf.open(annotated(tmp_path)) as doc:
+        full, clean = render_page(doc, 0, 1.0), render_page(doc, 0, 1.0, annotations=False)
+        with_nothing = doc[0].get_pixmap(annots=False)
+    assert full.annotations and not clean.annotations
+    assert (clean.width, clean.height) == (full.width, full.height)
+    assert colour_at(full, 100, 115) != (255, 255, 255), "the highlight"
+    assert colour_at(clean, 100, 115) == (255, 255, 255)
+    assert colour_at(clean, 120, 180) == (255, 255, 255), "the drawing"
+    assert colour_at(clean, 228, 108) == (255, 255, 255), "the note"
+    # What the document itself has stays: its text and its form fields.
+    assert colour_at(clean, 190, 55) == colour_at(full, 190, 55) != (255, 255, 255)
+    assert with_nothing.pixel(190, 55) == (255, 255, 255), "the plain way loses the fields"
+    assert clean.samples != bytes(with_nothing.samples)
+
+
+def test_a_turned_page_is_drawn_clean_the_same_way_round(tmp_path):
+    with pymupdf.open(annotated(tmp_path, turned=True)) as doc:
+        full, clean = render_page(doc, 0, 1.0), render_page(doc, 0, 1.0, annotations=False)
+        again = render_page(doc, 0, 1.5, rotation=90, annotations=False)
+    assert (clean.width, clean.height) == (full.width, full.height) == (200, 300)
+    assert (again.width, again.height) == (450, 300)
+    differ = sum(1 for a, b in zip(full.samples, clean.samples, strict=True) if a != b)
+    assert 0 < differ < len(full.samples) * 0.2, "only the annotations are missing"
+
+
+def test_drawing_a_page_clean_does_not_change_the_document(tmp_path):
+    with pymupdf.open(annotated(tmp_path)) as doc:
+
+        def objects():
+            return [doc.xref_object(xref) for xref in range(1, doc.xref_length())]
+
+        before = objects()
+        render_page(doc, 0, 1.0, annotations=False)
+        assert objects() == before
+        page = doc[0]
+        assert len(list(page.annots())) == 3
+
+
+def test_the_helper_draws_pages_clean_when_asked(collector, tmp_path):
+    collector.service.open(annotated(tmp_path))
+    collector.service.want([RenderRequest(0, 1.0, 0, False)])
+    collector.wait(lambda: len(collector.pages) == 1)
+    collector.service.want([RenderRequest(0, 1.0)])
+    collector.wait(lambda: len(collector.pages) == 2)
+    clean, full = collector.pages
+    assert not clean.annotations and full.annotations
+    assert colour_at(clean, 100, 115) == (255, 255, 255) != colour_at(full, 100, 115)

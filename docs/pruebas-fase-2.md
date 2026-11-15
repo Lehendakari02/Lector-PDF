@@ -306,3 +306,25 @@ Con el lápiz:
     lápiz" y dibuja: todo el trazo tiene el mismo grosor. Cambia "El dedo, con
     una herramienta en la mano" a "Dibuja y marca" y comprueba que el dedo
     vuelve a dibujar.
+
+## Tarea 2.12 – Mostrar y ocultar anotaciones
+
+En el modo **Estudiar**, con un documento que tenga subrayados, alguna nota y
+algún dibujo.
+
+1. Pulsa **Ocultar anotaciones**: la página se ve limpia, como el original. El
+   botón queda pulsado y abajo dice que no se ha borrado nada.
+2. Pulsa otra vez: vuelve todo, en su sitio.
+3. Con las anotaciones ocultas, haz clic donde había un dibujo: no se elige
+   nada. Pasa el borrador por ahí: no borra nada.
+4. Con las anotaciones ocultas, subraya una frase: vuelven a verse todas, con
+   la nueva.
+5. Oculta, guarda, cierra y abre el documento: las anotaciones están todas.
+6. Abre dos documentos y oculta en uno: en el otro se siguen viendo.
+7. Abre un PDF con campos de formulario rellenados y oculta las anotaciones:
+   lo escrito en los campos se sigue viendo.
+8. **Imprimir** con las anotaciones ocultas: la casilla "Con las anotaciones"
+   sale sin marcar y el papel sale limpio. Márcala: salen. Con las
+   anotaciones a la vista, la casilla sale marcada.
+9. También está en **Menú → Ver** y en el buscador de funciones (Ctrl+K,
+   escribe "ocultar").

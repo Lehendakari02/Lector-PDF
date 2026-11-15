@@ -111,6 +111,10 @@ ICONS: dict[str, str] = {
         '1.5 0 0 1 0 2.1L12.5 20z"/><path d="M9 9l6.5 6.5M8.5 20H20"/>'
     ),
     "bookmark": '<path d="M7 4h10a1 1 0 0 1 1 1v15l-6-4-6 4V5a1 1 0 0 1 1-1z"/>',
+    "hide_annotations": (
+        '<path d="M3 12s3.3-6 9-6c1.6 0 3 .5 4.2 1.2M21 12s-3.3 6-9 6c-1.6 0-3-.5-4.2-1.2"/>'
+        '<circle cx="12" cy="12" r="2.5"/><path d="M4.5 19.5l15-15"/>'
+    ),
     "go_to_article": (
         '<path d="M5 4.5V11a3 3 0 0 0 3 3h11"/><path d="M15 10l4 4-4 4"/><path d="M5 19.5h6"/>'
     ),

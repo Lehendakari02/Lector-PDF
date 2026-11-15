@@ -35,6 +35,7 @@ class PrintChoices:
     scaling: Scaling = Scaling.FIT
     both_sides: bool = False
     grey: bool = False
+    annotations: bool = True  # False: the pages clean, without marks, notes or drawings
 
 
 class PrintDialog(QDialog):
@@ -52,6 +53,7 @@ class PrintDialog(QDialog):
         current_page: int,
         settings: Settings,
         parent: QWidget | None = None,
+        annotations: bool = True,
     ) -> None:
         super().__init__(parent)
         self._page_count = page_count
@@ -132,6 +134,12 @@ class PrintDialog(QDialog):
         self.grey_box = QCheckBox(self.tr("En &blanco y negro"))
         self.grey_box.setChecked(remembered.get("grises") is True)
         layout.addWidget(self.grey_box)
+        # As the document is being seen: clean if the annotations are hidden.
+        self.annotations_box = QCheckBox(
+            self.tr("Con las &anotaciones (subrayados, notas y dibujos)")
+        )
+        self.annotations_box.setChecked(annotations)
+        layout.addWidget(self.annotations_box)
 
         layout.addStretch(1)
         buttons = QDialogButtonBox(
@@ -210,6 +218,7 @@ class PrintDialog(QDialog):
             scaling=self.scaling_box.currentData(),
             both_sides=self.both_sides_box.isChecked(),
             grey=self.grey_box.isChecked(),
+            annotations=self.annotations_box.isChecked(),
         )
         self._settings.set(
             PRINT_SETTING,
