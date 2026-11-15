@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMainWindow,
@@ -44,6 +45,7 @@ from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
 from app.core.document import PdfDocument, PdfOpenError, engine_version
 from app.core.drawing import ARROW, BOX, DRAW, ERASER, LINE, OVAL, SHAPE_TOOL, WIDTHS
 from app.core.error_log import running_from_source_or_test_build
+from app.core.favourites import MAX_FAVOURITES, Favourites, apply_to, favourite_of
 from app.core.history import History, file_key
 from app.core.interface_size import NORMAL_SIZE
 from app.core.journal import FOLDER_NAME as JOURNAL_FOLDER
@@ -71,6 +73,7 @@ from app.ui.color_menu import ColorMenu
 from app.ui.command_palette import CommandPalette
 from app.ui.document_page import DocumentPage
 from app.ui.error_reporting import ErrorReporter, ProvokedError
+from app.ui.favourites_bar import FavouritesBar
 from app.ui.features import (
     FEATURES,
     GROUP_STARTS,
@@ -112,6 +115,7 @@ RESTORE_TRIES = 6
 RESTORE_PAUSE = 0.25  # seconds
 PLACE_DELAY_MS = 2000  # how long after turning the page it is remembered
 MARKERS_SETTING = "rotuladores"  # colour and opacity of each marking tool
+FAVOURITES_SETTING = "favoritas"  # the favourite tools, in the order of their bar
 TOOLBAR_NAMES, TOOLBAR_ICONS = "nombres", "iconos"
 TOP_SEARCH_WIDTH = 280
 SIDE_PANEL_SETTING = "panel_lateral"  # "", "miniaturas" or "indice"
@@ -450,6 +454,7 @@ class MainWindow(QMainWindow):
             self.addToolBar(Qt.ToolBarArea.TopToolBarArea, toolbar)
             self.mode_toolbars[mode] = toolbar
         self._build_color_menus()
+        self._build_favourites_bar()
         self.set_toolbar_icons_only(
             self.settings.get(TOOLBAR_SETTING) == TOOLBAR_ICONS, remember=False
         )
@@ -460,6 +465,7 @@ class MainWindow(QMainWindow):
         and the shapes their colour, thickness and opacity."""
         self.marker_styles = MarkerStyles.from_setting(self.settings.get(MARKERS_SETTING))
         self.color_menus: dict[str, ColorMenu] = {}
+        self.favourite_actions: dict[str, QAction] = {}
         toolbar = self.mode_toolbars[Mode.STUDY]
         for kind in STYLED_KINDS:
             action = self.feature_actions[kind]
@@ -471,6 +477,13 @@ class MainWindow(QMainWindow):
                 self._add_shape_choices(menu)
             if kind in LINE_KINDS:
                 self._add_width_choices(menu, kind)
+            menu.addSeparator()
+            keep = menu.addAction(self.tr("Guardar en favoritas"))
+            keep.setToolTip(
+                self.tr("Deja esta herramienta, tal como está ahora, en la barra de favoritas")
+            )
+            keep.triggered.connect(lambda _checked=False, k=kind: self.add_favourite(k))
+            self.favourite_actions[kind] = keep
             menu.color_chosen.connect(lambda color, k=kind: self.set_marker_color(k, color))
             menu.opacity_chosen.connect(lambda value, k=kind: self.set_marker_opacity(k, value))
             self.color_menus[kind] = menu
@@ -479,6 +492,121 @@ class MainWindow(QMainWindow):
             button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
             button.setProperty("withMenu", True)  # the style sheet makes room for the arrow
         self._show_marker_styles()
+
+    # ---- favourite tools ---------------------------------------------------
+
+    def _build_favourites_bar(self) -> None:
+        """A second, thinner bar in the mode Estudiar, with the favourite tools.
+        It only takes room once there is one."""
+        self.favourites = Favourites.from_setting(self.settings.get(FAVOURITES_SETTING))
+        # For the tests: what the question for a name answers (None: cancelled).
+        self.ask_favourite_name = self._ask_favourite_name
+        bar = self.favourites_bar = FavouritesBar(self)
+        bar.used.connect(self.use_favourite)
+        bar.removed.connect(self.remove_favourite)
+        bar.rename_asked.connect(self.rename_favourite)
+        bar.moved.connect(self.move_favourite)
+        self.addToolBarBreak(Qt.ToolBarArea.TopToolBarArea)
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, bar)
+        self._show_favourites()
+
+    def favourite_name(self, favourite) -> str:
+        """The name of a favourite: the one it was given or what it is."""
+        if favourite.name:
+            return favourite.name
+        kind = favourite.kind
+        tool = translate(self._feature_named(kind).name)
+        if kind == SHAPE_TOOL:
+            tool = self.shape_actions[favourite.shape].text()
+        parts = [tool, self.color_menus[kind].swatch_name(favourite.color).lower()]
+        named = self.width_actions.get(kind, {})
+        if favourite.width in named and favourite.width != WIDTHS[1]:
+            parts.append(named[favourite.width].text().lower())
+        if kind in SEE_THROUGH_KINDS and favourite.opacity < 0.995:
+            parts.append(f"{round(favourite.opacity * 100)} %")
+        if kind == TEXT_BOX:
+            parts.append(f"{favourite.size:g}")
+        return " · ".join(parts)
+
+    def _current_favourite(self) -> int:
+        """The favourite that is the tool in hand as it is set now, or -1."""
+        if not hasattr(self, "documents"):
+            return -1  # the window is still being built
+        tool = self.pdf_view.markup_tool
+        if tool not in STYLED_KINDS:
+            return -1
+        return self.favourites.find(favourite_of(self.marker_styles, tool))
+
+    def _show_favourites(self) -> None:
+        names = [self.favourite_name(favourite) for favourite in self.favourites]
+        self.favourites_bar.show_favourites(self.favourites, names, self._current_favourite())
+        self._place_favourites_bar()
+
+    def _place_favourites_bar(self) -> None:
+        if hasattr(self, "favourites_bar"):
+            in_study = getattr(self, "_mode", None) is Mode.STUDY
+            self.favourites_bar.setVisible(
+                in_study and not self._full_screen and len(self.favourites) > 0
+            )
+
+    def _favourites_changed(self) -> None:
+        self.settings.set(FAVOURITES_SETTING, self.favourites.to_setting())
+        self._show_favourites()
+
+    def add_favourite(self, kind: str) -> int:
+        """Keep a tool, as it is set now, in the bar of favourites.
+
+        Returns where it is in the bar, or -1 if the bar is full.
+        """
+        favourite = favourite_of(self.marker_styles, kind)
+        already = self.favourites.find(favourite)
+        index = self.favourites.add(favourite)
+        if index < 0:
+            message = self.tr(
+                "La barra de favoritas está llena ({0}). Quita alguna con el botón derecho."
+            ).format(MAX_FAVOURITES)
+        elif already >= 0:
+            message = self.tr("Ya estaba en favoritas: {0}.").format(self.favourite_name(favourite))
+        else:
+            message = self.tr("Guardada en favoritas: {0}.").format(self.favourite_name(favourite))
+            self._favourites_changed()
+        self.statusBar().showMessage(message, STATUS_MESSAGE_MS)
+        return index
+
+    def use_favourite(self, index: int) -> None:
+        """Set a tool the way a favourite has it and take it in hand."""
+        if not 0 <= index < len(self.favourites):
+            return
+        favourite = self.favourites[index]
+        apply_to(self.marker_styles, favourite)
+        # Choosing its colour is what takes the tool (or marks the selected text).
+        self.set_marker_color(favourite.kind, favourite.color)
+        self.favourites_bar.set_current(self._current_favourite())
+
+    def remove_favourite(self, index: int) -> None:
+        if self.favourites.remove(index):
+            self._favourites_changed()
+
+    def move_favourite(self, index: int, by: int) -> None:
+        if self.favourites.move(index, by) != index:
+            self._favourites_changed()
+
+    def rename_favourite(self, index: int) -> None:
+        """Ask for a name for a favourite. An empty one gives back its description."""
+        if not 0 <= index < len(self.favourites):
+            return
+        name = self.ask_favourite_name(self.favourite_name(self.favourites[index]))
+        if name is not None and self.favourites.rename(index, name):
+            self._favourites_changed()
+
+    def _ask_favourite_name(self, current: str) -> str | None:
+        name, accepted = QInputDialog.getText(
+            self,
+            self.tr("Nombre de la favorita"),
+            self.tr("Nombre (vacío: el que pone el programa):"),
+            text=current,
+        )
+        return name if accepted else None
 
     def _add_text_choices(self, menu: ColorMenu) -> None:
         """Font and size of the text written on the page, under its colours."""
@@ -597,6 +725,8 @@ class MainWindow(QMainWindow):
                     name, menu.swatch_name(style.color)
                 )
             )
+        if hasattr(self, "favourites_bar"):
+            self.favourites_bar.set_current(self._current_favourite())
         # While the window is being built there are no documents yet.
         pages = [*getattr(self, "documents", []), getattr(self, "_spare", None)]
         for page in pages:
@@ -668,6 +798,7 @@ class MainWindow(QMainWindow):
                 button = toolbar.widgetForAction(action)
                 if isinstance(button, QToolButton) and not action.isSeparator():
                     button.setMinimumWidth(MIN_BUTTON_HEIGHT if icons_only else 0)
+        self.favourites_bar.set_icons_only(icons_only)
         if remember:
             self.settings.set(TOOLBAR_SETTING, TOOLBAR_ICONS if icons_only else TOOLBAR_NAMES)
 
@@ -1042,6 +1173,7 @@ class MainWindow(QMainWindow):
             self.current_document.mode = mode
         for other, toolbar in self.mode_toolbars.items():
             toolbar.setVisible(other is mode and not self._full_screen)
+        self._place_favourites_bar()
         self.mode_actions[mode].setChecked(True)
         index = MODES.index(mode)
         if self.mode_tabs.currentIndex() != index:
@@ -1295,6 +1427,8 @@ class MainWindow(QMainWindow):
         self.delete_action.setEnabled(picked is not None)
         self.duplicate_action.setEnabled(picked is not None and picked.kind not in MARKUP_KINDS)
         self.paste_action.setEnabled(PdfView.copied is not None and view.page_count > 0)
+        if hasattr(self, "favourites_bar"):
+            self.favourites_bar.set_current(self._current_favourite())
         for kind in (*STYLED_KINDS, ERASER):
             action = self.feature_actions[kind]
             action.setCheckable(True)

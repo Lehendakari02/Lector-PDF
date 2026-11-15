@@ -399,7 +399,7 @@ Notas de la Fase 1:
 | 2.7 | Notas adhesivas y cuadros de texto | Escribo notas y texto con la fuente, tamaño y color que quiero | ✅ (tres tipos de letra; mover y cambiar de tamaño llega con la 2.9) |
 | 2.8 | Dibujo a mano alzada, flechas, formas, borrador | Dibujo y borro sobre la página | ✅ (con ratón; lápiz y dedo llegan con la 2.11) |
 | 2.9 | Seleccionar, mover, redimensionar, copiar y borrar anotaciones | Corrijo una anotación mal puesta sin rehacerla | ✅ (solo las hechas con este programa) |
-| 2.10 | Herramientas favoritas | Guardo "rotulador amarillo fino" y lo uso con un clic | ⬜ |
+| 2.10 | Herramientas favoritas | Guardo "rotulador amarillo fino" y lo uso con un clic | ✅ |
 | 2.11 | Lápiz y pantalla táctil | Subrayo con lápiz en una tableta sin que la mano pinte | ⬜ |
 | 2.12 | Mostrar/ocultar anotaciones (también al imprimir/exportar) | Con un botón veo el documento limpio | ⬜ |
 | 2.13 | Atajos de teclado para cada herramienta | Cambio de herramienta sin usar el ratón | ⬜ |
@@ -690,6 +690,23 @@ Notas de la Fase 2A:
     más limitado si se echa de menos; queda apuntado como idea.
   - Pendiente: cambiar el color de una anotación ya puesta (ahora: borrar y
     volver a poner) y elegir varias a la vez.
+- **2.10: herramientas favoritas (15/11/2026).**
+  - En la flecha de cada herramienta (resaltar, subrayar, tachar, nota, texto,
+    dibujar y formas) hay **"Guardar en favoritas"**: guarda esa herramienta
+    tal como está en ese momento (color y, según la herramienta, opacidad,
+    grosor, forma o letra).
+  - Las favoritas salen en una **barra fina debajo de las herramientas**, solo
+    en el modo Estudiar y solo cuando hay alguna (si no, no ocupa sitio). Un
+    clic pone la herramienta así y la deja en la mano; con texto seleccionado,
+    un rotulador favorito lo marca directamente.
+  - Cada favorita lleva el nombre de lo que es ("Dibujar · rojo · grueso").
+    Con el botón derecho se le puede **cambiar el nombre**, **moverla** a
+    izquierda o derecha y **quitarla**.
+  - La que se lleva en la mano se ve pulsada. La misma combinación no se
+    guarda dos veces. Caben 12, para que siga siendo una barra rápida.
+  - Se guardan en los ajustes del programa (no en el PDF) y valen para todos
+    los documentos.
+  - No trae ninguna favorita de fábrica: cada persona guarda las suyas.
 
 ## Fase 2B – Documentos escaneados (OCR)
 | # | Tarea | Terminado cuando… | Estado |

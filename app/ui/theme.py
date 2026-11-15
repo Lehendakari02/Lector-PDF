@@ -446,6 +446,9 @@ QPushButton#bannerMainButton {{
 }}
 QPushButton#bannerMainButton:hover {{ background: {c.accent_hover}; }}
 QLabel#dialogNote {{ color: {c.muted}; }}
+QToolBar#favouritesBar {{ border-top: none; padding: 0 8px 1px 8px; }}
+QToolBar#favouritesBar QToolButton {{ padding: 1px 6px; }}
+QLabel#favouritesLabel {{ color: {c.muted}; font-size: 9pt; padding: 0 6px 0 4px; }}
 QFrame#notePanel {{
     background: {c.surface}; border: 1px solid {c.border}; border-radius: 10px;
 }}
