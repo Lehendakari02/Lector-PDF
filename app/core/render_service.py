@@ -26,6 +26,7 @@ from multiprocessing.connection import Connection
 from pathlib import Path
 
 from app.core.commands import Color, Command, CommandError, markup_for_selection
+from app.core.drawing import PageDrawing, page_drawings
 from app.core.notes import PageNote, page_notes
 from app.core.outline import OutlineEntry, read_outline
 from app.core.saving import FAILED as SAVE_FAILED
@@ -310,9 +311,10 @@ def _worker_main(connection: Connection) -> None:
                 if notes_token == token and doc is not None:
                     try:
                         found = page_notes(doc, page_index)
+                        drawn = page_drawings(doc, page_index)
                     except Exception:
-                        found = []  # a page that cannot be read has none
-                    connection.send(("notes", token, page_index, found))
+                        found, drawn = [], []  # a page that cannot be read has none
+                    connection.send(("notes", token, page_index, found, drawn))
             elif kind == "copy":
                 _, copy_token, copy_id, start, stop = message
                 if copy_token == token and doc is not None:
@@ -432,8 +434,10 @@ class RenderService:
         on_changed: Callable[[int, Command, list[int], bool], None] | None = None,
         on_change_failed: Callable[[int, str], None] | None = None,
         on_notes: Callable[[int, list[PageNote]], None] | None = None,
+        on_drawings: Callable[[int, list[PageDrawing]], None] | None = None,
     ) -> None:
         self._on_notes = on_notes or (lambda page, notes: None)
+        self._on_drawings = on_drawings or (lambda page, drawings: None)
         self._on_changed = on_changed or (lambda number, order, pages, undo: None)
         self._on_change_failed = on_change_failed or (lambda number, details: None)
         self._change_id = 0
@@ -569,7 +573,9 @@ class RenderService:
         """Ask for the notes and text boxes of a page (counting from 0).
 
         They arrive through ``on_notes(page, notes)``, each an
-        ``app.core.notes.PageNote``, as the document is at that moment.
+        ``app.core.notes.PageNote``, as the document is at that moment. Just
+        before, ``on_drawings(page, drawings)`` gives what is drawn or marked
+        on it (``app.core.drawing.PageDrawing``).
         """
         with self._lock:
             if self._path is None:
@@ -799,6 +805,7 @@ class RenderService:
             elif kind == "copied":
                 self._tell(self._on_copied, message[2], message[3])
             elif kind == "notes":
+                self._tell(self._on_drawings, message[2], message[4])
                 self._tell(self._on_notes, message[2], message[3])
             elif kind == "page_failed":
                 self._drawing = None

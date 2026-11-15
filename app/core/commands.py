@@ -153,8 +153,8 @@ class AddMarkup:
 
 
 class Command(Protocol):
-    """What every order knows how to do. The kinds: ``AddMarkup`` here, and the
-    notes and text boxes of ``app.core.notes``."""
+    """What every order knows how to do. The kinds: ``AddMarkup`` here, the
+    notes and text boxes of ``app.core.notes`` and what is drawn (``app.core.drawing``)."""
 
     def pages(self) -> list[int]: ...
 
@@ -175,7 +175,8 @@ def register_reader(what: str, reader: Callable[[dict], Command]) -> None:
 
 def command_from_dict(data: dict) -> Command:
     """Read back an order written with ``to_dict`` (for the recovery journal)."""
-    import app.core.notes  # noqa: F401  (its orders register themselves)
+    import app.core.drawing  # noqa: F401  (their orders register themselves)
+    import app.core.notes  # noqa: F401
 
     try:
         return _READERS[data["what"]](data)

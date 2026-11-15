@@ -8,6 +8,16 @@ chosen, so nobody has to touch anything.
 from dataclasses import dataclass, field
 
 from app.core.commands import DEFAULT_COLORS, MARKUP_KINDS, Color
+from app.core.drawing import (
+    DEFAULT_SHAPE,
+    DEFAULT_WIDTH,
+    DRAW,
+    DRAW_COLOR,
+    SHAPE_COLOR,
+    SHAPE_TOOL,
+    SHAPES,
+    clamp_width,
+)
 from app.core.notes import (
     FONTS,
     MAX_SIZE,
@@ -20,9 +30,20 @@ from app.core.notes import (
     TEXT_SIZE,
 )
 
-# Every tool that has a colour of its own: the markers, the notes and the text.
-STYLED_KINDS = (*MARKUP_KINDS, NOTE, TEXT_BOX)
-START_COLORS: dict[str, Color] = {**DEFAULT_COLORS, NOTE: NOTE_COLOR, TEXT_BOX: TEXT_COLOR}
+# Every tool that has a colour of its own: the markers, the notes, the text,
+# the pen and the shapes.
+STYLED_KINDS = (*MARKUP_KINDS, NOTE, TEXT_BOX, DRAW, SHAPE_TOOL)
+# The ones that draw a line, with a thickness that can be chosen.
+LINE_KINDS = (DRAW, SHAPE_TOOL)
+# The ones whose opacity can be chosen (a note or a text has none).
+SEE_THROUGH_KINDS = (*MARKUP_KINDS, *LINE_KINDS)
+START_COLORS: dict[str, Color] = {
+    **DEFAULT_COLORS,
+    NOTE: NOTE_COLOR,
+    TEXT_BOX: TEXT_COLOR,
+    DRAW: DRAW_COLOR,
+    SHAPE_TOOL: SHAPE_COLOR,
+}
 # The sizes of letter at hand for the text written on the page.
 TEXT_SIZES = (8, 10, 12, 14, 18, 24, 36)
 
@@ -107,6 +128,11 @@ class MarkerStyles:
     recent: list[Color] = field(default_factory=list)  # the newest first
     text_font: str = SANS  # the text written on the page: one of notes.FONTS
     text_size: float = TEXT_SIZE
+    # The pen and the shapes: how thick their line is, and the shape in hand.
+    widths: dict[str, float] = field(
+        default_factory=lambda: dict.fromkeys(LINE_KINDS, DEFAULT_WIDTH)
+    )
+    shape: str = DEFAULT_SHAPE
 
     def of(self, kind: str) -> MarkerStyle:
         return self.styles[kind]
@@ -128,15 +154,28 @@ class MarkerStyles:
     def set_text_size(self, size: float) -> None:
         self.text_size = clamp_size(size)
 
+    def width_of(self, kind: str) -> float:
+        return self.widths.get(kind, DEFAULT_WIDTH)
+
+    def set_width(self, kind: str, width: object) -> None:
+        if kind in LINE_KINDS:
+            self.widths[kind] = clamp_width(width)
+
+    def set_shape(self, shape: object) -> None:
+        if isinstance(shape, str) and shape in SHAPES:
+            self.shape = shape
+
     def to_setting(self) -> dict:
         """As plain data, for the settings file."""
         return {
             "tools": {
                 kind: {"color": to_hex(style.color), "opacity": round(style.opacity, 2)}
+                | ({"width": self.widths[kind]} if kind in LINE_KINDS else {})
                 for kind, style in self.styles.items()
             },
             "recent": [to_hex(color) for color in self.recent],
             "text": {"font": self.text_font, "size": self.text_size},
+            "shape": self.shape,
         }
 
     @classmethod
@@ -153,6 +192,8 @@ class MarkerStyles:
                     continue
                 color = from_hex(saved.get("color")) or START_COLORS[kind]
                 result.styles[kind] = MarkerStyle(color, clamp_opacity(saved.get("opacity", 1.0)))
+                result.set_width(kind, saved.get("width"))
+        result.set_shape(value.get("shape"))
         text = value.get("text")
         if isinstance(text, dict):
             result.set_text_font(text.get("font"))
