@@ -741,6 +741,21 @@ class MainWindow(QMainWindow):
         self.marker_styles.set_text_size(size)
         self._text_style_chosen()
 
+    def set_text_bold(self, bold: bool) -> None:
+        self.marker_styles.set_text_bold(bold)
+        self._text_style_chosen()
+
+    def text_style_used(self, look: dict) -> None:
+        """The look given to a text while writing it is the one of the next texts."""
+        if "color" in look:
+            self.marker_styles.set_color(TEXT_BOX, look["color"])
+        if "size" in look:
+            self.marker_styles.set_text_size(look["size"])
+        if "bold" in look:
+            self.marker_styles.set_text_bold(look["bold"])
+        self.settings.set(MARKERS_SETTING, self.marker_styles.to_setting())
+        self._show_marker_styles()
+
     def _text_style_chosen(self) -> None:
         self.settings.set(MARKERS_SETTING, self.marker_styles.to_setting())
         self._show_marker_styles()
@@ -785,9 +800,23 @@ class MainWindow(QMainWindow):
             view.markup_colors[kind] = style.color
             view.markup_opacity[kind] = style.opacity
         view.note_color = self.marker_styles.of(NOTE).color
-        view.text_color = self.marker_styles.of(TEXT_BOX).color
-        view.text_font = self.marker_styles.text_font
-        view.text_size = self.marker_styles.text_size
+        look = {
+            "color": self.marker_styles.of(TEXT_BOX).color,
+            "font": self.marker_styles.text_font,
+            "size": self.marker_styles.text_size,
+            "bold": self.marker_styles.text_bold,
+        }
+        before = {
+            "color": view.text_color,
+            "font": view.text_font,
+            "size": view.text_size,
+            "bold": view.text_bold,
+        }
+        view.text_color, view.text_font = look["color"], look["font"]
+        view.text_size, view.text_bold = look["size"], look["bold"]
+        changed = {name: value for name, value in look.items() if value != before[name]}
+        if changed:
+            view.text_style_given(**changed)  # a text being written takes it at once
         pen, shapes = self.marker_styles.of(DRAW), self.marker_styles.of(SHAPE_TOOL)
         view.draw_color, view.draw_opacity = pen.color, pen.opacity
         view.draw_width = self.marker_styles.width_of(DRAW)
@@ -2191,6 +2220,7 @@ class MainWindow(QMainWindow):
         self._give_marker_styles(view)
         self._give_pen_settings(view)
         view.pen_seen_changed.connect(self._pen_was_seen)
+        view.text_style_chosen.connect(self.text_style_used)
         view.page_changed.connect(self._update_position)
         view.page_changed.connect(lambda *_args: self._place_timer.start())
         view.zoom_changed.connect(self._update_position)

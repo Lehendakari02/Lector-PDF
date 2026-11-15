@@ -7,8 +7,15 @@ show them the same:
 - a **text box** is a "FreeText" annotation: text written on the page itself.
 
 Text boxes use only the three families every PDF reader has built in (without
-serifs, with serifs and typewriter). Any other font would have to travel
-inside the file as a drawing to look the same elsewhere.
+serifs, with serifs and typewriter), each in its normal and its bold weight.
+Any other font would have to travel inside the file as a drawing to look the
+same elsewhere.
+
+A text box is as wide as its longest line, or as wide as it was made by hand:
+then its text is cut into lines to fit. The lines are cut here, with the real
+widths of the letters, so the box looks the same in every viewer. What only
+this program needs to put a box again just the same (the width chosen and the
+weight) is kept in the annotation under keys of its own.
 
 Changing or removing one is also an order, built on the order that would put
 it: ``Remove`` takes it away and ``Replace`` swaps it for another. That needs
@@ -44,6 +51,14 @@ SERIF = "serif"
 MONO = "mono"
 # The fonts every PDF reader has, by the names PyMuPDF gives them.
 FONTS = {SANS: "Helv", SERIF: "TiRo", MONO: "Cour"}
+# Their bold weights: the name PyMuPDF measures with and the one PDF readers know.
+BOLD_FONTS = {
+    SANS: ("hebo", "Helvetica-Bold"),
+    SERIF: ("tibo", "Times-Bold"),
+    MONO: ("cobo", "Courier-Bold"),
+}
+WIDTH_KEY = "LectorPDFWidth"  # where the annotation keeps a width chosen by hand
+BOLD_KEY = "LectorPDFBold"
 TEXT_COLOR: Color = (0.1, 0.1, 0.1)
 TEXT_SIZE = 12.0
 MIN_SIZE, MAX_SIZE = 6.0, 72.0
@@ -53,6 +68,7 @@ PADDING = 2.0  # points between the text and the edge of its box
 # Room to spare, so that the engine never pushes the last word to another line.
 WIDTH_SLACK = 1.02
 MIN_BOX_WIDTH = 40.0
+MAX_BOX_WIDTH = 5000.0
 PAGE_MARGIN = 4.0
 
 
@@ -124,6 +140,8 @@ class AddTextBox:
     size: float
     color: Color
     name: str
+    width: float = 0.0  # of the box, chosen by hand; 0: as wide as its longest line
+    bold: bool = False
 
     def pages(self) -> list[int]:
         return [self.page]
@@ -138,7 +156,13 @@ class AddTextBox:
             if find_annotation(page, self.name) is None:
                 shown_page = page.rect  # as shown: turned pages already count
                 lines, shown = box_layout(
-                    self.text, self.font, self.size, self.origin, shown_page.width
+                    self.text,
+                    self.font,
+                    self.size,
+                    self.origin,
+                    shown_page.width,
+                    self.width,
+                    self.bold,
                 )
                 rect = (pymupdf.Rect(shown) * page.derotation_matrix).normalize()
                 annotation = page.add_freetext_annot(
@@ -151,9 +175,16 @@ class AddTextBox:
                     rotate=page.rotation,  # upright for the reader on a turned page
                 )
                 annotation.update()
-                doc.xref_set_key(annotation.xref, "NM", f"({self.name})")
+                xref = annotation.xref
+                doc.xref_set_key(xref, "NM", f"({self.name})")
                 # PyMuPDF leaves the line of a "callout" that was never asked for.
-                doc.xref_set_key(annotation.xref, "CL", "null")
+                doc.xref_set_key(xref, "CL", "null")
+                # The text as it was written, not as it was cut into lines.
+                doc.xref_set_key(xref, "Contents", pymupdf.get_pdf_str(self.text))
+                if self.width > 0:
+                    doc.xref_set_key(xref, WIDTH_KEY, f"{self.width:.2f}")
+                if self.bold:
+                    _make_bold(doc, xref, self.font)
         except CommandError:
             raise
         except Exception as error:
@@ -164,16 +195,20 @@ class AddTextBox:
         return _remove(doc, self.page, self.name)
 
     def to_dict(self) -> dict:
-        return {
-            "what": "add_text_box",
-            "page": self.page,
-            "origin": list(self.origin),
-            "text": self.text,
-            "font": self.font,
-            "size": self.size,
-            "color": list(self.color),
-            "name": self.name,
-        }
+        return (
+            {
+                "what": "add_text_box",
+                "page": self.page,
+                "origin": list(self.origin),
+                "text": self.text,
+                "font": self.font,
+                "size": self.size,
+                "color": list(self.color),
+                "name": self.name,
+            }
+            | ({"width": self.width} if self.width > 0 else {})
+            | ({"bold": True} if self.bold else {})
+        )
 
     @classmethod
     def from_dict(cls, data: dict) -> "AddTextBox":
@@ -186,7 +221,39 @@ class AddTextBox:
             float(data["size"]),
             _color(data["color"]),
             str(data["name"]),
+            clamp_box_width(data.get("width", 0.0)),
+            data.get("bold") is True,
         )
+
+
+def clamp_box_width(value: object) -> float:
+    """A width for a text box: 0 (as wide as its text) or one that can be used."""
+    try:
+        width = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if not width > 0:
+        return 0.0
+    return max(MIN_BOX_WIDTH, min(MAX_BOX_WIDTH, width))
+
+
+def _make_bold(doc, xref: int, font: str) -> None:
+    """Give the look of a text box the bold weight of its font.
+
+    The engine only writes with the normal weight; the look it made names its
+    font, and that name is pointed to the bold one. The lines were already
+    cut with the widths of the bold letters.
+    """
+    look = doc.xref_get_key(xref, "AP/N")
+    if look[0] != "xref":
+        return
+    bold = doc.get_new_xref()
+    doc.update_object(
+        bold,
+        f"<</Type/Font/Subtype/Type1/BaseFont/{BOLD_FONTS[font][1]}/Encoding/WinAnsiEncoding>>",
+    )
+    doc.xref_set_key(int(look[1].split()[0]), f"Resources/Font/{FONTS[font]}", f"{bold} 0 R")
+    doc.xref_set_key(xref, BOLD_KEY, "true")
 
 
 @dataclass(frozen=True)
@@ -270,19 +337,19 @@ def _color(values) -> Color:
 # ---- the size of a text box ---------------------------------------------------
 
 
-def text_width(text: str, font: str, size: float) -> float:
+def text_width(text: str, font: str, size: float, bold: bool = False) -> float:
     """How wide a line is, in points."""
-    return _font(font).text_length(text, size)
+    return _font(font, bold).text_length(text, size)
 
 
 @functools.cache
-def _font(font: str):
+def _font(font: str, bold: bool = False):
     import pymupdf
 
-    return pymupdf.Font(FONTS[font].lower())
+    return pymupdf.Font(BOLD_FONTS[font][0] if bold else FONTS[font].lower())
 
 
-def wrap_text(text: str, font: str, size: float, width: float) -> list[str]:
+def wrap_text(text: str, font: str, size: float, width: float, bold: bool = False) -> list[str]:
     """The lines of ``text``, cutting at spaces those wider than ``width``.
 
     A word wider than the whole width is cut wherever it has to be.
@@ -292,14 +359,14 @@ def wrap_text(text: str, font: str, size: float, width: float) -> list[str]:
         current = ""
         for word in line.split(" "):
             candidate = word if not current else f"{current} {word}"
-            if not current or text_width(candidate, font, size) <= width:
+            if not current or text_width(candidate, font, size, bold) <= width:
                 current = candidate
             else:
                 lines.append(current)
                 current = word
-            while text_width(current, font, size) > width and len(current) > 1:
+            while text_width(current, font, size, bold) > width and len(current) > 1:
                 cut = len(current) - 1
-                while cut > 1 and text_width(current[:cut], font, size) > width:
+                while cut > 1 and text_width(current[:cut], font, size, bold) > width:
                     cut -= 1
                 lines.append(current[:cut])
                 current = current[cut:]
@@ -308,20 +375,32 @@ def wrap_text(text: str, font: str, size: float, width: float) -> list[str]:
 
 
 def box_layout(
-    text: str, font: str, size: float, origin: tuple[float, float], page_width: float
+    text: str,
+    font: str,
+    size: float,
+    origin: tuple[float, float],
+    page_width: float,
+    width: float = 0.0,
+    bold: bool = False,
 ) -> tuple[list[str], Rect]:
     """The lines of a text box and the rectangle it takes, as the page is shown.
 
-    The box is as wide as its longest line and never goes past the right edge
-    of the page: lines that would are cut at a space.
+    Without ``width`` the box is as wide as its longest line. With it, the box
+    is that wide and its text is cut into lines to fit. Either way it never
+    goes past the right edge of the page: lines that would are cut at a space.
     """
     x, y = origin
-    room = max(MIN_BOX_WIDTH, page_width - PAGE_MARGIN - x) - 2 * PADDING
-    lines = wrap_text(text, font, size, room / WIDTH_SLACK)
-    widest = max(text_width(line, font, size) for line in lines)
-    width = widest * WIDTH_SLACK + 2 * PADDING + 2
+    outer = max(MIN_BOX_WIDTH, page_width - PAGE_MARGIN - x)
+    if width > 0:
+        outer = min(outer, max(MIN_BOX_WIDTH, width))
+    lines = wrap_text(text, font, size, (outer - 2 * PADDING - 2) / WIDTH_SLACK, bold)
+    if width > 0:
+        wide = outer
+    else:
+        widest = max(text_width(line, font, size, bold) for line in lines)
+        wide = widest * WIDTH_SLACK + 2 * PADDING + 2
     height = len(lines) * size * LINE_HEIGHT + 2 * PADDING
-    return lines, (x, y, x + width, y + height)
+    return lines, (x, y, x + wide, y + height)
 
 
 # ---- reading them back ----------------------------------------------------------
@@ -339,6 +418,8 @@ class PageNote:
     color: Color
     font: str = SANS  # text boxes only
     size: float = TEXT_SIZE  # text boxes only
+    width: float = 0.0  # text boxes only: chosen by hand, or 0
+    bold: bool = False  # text boxes only
 
     @property
     def ours(self) -> bool:
@@ -350,7 +431,17 @@ class PageNote:
         origin = (self.rect[0], self.rect[1])
         if self.kind == NOTE:
             return AddNote(self.page, origin, self.text, self.color, self.name)
-        return AddTextBox(self.page, origin, self.text, self.font, self.size, self.color, self.name)
+        return AddTextBox(
+            self.page,
+            origin,
+            self.text,
+            self.font,
+            self.size,
+            self.color,
+            self.name,
+            self.width,
+            self.bold,
+        )
 
 
 _APPEARANCE = re.compile(r"/(\S+)\s+([\d.]+)\s+Tf")
@@ -369,8 +460,12 @@ def page_notes(doc, page_number: int) -> list[PageNote]:
         info = annotation.info
         colors = annotation.colors or {}
         font, size, color = SANS, TEXT_SIZE, colors.get("stroke") or NOTE_COLOR
+        width, bold = 0.0, False
         if kind == TEXT_BOX:
             font, size, color = _text_style(doc, annotation.xref)
+            wide = doc.xref_get_key(annotation.xref, WIDTH_KEY)
+            width = clamp_box_width(wide[1]) if wide[0] in ("int", "float") else 0.0
+            bold = doc.xref_get_key(annotation.xref, BOLD_KEY) == ("bool", "true")
         found.append(
             PageNote(
                 kind,
@@ -381,6 +476,8 @@ def page_notes(doc, page_number: int) -> list[PageNote]:
                 _color(color) if len(color) == 3 else NOTE_COLOR,
                 font,
                 size,
+                width,
+                bold,
             )
         )
     return found
@@ -425,8 +522,12 @@ def new_text_box(
     font: str = SANS,
     size: float = TEXT_SIZE,
     color: Color = TEXT_COLOR,
+    width: float = 0.0,
+    bold: bool = False,
 ) -> AddTextBox:
-    return AddTextBox(page, origin, text, font, size, color, new_name())
+    return AddTextBox(
+        page, origin, text, font, size, color, new_name(), clamp_box_width(width), bool(bold)
+    )
 
 
 def changed(note: PageNote, **changes) -> Replace:

@@ -141,3 +141,11 @@ def test_settings_written_before_there_were_notes_still_work():
     back = MarkerStyles.from_setting(old)
     assert to_hex(back.of(HIGHLIGHT).color) == "#112233"
     assert back.of(NOTE).color == NOTE_COLOR and back.text_size == 12
+
+
+def test_the_text_can_be_bold_and_it_is_remembered():
+    styles = MarkerStyles()
+    assert not styles.text_bold and "bold" not in styles.to_setting()["text"]
+    styles.set_text_bold(True)
+    assert MarkerStyles.from_setting(styles.to_setting()).text_bold
+    assert not MarkerStyles.from_setting({"text": {"bold": "sí"}}).text_bold
