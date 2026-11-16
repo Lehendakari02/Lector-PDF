@@ -25,6 +25,14 @@ Tesseract OCR y sus datos del idioma español
   Licencia: Apache 2.0 (Apache-2.0.txt).
   https://github.com/tesseract-ocr
 
+DejaVu Sans (Bitstream y el proyecto DejaVu)
+  Para qué: las flechas y los símbolos que se escriben sobre las páginas. El
+  programa lleva solo esos símbolos, con otro nombre ("Lector PDF Simbolos"),
+  y los mete en los PDF donde se usan.
+  Licencia: Bitstream Vera; los cambios de DejaVu son de dominio público
+  (DejaVu-Bitstream-Vera.txt).
+  https://dejavu-fonts.github.io
+
 pyHanko y pyhanko-certvalidator (Matthias Valvekens)
   Para qué: firmar con certificado digital.
   Licencia: MIT.

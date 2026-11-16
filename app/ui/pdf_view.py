@@ -395,6 +395,7 @@ class PdfView(QAbstractScrollArea):
         self.text_font = notes.SANS
         self.text_size = notes.TEXT_SIZE
         self.text_bold = False
+        self.typed_arrows = True  # "->" turns into an arrow while writing a text
         self.text_color = notes.TEXT_COLOR
         self._changed.connect(self._change_done)
         self._change_failed.connect(self._change_did_not_work)
@@ -1545,6 +1546,7 @@ class PdfView(QAbstractScrollArea):
                 color=self.text_color,
                 bold=self.text_bold,
                 parent=self.viewport(),
+                typed_arrows=self.typed_arrows,
             )
             editor.saved.connect(
                 lambda text: self.put_text_box(
@@ -1582,6 +1584,7 @@ class PdfView(QAbstractScrollArea):
                 bold=now.bold,
                 width=now.width,
                 parent=self.viewport(),
+                typed_arrows=self.typed_arrows,
             )
             editor.saved.connect(
                 lambda text: self.change_note(

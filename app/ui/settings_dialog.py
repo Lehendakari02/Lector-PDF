@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.core import file_association, pen, save_settings
+from app.core import file_association, pen, save_settings, symbols
 from app.core.history import RESTORE_SETTING
 from app.core.interface_size import NORMAL_SIZE, SIZE_SETTING, SIZES, wanted_size
 from app.core.paths import is_portable
@@ -148,6 +148,18 @@ class SettingsDialog(QDialog):
         self.tool_keys_box.setChecked(tool_keys_wanted(self.settings))
         self.tool_keys_box.toggled.connect(self._tool_keys_chosen)
         layout.addWidget(self.tool_keys_box)
+        self.typed_arrows_box = QCheckBox(
+            self.tr("Al escribir un texto, -> se convierte en &flecha")
+        )
+        self.typed_arrows_box.setToolTip(
+            self.tr(
+                "Escribiendo sobre la página: -> o --> da →, <- da ←, <-> da ↔, "
+                "=> da ⇒ y <=> da ⇔. Ctrl+Z justo después lo deja como se tecleó."
+            )
+        )
+        self.typed_arrows_box.setChecked(symbols.typed_wanted(self.settings))
+        self.typed_arrows_box.toggled.connect(self._typed_arrows_chosen)
+        layout.addWidget(self.typed_arrows_box)
 
         # ---- when the program opens ----
         layout.addWidget(self._heading(self.tr("Al abrir el programa")))
@@ -200,6 +212,10 @@ class SettingsDialog(QDialog):
             + self.tabs.tabBar().sizeHint().height()
             + 8
         )
+
+    def _typed_arrows_chosen(self, on: bool) -> None:
+        self.settings.set(symbols.TYPED_SETTING, on)
+        self.window_.apply_pen_settings()
 
     def _tool_keys_chosen(self, on: bool) -> None:
         self.settings.set(TOOL_KEYS_SETTING, on)

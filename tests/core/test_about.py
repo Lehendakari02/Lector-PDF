@@ -27,6 +27,8 @@ def test_every_licence_the_notices_mention_is_there():
     for name in ("LGPL-3.0.txt", "GPL-3.0.txt", "Apache-2.0.txt"):
         assert name in about.notices_text()
         assert (folder / name).stat().st_size > 5000
+    assert "DejaVu-Bitstream-Vera.txt" in about.notices_text()
+    assert "Bitstream" in (folder / "DejaVu-Bitstream-Vera.txt").read_text("utf-8")
     assert "GNU AFFERO GENERAL PUBLIC LICENSE" in about.own_licence_file().read_text("utf-8")
 
 

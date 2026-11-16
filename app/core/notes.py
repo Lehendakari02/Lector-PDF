@@ -28,6 +28,7 @@ import functools
 import re
 from dataclasses import dataclass
 
+from app.core import symbols
 from app.core.commands import (
     NAME_PREFIX,
     Color,
@@ -57,6 +58,7 @@ BOLD_FONTS = {
     SERIF: ("tibo", "Times-Bold"),
     MONO: ("cobo", "Courier-Bold"),
 }
+SYMBOL_FONT_KEY = "LectorPDFSymbols"  # where the document keeps the font of the symbols
 WIDTH_KEY = "LectorPDFWidth"  # where the annotation keeps a width chosen by hand
 BOLD_KEY = "LectorPDFBold"
 TEXT_COLOR: Color = (0.1, 0.1, 0.1)
@@ -165,9 +167,11 @@ class AddTextBox:
                     self.bold,
                 )
                 rect = (pymupdf.Rect(shown) * page.derotation_matrix).normalize()
+                special = symbols.has_symbols(self.text)
                 annotation = page.add_freetext_annot(
                     rect,
-                    "\n".join(lines),
+                    # The engine writes the plain letters; the symbols come after.
+                    "\n".join(_plain(line) for line in lines) if special else "\n".join(lines),
                     fontsize=self.size,
                     fontname=FONTS[self.font],
                     text_color=self.color,
@@ -185,6 +189,8 @@ class AddTextBox:
                     doc.xref_set_key(xref, WIDTH_KEY, f"{self.width:.2f}")
                 if self.bold:
                     _make_bold(doc, xref, self.font)
+                if special:
+                    _write_symbols(doc, page, xref, lines, self.font, self.size)
         except CommandError:
             raise
         except Exception as error:
@@ -235,6 +241,65 @@ def clamp_box_width(value: object) -> float:
     if not width > 0:
         return 0.0
     return max(MIN_BOX_WIDTH, min(MAX_BOX_WIDTH, width))
+
+
+def _plain(line: str) -> str:
+    """A line with a plain letter in the place of every symbol."""
+    return "".join("?" if symbols.is_symbol(letter) else letter for letter in line)
+
+
+def _pdf_text(piece: str) -> str:
+    """A piece of plain letters as the look of an annotation writes it."""
+    out = []
+    for byte in piece.encode("cp1252", errors="replace"):
+        if byte in b"()\\":
+            out.append("\\" + chr(byte))
+        elif 32 <= byte < 127:
+            out.append(chr(byte))
+        else:
+            out.append(f"\\{byte:03o}")
+    return f"({''.join(out)}) Tj"
+
+
+def _symbol_font(doc, page) -> int:
+    """The font of the symbols inside the document: put in the first time, then reused."""
+    catalog = doc.pdf_catalog()
+    kept = doc.xref_get_key(catalog, SYMBOL_FONT_KEY)
+    if kept[0] == "xref":
+        return int(kept[1].split()[0])
+    xref = page.insert_font(fontname=symbols.FONT_NAME, fontfile=str(symbols.font_file()))
+    doc.xref_set_key(catalog, SYMBOL_FONT_KEY, f"{xref} 0 R")
+    return xref
+
+
+def _write_symbols(doc, page, xref: int, lines: list[str], font: str, size: float) -> None:
+    """Write the lines again in the look of a text box, each symbol with its font.
+
+    The engine wrote every line with one letter font and a "?" where a symbol
+    goes. Each of those lines is written again in pieces: the plain letters as
+    they were, the symbols with the font of the symbols.
+    """
+    look = doc.xref_get_key(xref, "AP/N")
+    if look[0] != "xref":
+        return
+    look_xref = int(look[1].split()[0])
+    stream = doc.xref_stream(look_xref).decode("latin-1").split("\n")
+    written = [i for i, row in enumerate(stream) if row.endswith(") Tj")]
+    if len(written) != len(lines):
+        return  # not the look that is known: left as the engine made it
+    base = f"/{FONTS[font]} {size:g} Tf"
+    special = f"/{symbols.FONT_NAME} {size:g} Tf"
+    for place, line in zip(written, lines, strict=True):
+        pieces = []
+        for is_special, piece in symbols.runs(line):
+            if is_special:
+                pieces += [special, f"<{symbols.glyphs(piece)}> Tj"]
+            else:
+                pieces += [base, _pdf_text(piece)]
+        stream[place] = "\n".join(pieces)
+    doc.update_stream(look_xref, "\n".join(stream).encode("latin-1"))
+    font_xref = _symbol_font(doc, page)
+    doc.xref_set_key(look_xref, f"Resources/Font/{symbols.FONT_NAME}", f"{font_xref} 0 R")
 
 
 def _make_bold(doc, xref: int, font: str) -> None:
@@ -338,8 +403,13 @@ def _color(values) -> Color:
 
 
 def text_width(text: str, font: str, size: float, bold: bool = False) -> float:
-    """How wide a line is, in points."""
-    return _font(font, bold).text_length(text, size)
+    """How wide a line is, in points. Arrows and symbols have their own font."""
+    if not symbols.has_symbols(text):
+        return _font(font, bold).text_length(text, size)
+    return sum(
+        symbols.width(piece, size) if special else _font(font, bold).text_length(piece, size)
+        for special, piece in symbols.runs(text)
+    )
 
 
 @functools.cache

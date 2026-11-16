@@ -12,6 +12,7 @@ from PySide6.QtCore import QEvent, QPoint, QRect, Qt, Signal
 from PySide6.QtGui import (
     QColor,
     QFont,
+    QFontDatabase,
     QFontMetricsF,
     QKeySequence,
     QRegion,
@@ -23,15 +24,18 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QPushButton,
     QTextEdit,
     QToolButton,
     QWidget,
+    QWidgetAction,
 )
 
-from app.core import notes
+from app.core import notes, symbols
 from app.core.marker_styles import QUICK_COLORS, TEXT_SIZES, clamp_size, same_color
 from app.core.notes import MONO, SANS, SERIF
 from app.ui import theme
@@ -68,6 +72,17 @@ def on_paper(color: Color) -> QColor:
     paper = QColor(theme.NIGHT_PAPER).getRgbF()
     ink = QColor(theme.NIGHT_INK).getRgbF()
     return QColor.fromRgbF(*((1 - part * (1 - paper[i])) * ink[i] for i, part in enumerate(color)))
+
+
+_font_loaded = False
+
+
+def load_symbol_font() -> None:
+    """Let the screen use the font of the symbols (once)."""
+    global _font_loaded
+    if not _font_loaded:
+        _font_loaded = True
+        QFontDatabase.addApplicationFont(str(symbols.font_file()))
 
 
 class _Grip(QWidget):
@@ -161,8 +176,13 @@ class TextEditor(QWidget):
         bold: bool = False,
         width: float = 0.0,
         parent: QWidget | None = None,
+        typed_arrows: bool = True,
     ) -> None:
         super().__init__(parent)
+        self.typed_arrows = typed_arrows
+        self._changing_text = False
+        self._one_typed = False
+        load_symbol_font()
         self.existing = existing
         self.font_name = font
         self.size = float(size)
@@ -194,6 +214,8 @@ class TextEditor(QWidget):
             self.tr("Intro: otra línea. Ctrl+Intro: dejar el texto. Esc: cancelar.")
         )
         self.edit.setPlainText(text)
+        self.edit.document().contentsChange.connect(self._text_changed)
+        self.edit.textChanged.connect(self._typed)
         self.edit.textChanged.connect(self._arrange)
 
         self.grip = _Grip(self)
@@ -234,6 +256,12 @@ class TextEditor(QWidget):
             )
             row.addWidget(button)
             self.ink_buttons.append(button)
+        self.symbols_button = self._button("→ ✓", self.tr("Flechas y símbolos"), None)
+        self.symbols_button.setObjectName("textEditorSymbols")
+        self.symbols_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.symbols_menu = self._symbols_menu()
+        self.symbols_button.setMenu(self.symbols_menu)
+        row.addWidget(self.symbols_button)
         row.addSpacing(4)
         self.remove_button = QPushButton(self.tr("Borrar"))
         self.remove_button.setToolTip(self.tr("Quitar el texto de la página"))
@@ -257,8 +285,85 @@ class TextEditor(QWidget):
         button.setToolTip(tip)
         button.setAccessibleName(tip)
         button.setFocusPolicy(Qt.FocusPolicy.TabFocus)
-        button.clicked.connect(action)
+        if action is not None:
+            button.clicked.connect(action)
         return button
+
+    def _symbols_menu(self) -> QMenu:
+        """Every arrow and symbol, by groups: a click writes it where the caret is."""
+        menu = QMenu(self)
+        menu.setObjectName("textEditorSymbolsMenu")
+        names = {
+            "arrows": self.tr("Flechas"),
+            "marks": self.tr("Marcas"),
+            "bullets": self.tr("Puntos y figuras"),
+            "numbers": self.tr("Números"),
+            "maths": self.tr("Matemáticas"),
+            "greek": self.tr("Letras griegas"),
+        }
+        holder = QWidget(menu)
+        grid = QGridLayout(holder)
+        grid.setContentsMargins(8, 6, 8, 8)
+        grid.setSpacing(2)
+        across = 12
+        line = 0
+        self.symbol_buttons: dict[str, QToolButton] = {}
+        look = QFont()
+        look.setFamilies([symbols.FONT_FAMILY])
+        look.setPixelSize(18)
+        for group, members in symbols.GROUPS:
+            title = QLabel(names[group])
+            title.setObjectName("textEditorSymbolsTitle")
+            grid.addWidget(title, line, 0, 1, across)
+            line += 1
+            for index, symbol in enumerate(members):
+                button = QToolButton(holder)
+                button.setText(symbol)
+                button.setFont(look)
+                button.setAutoRaise(True)
+                button.setFixedSize(28, 28)
+                button.setAccessibleName(self.tr("Símbolo {0}").format(symbol))
+                button.clicked.connect(lambda _checked=False, s=symbol: self.insert_symbol(s))
+                grid.addWidget(button, line + index // across, index % across)
+                self.symbol_buttons[symbol] = button
+            line += (len(members) - 1) // across + 1
+        if self.typed_arrows:
+            hint = QLabel(self.tr("Truco: escribe -> o => y sale la flecha."))
+            hint.setObjectName("textEditorSymbolsTitle")
+            grid.addWidget(hint, line, 0, 1, across)
+        action = QWidgetAction(menu)
+        action.setDefaultWidget(holder)
+        menu.addAction(action)
+        return menu
+
+    def insert_symbol(self, symbol: str) -> None:
+        self.symbols_menu.close()
+        self.edit.insertPlainText(symbol)
+        self.edit.setFocus()
+
+    def _text_changed(self, _place: int, removed: int, added: int) -> None:
+        self._one_typed = added == 1 and removed == 0
+
+    def _typed(self) -> None:
+        """Keys that make an arrow ("->") turn into it as they are typed."""
+        if not self.typed_arrows or self._changing_text or not self._one_typed:
+            return  # only what the hand types: not a paste, not an undo
+        cursor = self.edit.textCursor()
+        if cursor.hasSelection():
+            return
+        before = cursor.block().text()[: cursor.positionInBlock()]
+        found = symbols.typed_at(before)
+        if found is None:
+            return
+        count, symbol = found
+        keep = 1 if before and before[-1] not in "<>-=" else 0
+        self._changing_text = True
+        cursor.movePosition(cursor.MoveOperation.Left, cursor.MoveMode.MoveAnchor, keep)
+        cursor.movePosition(cursor.MoveOperation.Left, cursor.MoveMode.KeepAnchor, count)
+        cursor.insertText(symbol)
+        cursor.movePosition(cursor.MoveOperation.Right, cursor.MoveMode.MoveAnchor, keep)
+        self.edit.setTextCursor(cursor)
+        self._changing_text = False
 
     def _shortcut(self, keys: str, action) -> None:
         shortcut = QShortcut(QKeySequence(keys), self)
@@ -332,7 +437,8 @@ class TextEditor(QWidget):
 
     def _screen_font(self) -> QFont:
         font = QFont()
-        font.setFamilies(SCREEN_FAMILIES[self.font_name])
+        # The symbols come from their own font, the same one the PDF will carry.
+        font.setFamilies([*SCREEN_FAMILIES[self.font_name], symbols.FONT_FAMILY])
         font.setPixelSize(max(1, round(self.size * self._zoom)))
         font.setBold(self.bold)
         font.setKerning(False)  # the PDF does not bring the letters closer either
@@ -363,11 +469,20 @@ class TextEditor(QWidget):
         self.edit.blockSignals(True)
         self.edit.shown_font = font
         self.edit.document().setDefaultFont(font)
-        cursor = QTextCursor(self.edit.document())
-        cursor.select(QTextCursor.SelectionType.Document)
-        spacing = QTextBlockFormat()
-        spacing.setLineHeight(step, QTextBlockFormat.LineHeightTypes.FixedHeight.value)
-        cursor.mergeBlockFormat(spacing)
+        document = self.edit.document()
+        block, uneven = document.begin(), False
+        while block.isValid() and not uneven:
+            uneven = abs(block.blockFormat().lineHeight() - step) > 0.01
+            block = block.next()
+        if uneven:
+            cursor = QTextCursor(document)
+            # Part of what was just done: Ctrl+Z must not stop at this.
+            cursor.joinPreviousEditBlock()
+            cursor.select(QTextCursor.SelectionType.Document)
+            spacing = QTextBlockFormat()
+            spacing.setLineHeight(step, QTextBlockFormat.LineHeightTypes.FixedHeight.value)
+            cursor.mergeBlockFormat(spacing)
+            cursor.endEditBlock()
         self.edit.blockSignals(False)
 
         wrap = max(20, round(self._lines_width() * self._zoom))
@@ -432,6 +547,7 @@ class TextEditor(QWidget):
     def start(self) -> None:
         self.show()
         self.raise_()
+        self.edit.document().clearUndoRedoStacks()  # Ctrl+Z: only what is typed from now
         self.edit.setFocus()
         cursor = self.edit.textCursor()
         cursor.movePosition(cursor.MoveOperation.End)
