@@ -410,3 +410,19 @@ Con un documento abierto, en el modo Estudiar.
    relleno.
 9. Guarda y abre el PDF en Edge y en Adobe Reader: las formas se ven igual,
    con su relleno y sus rayas.
+
+## Tarea 2.13d – Hoja en blanco, de rayas o cuadriculada
+
+1. En **Estudiar**, ve a la página 3 y pulsa **Insertar hoja**: aparece una
+   hoja en blanco después de la página 3, del mismo tamaño, y el programa te
+   lleva a ella. Las miniaturas y el total de páginas cuentan una más.
+2. Abre la flecha del botón y elige **Cuadriculada**: sale una hoja con
+   cuadros de 5 mm. Pulsa otra vez el botón: vuelve a salir cuadriculada
+   (se recuerda). Prueba también **De rayas**.
+3. Haz un esquema en la hoja: texto, flechas, recuadros.
+4. **Ctrl+Z** varias veces: se va el esquema y después la hoja. **Ctrl+Y**
+   lo devuelve todo.
+5. Con una hoja puesta y sin guardar, cierra el programa a la fuerza (desde
+   el Administrador de tareas): al abrirlo ofrece recuperar y la hoja vuelve.
+6. Guarda y abre el PDF en Edge y en Adobe Reader: la hoja está en su sitio,
+   con sus rayas o cuadros, y el esquema encima.

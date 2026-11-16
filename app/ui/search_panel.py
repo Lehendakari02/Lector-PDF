@@ -130,6 +130,7 @@ class SearchPanel(QWidget):
         self.box.installEventFilter(self)
         view.search_hits.connect(self._hits_arrived)
         view.search_finished.connect(self._finished)
+        view.pages_reshaped.connect(self.document_changed)  # the pages have other numbers
         self._update_status()
 
     def eventFilter(self, watched, event) -> bool:  # noqa: N802 (Qt naming)
