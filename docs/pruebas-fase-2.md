@@ -495,3 +495,17 @@ Con un documento abierto, en el modo Estudiar.
    páginas no están escaneadas y no cambia nada.
 6. Guarda y abre el PDF en **Adobe** y en **Edge**: se busca bien y la página
    se ve igual.
+
+## Fase 2B – Tarea 2.18 – Buscar y subrayar en escaneados
+
+1. Abre un temario escaneado al que ya le hayas reconocido el texto (por
+   ejemplo tu Tema 6). Busca una palabra con tilde sin ponerla ("articulo") y
+   una con ñ ("año"): las encuentra, y "ano" no encuentra "año".
+2. Busca una frase que salte de una línea a otra: la encuentra.
+3. Selecciona una frase y subráyala: el subrayado cae justo sobre las letras de
+   la imagen.
+4. Abre `tests/ejemplos/ocr-malo.pdf` y busca "artículo": no encuentra nada y
+   el buscador sugiere la búsqueda aproximada.
+5. Marca **Aproximada, para escaneados**: ahora encuentra "Articu1o".
+   "Palabra completa" y "Coincidencia exacta" se apagan mientras está marcada.
+6. Desmárcala: vuelve la búsqueda normal.

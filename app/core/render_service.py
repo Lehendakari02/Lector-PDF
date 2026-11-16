@@ -375,10 +375,12 @@ def _worker_main(connection: Connection) -> None:
                 if reading_token == token and doc is not None and page_index not in readings:
                     readings.append(page_index)
             elif kind == "search":
-                _, search_token, search_id, query, whole_word, exact = message
+                _, search_token, search_id, query, whole_word, exact, approximate = message
                 search = None
                 if search_token == token and doc is not None:
-                    search = _SearchJob(search_id, query, SearchOptions(whole_word, exact))
+                    search = _SearchJob(
+                        search_id, query, SearchOptions(whole_word, exact, approximate)
+                    )
             elif kind == "cancel_search":
                 search = None
             elif kind == "text":
@@ -669,6 +671,7 @@ class RenderService:
                     query,
                     options.whole_word,
                     options.exact,
+                    options.approximate,
                 )
             )
             return self._search_id

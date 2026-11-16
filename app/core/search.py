@@ -44,6 +44,10 @@ Rect = tuple[float, float, float, float]
 class SearchOptions:
     whole_word: bool = False
     exact: bool = False  # accents and capitals must match too
+    # Also finds words badly read in scans ("Articu1o", "carnion", "ano"): the
+    # letters text recognition mixes up count as the same, and spaces do not
+    # count. Leaves out ``exact`` and ``whole_word``.
+    approximate: bool = False
 
 
 DEFAULT_OPTIONS = SearchOptions()
@@ -134,6 +138,33 @@ def _keep_exact(char: str) -> str:
     return unicodedata.normalize("NFC", char)
 
 
+# Letters text recognition mixes up, each turned into one way of writing it.
+# "m" and "d" are written as the two letters they are mistaken for, so that
+# "carnion" and "camion" become the same; "ñ" read without its tilde is an "n".
+LOOK_ALIKES = {
+    "1": "l",
+    "|": "l",
+    "!": "l",
+    "0": "o",
+    "m": "rn",
+    "d": "cl",
+    "ñ": "n",
+    "5": "s",
+    "8": "b",
+}
+
+
+@lru_cache(maxsize=4096)
+def _look_alike(char: str) -> str:
+    return "".join(LOOK_ALIKES.get(piece, piece) for piece in normalize_for_search(char))
+
+
+def approximate_text(text: str) -> str:
+    """``text`` as the approximate search compares it: simplified, with the
+    letters that look alike made the same and without spaces."""
+    return "".join(_look_alike(char) for char in text if not char.isspace())
+
+
 def read_page_text(page) -> PageText:
     """Collect the letters of a PyMuPDF page with their position."""
     import pymupdf
@@ -195,15 +226,18 @@ def _mark_split_hyphens(text: PageText) -> None:
             text.split_hyphens.add(last)
 
 
-def _stream(text: PageText, exact: bool, keep_split_hyphens: bool) -> tuple[str, array]:
+def _stream(
+    text: PageText, exact: bool, keep_split_hyphens: bool, approximate: bool = False
+) -> tuple[str, array]:
     """Simplified text of the page and, for each character, its source letter.
 
-    A source of -1 marks a space that stands for a line break.
+    A source of -1 marks a space that stands for a line break. The
+    approximate stream has no spaces and makes look-alike letters the same.
     """
-    key = (exact, keep_split_hyphens)
+    key = (exact, keep_split_hyphens, approximate)
     if key in text._streams:
         return text._streams[key]
-    simplify = _keep_exact if exact else _simplify
+    simplify = _look_alike if approximate else _keep_exact if exact else _simplify
     out: list[str] = []
     source = array("i")
     previous_line = 0
@@ -229,7 +263,7 @@ def _stream(text: PageText, exact: bool, keep_split_hyphens: bool) -> tuple[str,
             if not joined and pending_space == -2:
                 pending_space = index
             continue
-        if pending_space != -2:
+        if pending_space != -2 and not approximate:
             if out:
                 out.append(" ")
                 source.append(pending_space)
@@ -245,6 +279,8 @@ def _stream(text: PageText, exact: bool, keep_split_hyphens: bool) -> tuple[str,
 def prepare_query(query: str, options: SearchOptions = DEFAULT_OPTIONS) -> str:
     """Simplify what the person typed in the same way as the page text."""
     query = query.replace(_SOFT_HYPHEN, "")
+    if options.approximate:
+        return approximate_text(query)
     query = unicodedata.normalize("NFC", query) if options.exact else normalize_for_search(query)
     return re.sub(r"\s+", " ", query).strip()
 
@@ -307,6 +343,27 @@ def _readable(text: PageText, source: array, start: int, end: int) -> str:
     return "".join(pieces)
 
 
+def _plain(text: PageText, start: int, stop: int) -> str:
+    """The letters of the page from ``start`` to ``stop``, a line break as a space."""
+    start, stop = max(0, start), min(len(text.chars), stop)
+    pieces = []
+    for index in range(start, stop):
+        if index > start and text.lines[index] != text.lines[index - 1]:
+            pieces.append(" ")
+        char = text.chars[index]
+        pieces.append(" " if char.isspace() else char)
+    return re.sub(" +", " ", "".join(pieces))
+
+
+def _around(text: PageText, start: int, stop: int) -> tuple[str, str, str]:
+    """Before, the letters themselves and after, as the page has them."""
+    return (
+        _plain(text, start - CONTEXT_CHARS, start),
+        _plain(text, start, stop),
+        _plain(text, stop, stop + CONTEXT_CHARS),
+    )
+
+
 def find_in_page(
     text: PageText, query: str, options: SearchOptions = DEFAULT_OPTIONS, page: int = 0
 ) -> list[SearchHit]:
@@ -329,17 +386,24 @@ def _find(
         variants.append((needles[0], True))
     variants += [(needle, False) for needle in needles[1:]]
     for needle, keep_split_hyphens in variants:
-        stream, source = _stream(text, options.exact, keep_split_hyphens)
-        for start, end in _find_spans(stream, needle, options.whole_word):
+        stream, source = _stream(text, options.exact, keep_split_hyphens, options.approximate)
+        whole_word = options.whole_word and not options.approximate
+        for start, end in _find_spans(stream, needle, whole_word):
             letters = [letter for letter in source[start:end] if letter >= 0]
             if not letters or (letters[0], letters[-1]) in found:
                 continue
+            if options.approximate:  # the stream has no spaces: read the page itself
+                before, match, after = _around(text, letters[0], letters[-1] + 1)
+            else:
+                before = _readable(text, source, start - CONTEXT_CHARS, start)
+                match = _readable(text, source, start, end)
+                after = _readable(text, source, end, end + CONTEXT_CHARS)
             hit = SearchHit(
                 page=page,
                 rects=_line_rects(text, [n for n in letters if not text.chars[n].isspace()]),
-                before=_readable(text, source, start - CONTEXT_CHARS, start),
-                match=_readable(text, source, start, end),
-                after=_readable(text, source, end, end + CONTEXT_CHARS),
+                before=before,
+                match=match,
+                after=after,
             )
             found[(letters[0], letters[-1])] = (hit, letters)
     return [found[key] for key in sorted(found)]

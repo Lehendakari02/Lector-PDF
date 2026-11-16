@@ -923,8 +923,8 @@ Notas de la Fase 2A:
 |---|-------|-------------------|--------|
 | 2.15 | Detectar páginas escaneadas y ofrecer "Reconocer texto" | Abro un temario escaneado y me lo ofrece sin molestar | ✅ |
 | 2.16 | OCR en español en segundo plano (progreso, cancelar), enderezando la imagen, guardado como capa de texto estándar | Reconozco un tema escaneado, sigo leyendo mientras tanto, y luego busco en él también en Adobe | ✅ |
-| 2.17 | Rehacer el OCR de PDFs que ya traen uno malo (todo o páginas) | Un PDF con OCR malo pasa a buscarse bien | 🔶 |
-| 2.18 | Buscador y subrayado probados con texto de OCR real; búsqueda aproximada opcional | Subrayo y busco en un escaneado igual que en un PDF del BOE | ⬜ |
+| 2.17 | Rehacer el OCR de PDFs que ya traen uno malo (todo o páginas) | Un PDF con OCR malo pasa a buscarse bien | ✅ |
+| 2.18 | Buscador y subrayado probados con texto de OCR real; búsqueda aproximada opcional | Subrayo y busco en un escaneado igual que en un PDF del BOE | 🔶 |
 | 2.19 | Versión 0.3 | Estudio un tema escaneado con el programa | ⬜ |
 
 Notas de la Fase 2B:
@@ -984,6 +984,18 @@ Notas de la Fase 2B:
     veces seguidas.
   - No avisa solo de que un OCR es malo: medirlo bien sin un diccionario no es
     fiable. Se pide con el botón cuando la búsqueda falla.
+- **2.18: buscar y subrayar en escaneados (16/11/2026).**
+  - Pruebas automáticas con texto de OCR real (reconocido por el programa a
+    partir de páginas escaneadas): tildes, la ñ que no es una n, frases que
+    saltan de línea, palabra completa, y el resaltado cae sobre la palabra de
+    la imagen.
+  - Casilla nueva en el buscador: **Aproximada, para escaneados**. Trata como
+    iguales las letras que el OCR suele confundir (1, l, | y !; 0 y o; rn y m;
+    cl y d; 5 y s; 8 y b), no distingue la ñ y no tiene en cuenta los espacios
+    (un OCR malo los pone y los quita). Con ella se apagan "Palabra completa" y
+    "Coincidencia exacta". Por defecto está apagada.
+  - Cuando una búsqueda no encuentra nada en un documento escaneado, el
+    buscador sugiere probar la búsqueda aproximada.
 
 ## Fase 2C – Herramientas de estudio
 Ordenadas por uso diario.
@@ -1046,3 +1058,9 @@ Ordenadas por uso diario.
 
 ## Ideas para más adelante
 Versión para tableta o móvil · Mac/Linux.
+
+- **Botón "Traducir" (idea de Julen, 16/11/2026).** Para PDFs en otros idiomas.
+  Se piensa al final de todo el plan, no antes. Choca con dos principios: un
+  traductor en línea saca el texto del ordenador ("Todo en local") y un modelo
+  de traducción local es inteligencia artificial ("Sin IA"). Habría que decidir
+  si se acepta alguna excepción.
