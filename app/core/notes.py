@@ -39,6 +39,7 @@ from app.core.commands import (
     new_name,
     register_reader,
 )
+from app.core.foreign import Foreign, families_of, foreign_of, key_of
 from app.core.search import Rect
 
 NOTE = "note"
@@ -490,14 +491,22 @@ class PageNote:
     size: float = TEXT_SIZE  # text boxes only
     width: float = 0.0  # text boxes only: chosen by hand, or 0
     bold: bool = False  # text boxes only
+    foreign: Foreign | None = None  # made by another program: only taken away
 
     @property
     def ours(self) -> bool:
         """Made by this program: it can be changed and removed."""
         return self.name.startswith(NAME_PREFIX)
 
+    @property
+    def removable(self) -> bool:
+        """It can be taken away: made here, or by another program."""
+        return self.ours or self.foreign is not None
+
     def order(self) -> Command:
         """The order that would put it as it is."""
+        if self.foreign is not None:
+            return self.foreign
         origin = (self.rect[0], self.rect[1])
         if self.kind == NOTE:
             return AddNote(self.page, origin, self.text, self.color, self.name)
@@ -522,6 +531,7 @@ def page_notes(doc, page_number: int) -> list[PageNote]:
     """The notes and text boxes of a page, of this program or of any other."""
     found: list[PageNote] = []
     page = doc[page_number]
+    families = None  # read when the first annotation of another program comes
     for annotation in page.annots() or ():
         kind = {"Text": NOTE, "FreeText": TEXT_BOX}.get(annotation.type[1])
         if kind is None:
@@ -536,18 +546,26 @@ def page_notes(doc, page_number: int) -> list[PageNote]:
             wide = doc.xref_get_key(annotation.xref, WIDTH_KEY)
             width = clamp_box_width(wide[1]) if wide[0] in ("int", "float") else 0.0
             bold = doc.xref_get_key(annotation.xref, BOLD_KEY) == ("bool", "true")
+        name = str(info.get("id") or "")
+        box = (rect.x0, rect.y0, rect.x1, rect.y1)
+        foreign = None
+        if not name.startswith(NAME_PREFIX):
+            families = families or families_of(doc, page_number)
+            foreign = foreign_of(doc, page_number, annotation, box, families)
+            name = key_of(annotation.xref)
         found.append(
             PageNote(
                 kind,
                 page_number,
-                str(info.get("id") or ""),
-                (rect.x0, rect.y0, rect.x1, rect.y1),
+                name,
+                box,
                 str(info.get("content") or ""),
                 _color(color) if len(color) == 3 else NOTE_COLOR,
                 font,
                 size,
                 width,
                 bold,
+                foreign,
             )
         )
     return found

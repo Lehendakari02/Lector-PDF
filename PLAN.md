@@ -407,7 +407,7 @@ Notas de la Fase 1:
 | 2.13b | Símbolos y flechas dentro del texto | Pongo →, ⇒, ✓, • … mientras escribo, sin buscarlos fuera | ✅ |
 | 2.13c | Más formas y más cómodas | Hago un esquema con flechas, llaves y recuadros con texto sin volver a coger la herramienta cada vez | ✅ (texto dentro de un recuadro: con el texto encima, por ahora) |
 | 2.13d | Hoja en blanco, de rayas o cuadriculada (adelantada de la 2C) | Añado una hoja entre páginas y hago en ella un esquema | ✅ |
-| 2.13e | Borrar anotaciones de otros programas | Quito un subrayado hecho con Edge, y Deshacer lo devuelve igual | ⬜ |
+| 2.13e | Borrar anotaciones de otros programas | Quito un subrayado hecho con Edge, y Deshacer lo devuelve igual | ✅ |
 | 2.14 | Versión 0.2 | Estudio un tema completo con el programa durante una sesión real | ⬜ |
 
 
@@ -901,6 +901,22 @@ Notas de la Fase 2A:
   - Pendiente para la Fase 5 (Organizar): borrar o mover páginas sueltas.
     Una hoja añadida se quita, por ahora, con Deshacer.
   - Comprobado con el motor de Chrome. Sin probar en Adobe Reader.
+- **2.13e: borrar anotaciones de otros programas (16/11/2026).**
+  - Decidido por Julen: **solo borrar, con Deshacer**. Lo que otro programa
+    puso (Edge, Adobe…) se puede elegir y quitar como lo propio: clic y
+    Supr, el borrador, el botón derecho ("Borrar la anotación") o el botón
+    Borrar de su nota. No se mueve, ni se cambia, ni se copia.
+  - Vale para subrayados, resaltados, tachados, dibujos, líneas, recuadros,
+    óvalos, notas, cuadros de texto, sellos, polígonos, ondulados e
+    intercalados.
+  - **Nunca se tocan** los campos de formulario, las firmas, los enlaces ni
+    las zonas marcadas para tapar: no se ofrecen.
+  - Una nota se va con su ventanita y con las respuestas que tenga.
+  - Deshacer devuelve el mismo objeto, sin cambiar nada de él: se quita de
+    la lista de anotaciones de la página y el objeto queda dentro del
+    archivo. Sigue funcionando después de guardar.
+  - Comprobado con anotaciones hechas por PyMuPDF imitando a otros
+    programas. Sin probar con un PDF anotado de verdad en Edge o Adobe.
 
 ## Fase 2B – Documentos escaneados (OCR)
 | # | Tarea | Terminado cuando… | Estado |

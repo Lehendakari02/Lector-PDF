@@ -426,3 +426,18 @@ Con un documento abierto, en el modo Estudiar.
    el Administrador de tareas): al abrirlo ofrece recuperar y la hoja vuelve.
 6. Guarda y abre el PDF en Edge y en Adobe Reader: la hoja está en su sitio,
    con sus rayas o cuadros, y el esquema encima.
+
+## Tarea 2.13e – Borrar anotaciones de otros programas
+
+1. En Edge, abre un PDF, resalta una frase, dibuja algo y guárdalo. En Adobe
+   Reader (si lo tienes), pon una nota adhesiva.
+2. Ábrelo en el programa. Sin herramienta en la mano, haz clic en el dibujo
+   de Edge: queda elegido. Pulsa Supr: se va. **Ctrl+Z**: vuelve igual.
+3. Intenta arrastrarlo: no se mueve (lo de otros programas solo se borra).
+4. Coge el **borrador** y pasa por encima del resaltado de Edge: se va.
+5. Clic derecho sobre la nota de Adobe: "Borrar la nota". Ábrela: dice que
+   es de otro programa, se puede leer y tiene el botón Borrar.
+6. Con un formulario o un PDF firmado: los campos, la firma y los enlaces
+   no se pueden elegir ni borrar.
+7. Guarda y abre el PDF en Edge y en Adobe: lo borrado ya no está y lo demás
+   sigue igual.

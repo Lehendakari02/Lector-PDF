@@ -129,7 +129,9 @@ def test_a_click_on_a_mark_picks_it_but_dragging_still_selects_text(
     assert not view.move_picked(10, 10)
 
 
-def test_what_another_program_made_is_not_picked(window, sample, tmp_path, wait_until):
+def test_what_another_program_made_is_picked_but_does_not_move(
+    window, sample, tmp_path, wait_until
+):
     path = tmp_path / "ajeno.pdf"
     with pymupdf.open(sample("boe.pdf")) as doc:
         page = doc[0]
@@ -140,7 +142,14 @@ def test_what_another_program_made_is_not_picked(window, sample, tmp_path, wait_
     view = window.pdf_view
     wait_until(lambda: 0 in view.cached_pages() and 0 in view._notes)
     click(view, 0, 100, 130)
-    assert view.picked_item() is None
+    picked = view.picked_item()
+    assert picked is not None and not picked.ours
+    drag(view, 0, (100, 130), (150, 180))
+    settle(view, wait_until)
+    (box,) = view.drawings_of(0)
+    assert box.rect == picked.rect and not view.modified, "it stays where it was"
+    assert not view.copy_picked() and not view.move_picked(10, 10)
+    assert not view.resize_picked(0, 10, 10)
 
 
 # ---- moving ----------------------------------------------------------------------

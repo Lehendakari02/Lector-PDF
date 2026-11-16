@@ -75,8 +75,16 @@ def test_pictures_already_drawn_move_with_their_pages(window, opened, wait_until
     view, _path = opened()
     view.scroll_to_page(3)
     wait_until(lambda: 3 in view.cached_pages() and 4 in view.cached_pages())
-    before = {page: kept[1] for page, kept in view._cache.items()}
-    after = {}
+    # Pictures may still arrive until the change is done: compare the cache
+    # just before the view follows the new pages with just after.
+    before, after = {}, {}
+    reshape = view._reshape
+
+    def watched(*args):
+        before.update({page: kept[1] for page, kept in view._cache.items()})
+        reshape(*args)
+
+    view._reshape = watched
     view.pages_reshaped.connect(
         lambda: after.update({page: kept[1] for page, kept in view._cache.items()})
     )

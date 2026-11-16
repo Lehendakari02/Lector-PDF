@@ -46,6 +46,7 @@ from app.core import arrange, drawing, notes, pen, sheets
 from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
 from app.core.document import PageSize, PdfDocument
 from app.core.drawing import ARROW, BOX, DRAW, ERASER, INK, OVAL, SHAPE_TOOL, PageDrawing
+from app.core.foreign import OTHER
 from app.core.notes import NOTE, TEXT_BOX, PageNote
 from app.core.outline import OutlineEntry
 from app.core.render_service import (
@@ -1651,8 +1652,8 @@ class PdfView(QAbstractScrollArea):
         return self._do(notes.Replace(old, new))
 
     def remove_note(self, note: PageNote) -> bool:
-        """Take a note or a text box away. Only the ones made here."""
-        return note.ours and self._do(notes.Remove(note.order()))
+        """Take a note or a text box away (one of another program too)."""
+        return note.removable and self._do(notes.Remove(note.order()))
 
     def close_note_panel(self, keep: bool = False) -> None:
         """Close the panel where a note is being written, keeping the text or not."""
@@ -1741,7 +1742,14 @@ class PdfView(QAbstractScrollArea):
             editor.removed.connect(lambda: self.remove_note(note))
             self.pick(None)
             return self._show_editor(editor, now.page, *now.origin)
-        panel = NotePanel(note.kind, note.text, existing=True, editable=note.ours, parent=self)
+        panel = NotePanel(
+            note.kind,
+            note.text,
+            existing=True,
+            editable=note.ours,
+            parent=self,
+            removable=note.removable,
+        )
         if note.kind == TEXT_BOX:
             panel.show_text_style(note.font, note.size, note.color)
         panel.saved.connect(lambda text: self.change_note(note, text))
@@ -1877,20 +1885,21 @@ class PdfView(QAbstractScrollArea):
         return True
 
     def erase_at(self, position: QPoint) -> bool:
-        """Take away what is under a place of the window, if it was made here:
-        a drawing, a shape, a mark on the text, a note or a text box."""
+        """Take away what is under a place of the window: a drawing, a shape,
+        a mark on the text, a note or a text box, made here or by another
+        program (Deshacer puts it back as it was)."""
         point = self._point_on_page(position)
         if point is None or self._document is None or not self._annotations_shown:
             return False  # what is not seen is not erased
         page, x, y = point
         gone = self._erased.setdefault(page, set())
         note = self.note_under(position)
-        if note is not None and note.ours and note.name not in gone:
+        if note is not None and note.removable and note.name not in gone:
             gone.add(note.name)
             return self._do(notes.Remove(note.order()))
         reach = ERASER_REACH / self._zoom
         for item in reversed(self._drawings.get(page, ())):
-            if item.ours and item.name not in gone and item.touches(x, y, reach):
+            if item.removable and item.name not in gone and item.touches(x, y, reach):
                 gone.add(item.name)
                 return self._do(notes.Remove(item.order()))
         return False
@@ -1920,21 +1929,23 @@ class PdfView(QAbstractScrollArea):
         return self._latest.get(item.name) or item.order()
 
     def pick(self, item) -> None:
-        """Pick an annotation made here (or none), to move, copy or remove it."""
-        chosen = (item.page, item.name) if item is not None and item.ours else None
+        """Pick an annotation (or none), to move, copy or remove it. One made
+        by another program can only be removed."""
+        chosen = (item.page, item.name) if item is not None and item.removable else None
         if chosen != self._picked:
             self._picked = chosen
             self.picked_changed.emit()
             self.viewport().update()
 
     def item_under(self, position: QPoint, marks: bool = True):
-        """The annotation made here that is under a place of the window.
+        """The annotation that is under a place of the window (made here, or
+        by another program).
 
         With ``marks`` false, the marks on the text do not count (a press on
         them starts selecting text).
         """
         note = self.note_under(position)
-        if note is not None and note.ours:
+        if note is not None and note.removable:
             return note
         point = self._point_on_page(position, reach=NOTE_REACH)
         if point is None or not self._annotations_shown:
@@ -1942,7 +1953,7 @@ class PdfView(QAbstractScrollArea):
         page, x, y = point
         reach = PICK_REACH / self._zoom
         for item in reversed(self._drawings.get(page, ())):
-            if not item.ours or (item.kind in MARKUP_KINDS and not marks):
+            if not item.removable or (item.kind in MARKUP_KINDS and not marks):
                 continue
             if item.touches(x, y, reach):
                 return item
@@ -2602,7 +2613,7 @@ class PdfView(QAbstractScrollArea):
             remove = menu.addAction(
                 self.tr("Borrar la nota") if is_note else self.tr("Borrar el texto")
             )
-            remove.setEnabled(note.ours)
+            remove.setEnabled(note.removable)
             remove.triggered.connect(lambda _checked=False: self.remove_note(note))
         item = self.item_under(where)
         if item is not None:
@@ -2620,6 +2631,8 @@ class PdfView(QAbstractScrollArea):
                     if item.kind in MARKUP_KINDS
                     else self.tr("Borrar el dibujo")
                     if item.kind == INK
+                    else self.tr("Borrar la anotación")
+                    if item.kind == OTHER
                     else self.tr("Borrar la forma")
                 )
                 menu.addAction(name).triggered.connect(lambda _checked=False: self.remove_picked())

@@ -370,7 +370,9 @@ def test_the_eraser_takes_marks_and_notes_too(window, opened, wait_until):
     assert view.note_panel is None, "the eraser does not open the note"
 
 
-def test_the_eraser_leaves_what_another_program_drew(window, sample, tmp_path, wait_until):
+def test_the_eraser_takes_what_another_program_drew_and_undo_puts_it_back(
+    window, sample, tmp_path, wait_until
+):
     path = tmp_path / "ajeno.pdf"
     with pymupdf.open(sample("boe.pdf")) as doc:
         page = doc[0]
@@ -383,7 +385,11 @@ def test_the_eraser_leaves_what_another_program_drew(window, sample, tmp_path, w
     window.use_writing_tool(ERASER)
     drag(view, 0, (150, 100))
     settle(view, wait_until)
-    assert len(view.drawings_of(0)) == 1 and not view.modified
+    assert view.drawings_of(0) == [] and view.modified
+    assert view.undo()
+    settle(view, wait_until)
+    (line,) = view.drawings_of(0)
+    assert not line.ours and line.removable
 
 
 def test_what_is_drawn_is_written_in_the_journal_at_once(window, opened, wait_until):
