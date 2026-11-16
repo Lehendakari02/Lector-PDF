@@ -64,7 +64,8 @@ class RenderRequest:
     zoom: float
     rotation: int = 0  # extra quarter turns for viewing: 0, 90, 180 or 270
     # False: the page without what was put on it (marks, notes, drawings).
-    annotations: bool = True
+    # A tuple of names: with everything but those (a text being changed).
+    annotations: bool | tuple[str, ...] = True
 
 
 @dataclass(frozen=True)
@@ -79,7 +80,7 @@ class RenderedPage:
     samples: bytes
     seconds: float
     rotation: int = 0
-    annotations: bool = True  # False: drawn without what was put on the page
+    annotations: bool | tuple[str, ...] = True  # as asked in the RenderRequest
 
 
 def _clean_pixmap(page, matrix):
@@ -101,14 +102,46 @@ def _clean_pixmap(page, matrix):
     return pymupdf.DisplayList(drawn).get_pixmap(matrix=matrix, alpha=False)
 
 
+@contextlib.contextmanager
+def _hidden(doc, page, names: tuple[str, ...]):
+    """Some annotations of a page left out of its picture for a moment (the
+    text being changed, so that only its editor shows it). Nothing of the
+    document changes: each one gets back its own flags."""
+    from app.core.commands import find_annotation
+
+    kept = []
+    for name in names:
+        annotation = find_annotation(page, name)
+        if annotation is None:
+            continue
+        xref = annotation.xref
+        flags = doc.xref_get_key(xref, "F")
+        number = int(flags[1]) if flags[0] == "int" else 0
+        kept.append((xref, flags))
+        doc.xref_set_key(xref, "F", str(number | HIDDEN_FLAG))
+    try:
+        yield
+    finally:
+        for xref, flags in kept:
+            doc.xref_set_key(xref, "F", flags[1] if flags[0] == "int" else "null")
+
+
+HIDDEN_FLAG = 2  # the "Hidden" flag of an annotation in the PDF standard
+
+
 def render_page(
-    doc, page_index: int, zoom: float, rotation: int = 0, annotations: bool = True
+    doc,
+    page_index: int,
+    zoom: float,
+    rotation: int = 0,
+    annotations: bool | tuple[str, ...] = True,
 ) -> RenderedPage:
     """Draw one page of an open PyMuPDF document.
 
     ``rotation`` turns the picture clockwise for viewing; the file is not changed.
     Without ``annotations`` the page is drawn clean: marks, notes and drawings
-    are left out (they stay in the document).
+    are left out (they stay in the document). With a tuple of names, only
+    those are left out.
     """
     import pymupdf
 
@@ -118,7 +151,10 @@ def render_page(
     if pixels > MAX_PIXELS_PER_PAGE:
         zoom *= (MAX_PIXELS_PER_PAGE / pixels) ** 0.5
     matrix = pymupdf.Matrix(zoom, zoom).prerotate(rotation % 360)
-    if annotations:
+    if isinstance(annotations, tuple):
+        with _hidden(doc, page, annotations):
+            pixmap = page.get_pixmap(matrix=matrix, alpha=False)
+    elif annotations:
         pixmap = page.get_pixmap(matrix=matrix, alpha=False)
     else:
         pixmap = _clean_pixmap(page, matrix)

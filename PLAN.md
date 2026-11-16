@@ -926,6 +926,9 @@ Notas de la Fase 2A:
 | 2.17 | Rehacer el OCR de PDFs que ya traen uno malo (todo o páginas) | Un PDF con OCR malo pasa a buscarse bien | ✅ |
 | 2.18 | Buscador y subrayado probados con texto de OCR real; búsqueda aproximada opcional | Subrayo y busco en un escaneado igual que en un PDF del BOE | ✅ |
 | 2.19 | Versión 0.3 | Estudio un tema escaneado con el programa | 🔶 número 0.3.0 puesto (16/11/2026); falta que Julen cree la Release v0.3.0 y lo use con un tema escaneado |
+| 2.19a | Textos tras la prueba del 16/11: moverlos después de ponerlos, A+ a la izquierda y A− a la derecha, sin fondo blanco al cambiarlos | Encajo un texto entre líneas del temario, lo muevo a su sitio y no tapa nada | 🔶 |
+| 2.19b | Elegir cualquier cosa con un clic (también con una herramienta en la mano) y borrarla con Supr | Hago clic en un subrayado, un dibujo o un texto y Supr lo borra | ⬜ |
+| 2.19c | Cambiar el color de lo ya puesto (subrayados, dibujos, formas, textos, notas) | Cambio un resaltado amarillo a verde sin borrarlo y hacerlo otra vez | ⬜ |
 
 Notas de la Fase 2B:
 - **2.15: detectar escaneados y ofrecer "Reconocer texto" (16/11/2026).**
@@ -996,6 +999,15 @@ Notas de la Fase 2B:
     "Coincidencia exacta". Por defecto está apagada.
   - Cuando una búsqueda no encuentra nada en un documento escaneado, el
     buscador sugiere probar la búsqueda aproximada.
+
+- **2.19a–c: arreglos tras la prueba de Julen (16/11/2026).** Antes de la
+  Fase 2C, como se hizo con la 2.13a–e.
+  - 2.19a: el texto abierto lleva un asa a su izquierda (cuatro flechas) para
+    moverlo; con la herramienta Texto en la mano, arrastrar un texto ya puesto
+    lo mueve y un clic lo abre. En la barra, A+ va a la izquierda y A− a la
+    derecha. Al cambiar un texto ya puesto, la página se dibuja sin él (el
+    PDF no cambia) y el marco queda transparente: no tapa el temario. En el
+    PDF guardado un texto nunca ha tenido fondo.
 
 ## Fase 2C – Herramientas de estudio
 Ordenadas por uso diario.
