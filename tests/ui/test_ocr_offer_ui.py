@@ -87,12 +87,16 @@ def test_it_can_be_turned_off_in_the_settings(window, opened, wait_until, settin
     assert not window.current_document.ocr_banner.isVisibleTo(window)
 
 
-def test_reconocer_texto_starts_reading_the_page(window, opened, wait_until):
-    opened()
+def test_reconocer_texto_reads_the_whole_document(window, opened, wait_until):
+    view, _ = opened()
     banner = window.current_document.ocr_banner
     wait_until(lambda: banner.isVisibleTo(window))
     banner.recognize_button.click()
+    assert window.current_document.text_recognition is not None
+    assert banner.isVisibleTo(window) and banner.working, "it shows how far it has got"
+    assert banner.cancel_button.isVisibleTo(window)
+    assert not banner.recognize_button.isVisibleTo(window)
+    wait_until(lambda: window.current_document.text_recognition is None, seconds=120)
     assert not banner.isVisibleTo(window)
-    assert window._ocr_job is not None
-    wait_until(lambda: window.last_ocr is not None, seconds=60)
-    assert window.last_ocr.words
+    assert "Texto reconocido en 3 páginas" in window.statusBar().currentMessage()
+    wait_until(lambda: view.modified and not view._changing)

@@ -57,6 +57,7 @@ from app.core.render_service import (
 )
 from app.core.search import PageText, SearchHit
 from app.core.selection import caret_at, is_on_text, selection_rects, word_at
+from app.core.text_layer import AddTextLayer, PageLayer
 from app.ui import theme
 from app.ui.note_panel import NotePanel
 from app.ui.text_editor import TextEditor
@@ -266,6 +267,11 @@ class PdfView(QAbstractScrollArea):
     pages_changed = Signal(object)
     # Pages were put in or taken away: every page from there on has another number.
     pages_reshaped = Signal()
+    pages_moved = Signal(int, int)  # a page put in at (1) or taken from (-1) a place
+    text_changed = Signal(object)  # the letters of these pages are different (OCR)
+    # The grey picture of a page, to read its text: page, width, height, dpi, bytes.
+    reading_ready = Signal(int, int, int, int, object)
+    reading_failed = Signal(int, str)
     # The pages that are only a picture (scanned), once the whole document has
     # been looked at: their numbers (from 0) and how many pages there are.
     scanned_found = Signal(object, int)
@@ -358,6 +364,8 @@ class PdfView(QAbstractScrollArea):
             on_notes=self._notes_ready.emit,
             on_drawings=self._drawings_ready.emit,
             on_scanned=self._scanned_ready.emit,
+            on_reading=self.reading_ready.emit,
+            on_reading_failed=self.reading_failed.emit,
         )
         self.scanned_pages: list[int] = []  # known once the helper has looked
         self.scanned_known = False  # whether it has looked at every page
@@ -596,10 +604,16 @@ class PdfView(QAbstractScrollArea):
         self._stale.update(page for page in pages if 0 <= page < self.page_count)
         for page in pages:
             self._want_notes(page, again=True)  # what is on those pages may be different
+        if getattr(order, "text_change", False):
+            for page in pages:  # their letters are read again when needed
+                self._texts.pop(page, None)
+                self._asked_texts.discard(page)
         self.mark_modified()
         self._request_pages()
         self.history_changed.emit()
         self.pages_changed.emit(list(pages))
+        if getattr(order, "text_change", False):
+            self.text_changed.emit(list(pages))
 
     def _store_scanned(self, pages: object, count: int) -> None:
         if self._document is None or count != self.page_count:
@@ -662,6 +676,7 @@ class PdfView(QAbstractScrollArea):
         )
         self._current_page = -1  # told again, with the new count
         self._scrolled()
+        self.pages_moved.emit(at, by)
         self.pages_reshaped.emit()
 
     def recover(self, entries) -> int:
@@ -1611,6 +1626,21 @@ class PdfView(QAbstractScrollArea):
         x = max(0.0, min(size.width - notes.NOTE_SIZE, x - half))
         y = max(0.0, min(size.height - notes.NOTE_SIZE, y - half))
         return self._do(notes.new_note(page, (x, y), text.strip(), self.note_color))
+
+    def want_reading(self, page: int) -> None:
+        """Ask for the picture of a page to read its text: ``reading_ready``."""
+        if self._document is not None and 0 <= page < self.page_count:
+            self.service.want_reading(page)
+
+    def add_text_layer(self, recognised: list) -> bool:
+        """Write the text read on some pages (``app.core.ocr.OcrPage``) as
+        invisible text. One change: Deshacer takes all of it away."""
+        layers = tuple(
+            PageLayer.of(page) for page in recognised if 0 <= page.page < self.page_count
+        )
+        if not layers:
+            return False
+        return self._do(AddTextLayer(layers))
 
     def insert_sheet(self, kind: str = sheets.DEFAULT_SHEET, after: int | None = None) -> bool:
         """Put a sheet to write on after a page (the one being read, if not

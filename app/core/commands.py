@@ -179,6 +179,7 @@ def command_from_dict(data: dict) -> Command:
     import app.core.foreign  # noqa: F401
     import app.core.notes  # noqa: F401
     import app.core.sheets  # noqa: F401
+    import app.core.text_layer  # noqa: F401
 
     try:
         return _READERS[data["what"]](data)

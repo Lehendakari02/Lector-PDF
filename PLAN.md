@@ -922,7 +922,7 @@ Notas de la Fase 2A:
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
 | 2.15 | Detectar páginas escaneadas y ofrecer "Reconocer texto" | Abro un temario escaneado y me lo ofrece sin molestar | ✅ |
-| 2.16 | OCR en español en segundo plano (progreso, cancelar), enderezando la imagen, guardado como capa de texto estándar | Reconozco un tema escaneado, sigo leyendo mientras tanto, y luego busco en él también en Adobe | ⬜ |
+| 2.16 | OCR en español en segundo plano (progreso, cancelar), enderezando la imagen, guardado como capa de texto estándar | Reconozco un tema escaneado, sigo leyendo mientras tanto, y luego busco en él también en Adobe | 🔶 |
 | 2.17 | Rehacer el OCR de PDFs que ya traen uno malo (todo o páginas) | Un PDF con OCR malo pasa a buscarse bien | ⬜ |
 | 2.18 | Buscador y subrayado probados con texto de OCR real; búsqueda aproximada opcional | Subrayo y busco en un escaneado igual que en un PDF del BOE | ⬜ |
 | 2.19 | Versión 0.3 | Estudio un tema escaneado con el programa | ⬜ |
@@ -940,6 +940,32 @@ Notas de la Fase 2B:
     (activado por defecto).
   - Por ahora el botón reconoce la página que se está viendo (lo de la Fase 0).
     El documento entero, en segundo plano y guardado en el PDF, es la 2.16.
+- **2.16: reconocer el documento entero (16/11/2026).**
+  - "Reconocer texto" (en la franja o en el modo Estudiar) lee todas las páginas
+    escaneadas, una tras otra, en un proceso aparte. Se sigue leyendo y
+    desplazándose con normalidad: dibujar las páginas va siempre primero.
+  - La franja muestra "Reconociendo el texto: página X de N" con una barra y
+    **Cancelar**. Cancelar conserva las páginas ya leídas.
+  - Antes de leer cada página se endereza: se mide la inclinación de las líneas
+    (hasta 10°) y se gira la imagen; una página del revés o de lado se pone
+    derecha (se reconoce porque al leerla no salen palabras comunes del español).
+    "Limpiar" la imagen se queda en pasarla a gris: Tesseract ya separa la
+    letra del fondo por su cuenta y con eso lee bien el ejemplo con ruido.
+  - Lo leído se escribe como texto invisible estándar encima de cada palabra
+    (la página se ve igual), con Helvetica y las letras de Windows, que tienen
+    todas las del español; una letra que no esté sale como "?". Las palabras
+    van rectas, no inclinadas como el escaneo: algunos lectores parten las
+    líneas inclinadas incluso a mitad de palabra.
+  - Todo se escribe al final como un solo cambio: Deshacer lo quita entero, se
+    guarda en el PDF al guardar y va al diario (no se pierde con un apagón).
+  - Si mientras tanto se mete o se quita una hoja, el texto sigue yendo a su página.
+  - Arregla los fallos M10 (capa de texto mal en páginas giradas, palabras
+    estrechas, letras que faltaban) y B6 (un proceso por página, sin contraseña)
+    de la revisión de la Fase 0: ahora un solo proceso, y las imágenes las da el
+    ayudante, así que funciona con contraseña y con cambios sin guardar.
+  - Comprobado aquí con PyMuPDF y con Poppler (el motor de otros lectores): las
+    palabras se encuentran en su sitio. **Sin probar en Adobe ni en Edge.**
+  - Velocidad medida aquí: unos 2 segundos por página escaneada a 150 ppp.
 
 ## Fase 2C – Herramientas de estudio
 Ordenadas por uso diario.

@@ -136,7 +136,7 @@ FEATURES: list[Feature] = [
         "ocr",
         STUDY,
         "Reconocer texto",
-        "Leer el texto de una página escaneada",
+        "Leer el texto de las páginas escaneadas para poder buscar, subrayar y copiar",
         "ocr escaneado foto imagen",
     ),
     _f(
