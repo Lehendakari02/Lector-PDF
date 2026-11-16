@@ -408,7 +408,7 @@ Notas de la Fase 1:
 | 2.13c | Más formas y más cómodas | Hago un esquema con flechas, llaves y recuadros con texto sin volver a coger la herramienta cada vez | ✅ (texto dentro de un recuadro: con el texto encima, por ahora) |
 | 2.13d | Hoja en blanco, de rayas o cuadriculada (adelantada de la 2C) | Añado una hoja entre páginas y hago en ella un esquema | ✅ |
 | 2.13e | Borrar anotaciones de otros programas | Quito un subrayado hecho con Edge, y Deshacer lo devuelve igual | ✅ |
-| 2.14 | Versión 0.2 | Estudio un tema completo con el programa durante una sesión real | ⬜ |
+| 2.14 | Versión 0.2 | Estudio un tema completo con el programa durante una sesión real | 🔶 número 0.2.0 puesto (16/11/2026); falta que Julen cree la Release v0.2.0 y lo use en una sesión real |
 
 
 Notas de la Fase 2A:
