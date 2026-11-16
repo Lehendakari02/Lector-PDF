@@ -19,7 +19,9 @@ to the page as it is shown (``OcrPage.matrix``).
 
 import math
 import multiprocessing
+import queue
 import sys
+import threading
 import time
 from collections import Counter
 from dataclasses import dataclass, field
@@ -342,16 +344,16 @@ class OcrFailure:
     details: str
 
 
-def _recognizer_main(connection) -> None:
+def _recognizer_main(pictures, connection) -> None:
     import pymupdf
 
     while True:
         try:
-            message = connection.recv()
+            message = pictures.recv()
             if message[0] != "read":
                 return
             _, page, width, height, dpi = message
-            samples = connection.recv_bytes()
+            samples = pictures.recv_bytes()
         except (EOFError, OSError):
             return
         try:
@@ -372,22 +374,47 @@ class Recognizer:
     ``read`` hands it the grey picture of a page; ``results`` gives what is
     ready, without waiting. Only one process for a whole document: starting
     it takes a moment, reading each page does not need to.
+
+    The pictures go one way and the words come back another, and the
+    pictures are handed over by a thread of their own: a picture is a few
+    megabytes, and on Windows handing it over waits until the process takes
+    it. The window never waits for that.
     """
 
     def __init__(self) -> None:
         context = multiprocessing.get_context("spawn")
-        self._connection, child_end = context.Pipe(duplex=True)
-        self._process = context.Process(target=_recognizer_main, args=(child_end,), daemon=True)
+        pictures_in, self._pictures = context.Pipe(duplex=False)
+        self._connection, results_out = context.Pipe(duplex=False)
+        self._process = context.Process(
+            target=_recognizer_main, args=(pictures_in, results_out), daemon=True
+        )
         self._process.start()
-        child_end.close()
+        pictures_in.close()
+        results_out.close()
         self._closed = False
+        self._broken = False
+        self._waiting: queue.Queue = queue.Queue()
+        self._sender = threading.Thread(target=self._send_pictures, daemon=True)
+        self._sender.start()
 
     def read(self, page: int, width: int, height: int, dpi: int, samples: bytes) -> None:
-        try:
-            self._connection.send(("read", page, width, height, dpi))
-            self._connection.send_bytes(samples)
-        except (OSError, ValueError) as exc:
-            raise OcrError("the recognition process stopped") from exc
+        """Hand over the picture of a page, without waiting."""
+        if self._closed or self._broken:
+            raise OcrError("the recognition process stopped")
+        self._waiting.put((page, width, height, dpi, samples))
+
+    def _send_pictures(self) -> None:
+        while True:
+            picture = self._waiting.get()
+            if picture is None:
+                return
+            page, width, height, dpi, samples = picture
+            try:
+                self._pictures.send(("read", page, width, height, dpi))
+                self._pictures.send_bytes(samples)
+            except (OSError, ValueError):
+                self._broken = True  # the process has gone: ``results`` says so
+                return
 
     def results(self) -> list[OcrPage | OcrFailure]:
         """What has been read since last asked. Raises ``OcrError`` if the
@@ -401,7 +428,7 @@ class Recognizer:
         except (EOFError, OSError):
             self.close()
             raise OcrError("the recognition process stopped") from None
-        if not found and not self._process.is_alive():
+        if not found and (self._broken or not self._process.is_alive()):
             self.close()
             raise OcrError("the recognition process stopped")
         return found
@@ -411,7 +438,9 @@ class Recognizer:
         if self._closed:
             return
         self._closed = True
+        self._waiting.put(None)
         if self._process.is_alive():
             self._process.terminate()
         self._process.join(timeout=2)
         self._connection.close()
+        self._pictures.close()
