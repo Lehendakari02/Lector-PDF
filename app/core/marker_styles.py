@@ -134,6 +134,8 @@ class MarkerStyles:
         default_factory=lambda: dict.fromkeys(LINE_KINDS, DEFAULT_WIDTH)
     )
     shape: str = DEFAULT_SHAPE
+    shape_fill: bool = False  # closed shapes filled with a light tone of their colour
+    shape_dashed: bool = False
 
     def of(self, kind: str) -> MarkerStyle:
         return self.styles[kind]
@@ -169,6 +171,12 @@ class MarkerStyles:
         if isinstance(shape, str) and shape in SHAPES:
             self.shape = shape
 
+    def set_shape_fill(self, fill: object) -> None:
+        self.shape_fill = fill is True
+
+    def set_shape_dashed(self, dashed: object) -> None:
+        self.shape_dashed = dashed is True
+
     def to_setting(self) -> dict:
         """As plain data, for the settings file."""
         return {
@@ -181,6 +189,8 @@ class MarkerStyles:
             "text": {"font": self.text_font, "size": self.text_size}
             | ({"bold": True} if self.text_bold else {}),
             "shape": self.shape,
+            **({"shape_fill": True} if self.shape_fill else {}),
+            **({"shape_dashed": True} if self.shape_dashed else {}),
         }
 
     @classmethod
@@ -199,6 +209,8 @@ class MarkerStyles:
                 result.styles[kind] = MarkerStyle(color, clamp_opacity(saved.get("opacity", 1.0)))
                 result.set_width(kind, saved.get("width"))
         result.set_shape(value.get("shape"))
+        result.set_shape_fill(value.get("shape_fill"))
+        result.set_shape_dashed(value.get("shape_dashed"))
         text = value.get("text")
         if isinstance(text, dict):
             result.set_text_font(text.get("font"))

@@ -165,15 +165,34 @@ def _arrow_head(start: QPointF, end: QPointF, width: float) -> list[QPointF]:
 
 def _sketch_of(order) -> tuple | None:
     """What an order draws, to paint it before the engine does: page, kind,
-    strokes, colour, thickness, opacity and, for a stroke made with a pen that
-    feels it, the pressures. None if it is not a drawing."""
+    strokes, colour, thickness, opacity, for a stroke made with a pen that
+    feels it the pressures and, for a shape, whether it is filled and dashed.
+    None if it is not a drawing."""
     if isinstance(order, drawing.AddInk):
         strokes = [list(stroke) for stroke in order.strokes]
         pressures = order.pressures if order.pressed else ()
-        return (order.page, INK, strokes, order.color, order.width, order.opacity, pressures)
+        return (
+            order.page,
+            INK,
+            strokes,
+            order.color,
+            order.width,
+            order.opacity,
+            pressures,
+            (False, False),
+        )
     if isinstance(order, drawing.AddShape):
         ends = [[order.start, order.end]]
-        return (order.page, order.kind, ends, order.color, order.width, order.opacity, ())
+        return (
+            order.page,
+            order.kind,
+            ends,
+            order.color,
+            order.width,
+            order.opacity,
+            (),
+            (order.fill, order.dashed),
+        )
     return None
 
 
@@ -385,6 +404,8 @@ class PdfView(QAbstractScrollArea):
         self.shape_color = drawing.SHAPE_COLOR
         self.shape_width = drawing.DEFAULT_WIDTH
         self.shape_opacity = 1.0
+        self.shape_fill = False  # a closed shape is filled with a light tone of its colour
+        self.shape_dashed = False
         self._notes: dict[int, list[PageNote]] = {}  # notes and text boxes by page
         self._asked_notes: set[int] = set()
         # Where one is being written: a panel, or the page itself for a text.
@@ -1179,8 +1200,9 @@ class PdfView(QAbstractScrollArea):
         if self._sketch is not None:
             kind, color, width, opacity = self._sketch_style(self._sketch[1])
             pressed = (self._sketch_pressures,) if self._sketch_pressures else ()
+            look = (self.shape_fill, self.shape_dashed) if kind != INK else (False, False)
             waiting.append(
-                (self._sketch[0], kind, [self._sketch[2]], color, width, opacity, pressed)
+                (self._sketch[0], kind, [self._sketch[2]], color, width, opacity, pressed, look)
             )
         dragged = self._grab["change"].new if self._grab and self._grab["change"] else None
         if dragged is not None and _sketch_of(dragged) is not None:
@@ -1190,37 +1212,84 @@ class PdfView(QAbstractScrollArea):
         painter.setClipRect(target)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        for _page, kind, strokes, color, width, opacity, pressures in waiting:
-            tone = QColor.fromRgbF(*color)
-            tone.setAlphaF(max(0.05, min(1.0, opacity)))
-            if len(pressures) == len(strokes) and all(
-                len(pressed) == len(points)
-                for pressed, points in zip(pressures, strokes, strict=True)
-            ):
-                for points, pressed in zip(strokes, pressures, strict=True):
-                    shown = [self._on_screen(page, point, target, zoom) for point in points]
-                    self._paint_pressed(painter, shown, pressed, width * zoom, tone)
-                continue
-            pen = QPen(tone, max(1.0, width * zoom))
-            round_ends = kind in (INK, ARROW)
-            pen.setCapStyle(Qt.PenCapStyle.RoundCap if round_ends else Qt.PenCapStyle.FlatCap)
-            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin if round_ends else Qt.PenJoinStyle.MiterJoin)
-            painter.setPen(pen)
-            for points in strokes:
-                if len(points) < 2:
+        try:
+            for _page, kind, strokes, color, width, opacity, pressures, look in waiting:
+                tone = QColor.fromRgbF(*color)
+                tone.setAlphaF(max(0.05, min(1.0, opacity)))
+                if len(pressures) == len(strokes) and all(
+                    len(pressed) == len(points)
+                    for pressed, points in zip(pressures, strokes, strict=True)
+                ):
+                    for points, pressed in zip(strokes, pressures, strict=True):
+                        shown = [self._on_screen(page, point, target, zoom) for point in points]
+                        self._paint_pressed(painter, shown, pressed, width * zoom, tone)
                     continue
-                shown = [self._on_screen(page, point, target, zoom) for point in points]
-                if kind == BOX:
-                    painter.drawRect(QRectF(shown[0], shown[-1]).normalized())
-                elif kind == OVAL:
-                    painter.drawEllipse(QRectF(shown[0], shown[-1]).normalized())
-                else:
-                    painter.drawPolyline(QPolygonF(shown))
-                    if kind == ARROW:
-                        head = _arrow_head(shown[0], shown[-1], width * zoom)
-                        painter.drawPolyline(QPolygonF(head))
-        painter.restore()
+                pen = QPen(tone, max(1.0, width * zoom))
+                round_ends = kind in (
+                    INK,
+                    ARROW,
+                    drawing.DOUBLE_ARROW,
+                    drawing.ELBOW,
+                    drawing.BRACE,
+                )
+                pen.setCapStyle(Qt.PenCapStyle.RoundCap if round_ends else Qt.PenCapStyle.FlatCap)
+                pen.setJoinStyle(
+                    Qt.PenJoinStyle.RoundJoin if round_ends else Qt.PenJoinStyle.MiterJoin
+                )
+                filled, dashed = look
+                if dashed:
+                    pen.setCapStyle(Qt.PenCapStyle.FlatCap)
+                    pen.setDashPattern([3.0, 2.0])  # as the PDF has it, in thicknesses
+                painter.setPen(pen)
+                for points in strokes:
+                    if len(points) < 2:
+                        continue
+                    self._paint_shape(
+                        painter, page, kind, points, target, zoom, width, tone, opacity, filled
+                    )
+        finally:
+            # Whatever happens above, the painter is left as it was found.
+            painter.restore()
         self._paint_frame(painter, page, target, zoom)
+
+    def _paint_shape(
+        self, painter, page, kind, points, target, zoom, width, tone, opacity, filled
+    ) -> None:
+        """A shape (or a stroke) on the screen, as the PDF will have it."""
+        if kind == INK or kind not in drawing.SHAPES:
+            shown = [self._on_screen(page, point, target, zoom) for point in points]
+            painter.drawPolyline(QPolygonF(shown))
+            return
+        start, end = points[0], points[-1]
+        corners = drawing.shape_points(kind, start, end)
+        shown = [self._on_screen(page, point, target, zoom) for point in corners]
+        if filled and kind in drawing.FILLABLE:
+            fill = QColor.fromRgbF(*drawing.fill_tone(tone.getRgbF()[:3]))
+            fill.setAlphaF(max(0.05, min(1.0, opacity)))
+            painter.save()
+            # Like a highlighter: what is underneath still shows.
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Multiply)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(fill)
+            self._draw_outline(painter, kind, shown)
+            painter.restore()
+        self._draw_outline(painter, kind, shown)
+        head = width * zoom
+        if kind in (ARROW, drawing.DOUBLE_ARROW, drawing.ELBOW):
+            painter.drawPolyline(QPolygonF(_arrow_head(shown[-2], shown[-1], head)))
+        if kind == drawing.DOUBLE_ARROW:
+            painter.drawPolyline(QPolygonF(_arrow_head(shown[1], shown[0], head)))
+
+    @staticmethod
+    def _draw_outline(painter: QPainter, kind: str, shown: list[QPointF]) -> None:
+        if kind == BOX:
+            painter.drawRect(QRectF(shown[0], shown[2]).normalized())
+        elif kind == OVAL:
+            painter.drawEllipse(QRectF(shown[0], shown[2]).normalized())
+        elif kind in (drawing.TRIANGLE, drawing.RHOMBUS):
+            painter.drawPolygon(QPolygonF(shown))
+        else:
+            painter.drawPolyline(QPolygonF(shown))
 
     @staticmethod
     def _paint_pressed(painter: QPainter, shown, pressures, width: float, tone: QColor) -> None:
@@ -1654,9 +1723,11 @@ class PdfView(QAbstractScrollArea):
         self._want_notes(page)
         return list(self._drawings.get(page, ()))
 
-    def _extend_sketch(self, position: QPoint) -> None:
+    def _extend_sketch(self, position: QPoint, modifiers=Qt.KeyboardModifier.NoModifier) -> None:
         page, tool, points = self._sketch
         _, x, y = self._page_point(position, page)
+        if tool == SHAPE_TOOL and modifiers & Qt.KeyboardModifier.ShiftModifier:
+            x, y = drawing.straightened(self.shape_kind, points[0], (x, y))
         size = self._sizes[page]
         point = (max(0.0, min(size.width, x)), max(0.0, min(size.height, y)))
         if tool == DRAW:
@@ -1715,9 +1786,23 @@ class PdfView(QAbstractScrollArea):
         if not 0 <= page < self.page_count:
             return False
         order = drawing.new_shape(
-            kind, page, start, end, self.shape_color, self.shape_width, self.shape_opacity
+            kind,
+            page,
+            start,
+            end,
+            self.shape_color,
+            self.shape_width,
+            self.shape_opacity,
+            self.shape_fill,
+            self.shape_dashed,
         )
-        return order is not None and self._do(order)
+        if order is None or not self._do(order):
+            return False
+        if self._markup_tool == SHAPE_TOOL:
+            # It stays picked: its handles adjust it at once, Supr takes it away.
+            self._picked = (page, order.name)
+            self.picked_changed.emit()
+        return True
 
     def erase_at(self, position: QPoint) -> bool:
         """Take away what is under a place of the window, if it was made here:
@@ -1999,6 +2084,14 @@ class PdfView(QAbstractScrollArea):
             self.close_note_panel(keep=True)
             if not (on_page and self._markup_tool == TEXT_BOX):
                 return
+        if self._markup_tool == SHAPE_TOOL and self._picked is not None:
+            # The shape just drawn can be adjusted by its handles or dragged.
+            handle = self._handle_under(position)
+            item = self.picked_item()
+            if item is not None and (handle is not None or self.item_under(position) == item):
+                self._start_grab(item, handle, position)
+                return
+            self.pick(None)
         if self._markup_tool in (DRAW, SHAPE_TOOL):
             point = self._point_on_page(position)
             if point is not None:
@@ -2046,12 +2139,12 @@ class PdfView(QAbstractScrollArea):
         self._drag_position = position
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
-        self._move(event.position().toPoint())
+        self._move(event.position().toPoint(), event.modifiers())
 
-    def _move(self, position: QPoint) -> None:
+    def _move(self, position: QPoint, modifiers=Qt.KeyboardModifier.NoModifier) -> None:
         """The mouse, the pen or a finger moves, held down or not."""
         if self._sketch is not None:
-            self._extend_sketch(position)
+            self._extend_sketch(position, modifiers)
             return
         if self._erasing:
             self.erase_at(position)
@@ -2072,14 +2165,14 @@ class PdfView(QAbstractScrollArea):
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.LeftButton:
-            self._release(event.position().toPoint())
+            self._release(event.position().toPoint(), event.modifiers())
         super().mouseReleaseEvent(event)
 
-    def _release(self, position: QPoint) -> None:
+    def _release(self, position: QPoint, modifiers=Qt.KeyboardModifier.NoModifier) -> None:
         """The mouse button, the pen or a finger is lifted."""
         self._erasing = False
         if self._sketch is not None:
-            self._extend_sketch(position)
+            self._extend_sketch(position, modifiers)
             self._finish_sketch()
         if self._grab is not None:
             self._drag_grab(position)
@@ -2364,7 +2457,10 @@ class PdfView(QAbstractScrollArea):
     def _update_pointer(self, position: QPoint) -> None:
         """A hand over a note, a cross to put one, an I-beam over text, an arrow elsewhere."""
         if self._markup_tool in (DRAW, SHAPE_TOOL, ERASER):
-            if self._point_on_page(position) is None:
+            handle = self._handle_under(position) if self._markup_tool == SHAPE_TOOL else None
+            if handle is not None:
+                self.viewport().setCursor(self._handle_cursor(handle))
+            elif self._point_on_page(position) is None:
                 self.viewport().setCursor(Qt.CursorShape.ArrowCursor)
             elif self._markup_tool == ERASER:
                 self.viewport().setCursor(_eraser_cursor())

@@ -287,9 +287,14 @@ def test_the_menus_offer_thickness_and_opacity(window):
     assert window.color_menus[NOTE].opacity_slider.isHidden()
     assert [a.text() for a in window.shape_actions.values()] == [
         "Flecha",
+        "Flecha doble",
+        "Flecha en codo",
         "Línea",
         "Recuadro",
         "Óvalo",
+        "Triángulo",
+        "Rombo",
+        "Llave { }",
     ]
 
 

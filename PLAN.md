@@ -405,7 +405,7 @@ Notas de la Fase 1:
 | 2.13 | Atajos de teclado para cada herramienta | Cambio de herramienta sin usar el ratón | ✅ |
 | 2.13a | Escribir texto directamente sobre la página (tras la prueba del 15/11) | Hago clic y escribo ahí mismo; elijo tamaño, negrita, color y ancho sin salir del texto | ✅ |
 | 2.13b | Símbolos y flechas dentro del texto | Pongo →, ⇒, ✓, • … mientras escribo, sin buscarlos fuera | ✅ |
-| 2.13c | Más formas y más cómodas | Hago un esquema con flechas, llaves y recuadros con texto sin volver a coger la herramienta cada vez | ⬜ |
+| 2.13c | Más formas y más cómodas | Hago un esquema con flechas, llaves y recuadros con texto sin volver a coger la herramienta cada vez | ✅ (texto dentro de un recuadro: con el texto encima, por ahora) |
 | 2.13d | Hoja en blanco, de rayas o cuadriculada (adelantada de la 2C) | Añado una hoja entre páginas y hago en ella un esquema | ⬜ |
 | 2.13e | Borrar anotaciones de otros programas | Quito un subrayado hecho con Edge, y Deshacer lo devuelve igual | ⬜ |
 | 2.14 | Versión 0.2 | Estudio un tema completo con el programa durante una sesión real | ⬜ |
@@ -860,6 +860,30 @@ Notas de la Fase 2A:
     va dentro (`--check-symbols`).
   - De paso: Ctrl+Z dentro de un texto deshace lo tecleado (antes podía hacer
     falta pulsarlo dos veces).
+  - Comprobado con el motor de Chrome. Sin probar en Adobe Reader.
+- **2.13c: más formas y más cómodas (16/11/2026).**
+  - **Formas nuevas** en el menú de Formas, cada una con su dibujito: flecha
+    doble, flecha en codo (va en horizontal y luego baja o sube), triángulo,
+    rombo y **llave** (arrastrando hacia la derecha sale "{", hacia la
+    izquierda "}"; si es más ancha que alta, sale tumbada).
+  - **Relleno claro** (casilla en el menú): recuadros, óvalos, triángulos y
+    rombos se rellenan de un tono claro de su color, mezclado como un
+    rotulador, así que el texto de debajo se sigue leyendo.
+  - **Línea discontinua** (casilla en el menú), para cualquier forma.
+  - **Mayús** mientras se suelta: líneas y flechas rectas (de 45 en 45
+    grados), recuadros cuadrados y óvalos redondos.
+  - **La forma recién dibujada queda elegida**, con sus tiradores, sin soltar
+    la herramienta: se ajusta en el momento arrastrando un tirador, se mueve
+    arrastrándola o se quita con Supr. Un arrastre en otro sitio empieza la
+    siguiente.
+  - Relleno y discontinua se recuerdan y van en las favoritas.
+  - Todo es anotación PDF estándar (Line, PolyLine, Polygon, Square, Circle).
+    Los polígonos guardan además qué forma son y entre qué dos puntos se
+    dibujaron, para poder moverlos y cambiarlos de tamaño igual.
+  - No hechas todavía: las marcas ✓ y ✗ como forma (ya se escriben como
+    símbolo en el texto, en el tamaño y color que se quiera) y escribir texto
+    dentro de un recuadro (de momento, texto encima del recuadro). Se
+    retoman si se echan de menos.
   - Comprobado con el motor de Chrome. Sin probar en Adobe Reader.
 
 ## Fase 2B – Documentos escaneados (OCR)
