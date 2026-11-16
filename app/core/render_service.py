@@ -381,6 +381,13 @@ def _worker_main(connection: Connection) -> None:
                         connection.send(("change_failed", token, change_id, str(exc)))
                     else:
                         connection.send(("changed", token, change_id, order, pages, undo))
+                        if hasattr(order, "page_change"):
+                            # Pages were put or taken away: the letters read so
+                            # far belong to other places now, and the index
+                            # points elsewhere. The window searches again.
+                            page_texts.clear()
+                            search = None
+                            connection.send(("outline", token, read_outline(doc)))
             elif kind == "save":
                 _, save_token, save_id, target = message
                 if save_token == token and doc is not None:

@@ -155,7 +155,11 @@ FEATURES: list[Feature] = [
         "márgenes ampliar",
     ),
     _f(
-        "insert_sheet", STUDY, "Insertar hoja", "Añadir una hoja en blanco o cuadriculada", "página"
+        "insert_sheet",
+        STUDY,
+        "Insertar hoja",
+        "Añadir una hoja en blanco, de rayas o cuadriculada",
+        "página rayas cuadrícula",
     ),
     # Rellenar y firmar
     _f("fill_form", FILL, "Rellenar campos", "Rellenar los campos de un formulario", "formulario"),

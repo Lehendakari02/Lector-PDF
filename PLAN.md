@@ -406,7 +406,7 @@ Notas de la Fase 1:
 | 2.13a | Escribir texto directamente sobre la página (tras la prueba del 15/11) | Hago clic y escribo ahí mismo; elijo tamaño, negrita, color y ancho sin salir del texto | ✅ |
 | 2.13b | Símbolos y flechas dentro del texto | Pongo →, ⇒, ✓, • … mientras escribo, sin buscarlos fuera | ✅ |
 | 2.13c | Más formas y más cómodas | Hago un esquema con flechas, llaves y recuadros con texto sin volver a coger la herramienta cada vez | ✅ (texto dentro de un recuadro: con el texto encima, por ahora) |
-| 2.13d | Hoja en blanco, de rayas o cuadriculada (adelantada de la 2C) | Añado una hoja entre páginas y hago en ella un esquema | ⬜ |
+| 2.13d | Hoja en blanco, de rayas o cuadriculada (adelantada de la 2C) | Añado una hoja entre páginas y hago en ella un esquema | ✅ |
 | 2.13e | Borrar anotaciones de otros programas | Quito un subrayado hecho con Edge, y Deshacer lo devuelve igual | ⬜ |
 | 2.14 | Versión 0.2 | Estudio un tema completo con el programa durante una sesión real | ⬜ |
 
@@ -885,6 +885,22 @@ Notas de la Fase 2A:
     dentro de un recuadro (de momento, texto encima del recuadro). Se
     retoman si se echan de menos.
   - Comprobado con el motor de Chrome. Sin probar en Adobe Reader.
+- **2.13d: hoja en blanco, de rayas o cuadriculada (16/11/2026).**
+  - Botón **Insertar hoja** (modo Estudiar): pone una hoja justo después de
+    la página que se está leyendo, del mismo tamaño que ella, y la muestra.
+    La flecha del botón ofrece **En blanco**, **De rayas** (renglones cada
+    8 mm, como un cuaderno) y **Cuadriculada** (cuadros de 5 mm). Se recuerda
+    la última elegida; por defecto, en blanco.
+  - Las rayas y la cuadrícula son parte de la hoja (no anotaciones), en un
+    azul claro que no estorba. Es una página PDF normal: cualquier lector la
+    ve, y encima se puede escribir, dibujar y hacer formas como en cualquier
+    otra.
+  - Deshacer la quita y Rehacer la vuelve a poner; el diario la recupera tras
+    un apagón. Miniaturas, número de páginas, búsqueda e índice siguen a las
+    páginas movidas; las páginas ya dibujadas no parpadean.
+  - Pendiente para la Fase 5 (Organizar): borrar o mover páginas sueltas.
+    Una hoja añadida se quita, por ahora, con Deshacer.
+  - Comprobado con el motor de Chrome. Sin probar en Adobe Reader.
 
 ## Fase 2B – Documentos escaneados (OCR)
 | # | Tarea | Terminado cuando… | Estado |
@@ -905,7 +921,7 @@ Ordenadas por uso diario.
 | 2.22 | Marcadores propios | Marco artículos clave y vuelvo a ellos con un clic | ⬜ |
 | 2.23 | Modo repaso | Lo subrayado se tapa y lo descubro al hacer clic | ⬜ |
 | 2.24 | Márgenes ampliables | Añado margen a una página y escribo en él; se ve igual en Edge y Adobe | ⬜ |
-| 2.25 | Insertar hojas en blanco, de rayas o cuadriculadas | Meto una hoja cuadriculada para un esquema | ⬜ |
+| 2.25 | Insertar hojas en blanco, de rayas o cuadriculadas | Meto una hoja cuadriculada para un esquema | ✅ (hecha en la 2.13d) |
 | 2.26 | Código de colores propio (opcional, nada predefinido) | Si quiero, pongo nombre a mis colores; si no, no aparece nada | ⬜ |
 | 2.27 | Exportar resumen (formato por decidir) | Saco un documento con todo lo subrayado, ordenado por página | ⬜ |
 | 2.28 | Vista de dos documentos lado a lado | Veo el tema y la ley a la vez | ⬜ |

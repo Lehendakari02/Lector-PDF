@@ -177,6 +177,7 @@ def command_from_dict(data: dict) -> Command:
     """Read back an order written with ``to_dict`` (for the recovery journal)."""
     import app.core.drawing  # noqa: F401  (their orders register themselves)
     import app.core.notes  # noqa: F401
+    import app.core.sheets  # noqa: F401
 
     try:
         return _READERS[data["what"]](data)

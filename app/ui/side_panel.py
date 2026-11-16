@@ -74,6 +74,7 @@ class ThumbnailList(QListWidget):
         view.thumbnail_drawn.connect(self._store)
         view.page_changed.connect(lambda page, _count: self.follow(page - 1))
         view.rotation_changed.connect(lambda _degrees: self.rebuild())
+        view.pages_reshaped.connect(self.rebuild)  # a sheet was put in or taken away
         view.pages_changed.connect(self._pages_changed)
 
     def rebuild(self) -> None:

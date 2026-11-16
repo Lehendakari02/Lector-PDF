@@ -40,7 +40,7 @@ from PySide6.QtWidgets import (
 )
 
 from app import APP_NAME, BUILD_LABEL, __version__
-from app.core import pen, save_checks, save_settings, saving, symbols
+from app.core import pen, save_checks, save_settings, saving, sheets, symbols
 from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
 from app.core.document import PdfDocument, PdfOpenError, engine_version
 from app.core.drawing import (
@@ -135,6 +135,7 @@ FAVOURITES_SETTING = "favoritas"  # the favourite tools, in the order of their b
 TOOLBAR_NAMES, TOOLBAR_ICONS = "nombres", "iconos"
 TOP_SEARCH_WIDTH = 280
 SIDE_PANEL_SETTING = "panel_lateral"  # "", "miniaturas" or "indice"
+SHEET_SETTING = "hoja_nueva"  # the kind of sheet Insertar hoja puts: the last one chosen
 
 
 class MainWindow(QMainWindow):
@@ -315,6 +316,7 @@ class MainWindow(QMainWindow):
             "redo": self.redo,
             "save": self.save_document,
             "save_as": self.save_document_as,
+            "insert_sheet": self.insert_sheet,
         }
         self._mark_pending_features()
         self._refresh_save_actions()
@@ -515,6 +517,7 @@ class MainWindow(QMainWindow):
             self.addToolBar(Qt.ToolBarArea.TopToolBarArea, toolbar)
             self.mode_toolbars[mode] = toolbar
         self._build_color_menus()
+        self._build_sheet_menu()
         self._build_favourites_bar()
         self.set_toolbar_icons_only(
             self.settings.get(TOOLBAR_SETTING) == TOOLBAR_ICONS, remember=False
@@ -553,6 +556,60 @@ class MainWindow(QMainWindow):
             button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
             button.setProperty("withMenu", True)  # the style sheet makes room for the arrow
         self._show_marker_styles()
+
+    def _build_sheet_menu(self) -> None:
+        """Insertar hoja puts the kind of sheet chosen last; the arrow next to
+        it offers the three."""
+        menu = QMenu(self)
+        menu.setObjectName("sheetMenu")
+        self.sheet_actions: dict[str, QAction] = {}
+        group = QActionGroup(menu)
+        for kind, name, tip in (
+            (sheets.PLAIN, self.tr("En blanco"), self.tr("Una hoja lisa")),
+            (sheets.RULED, self.tr("De rayas"), self.tr("Con renglones, como un cuaderno")),
+            (sheets.SQUARED, self.tr("Cuadriculada"), self.tr("Cuadrícula de 5 mm, para esquemas")),
+        ):
+            action = menu.addAction(name)
+            action.setToolTip(tip)
+            action.setCheckable(True)
+            action.triggered.connect(lambda _checked=False, k=kind: self.insert_sheet(k))
+            group.addAction(action)
+            self.sheet_actions[kind] = action
+        menu.setToolTipsVisible(True)
+        self.sheet_actions[self.sheet_kind].setChecked(True)
+        button = self.mode_toolbars[Mode.STUDY].widgetForAction(
+            self.feature_actions["insert_sheet"]
+        )
+        button.setMenu(menu)
+        button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        button.setProperty("withMenu", True)
+
+    @property
+    def sheet_kind(self) -> str:
+        """The kind of sheet Insertar hoja puts (the last one chosen)."""
+        kind = self.settings.get(SHEET_SETTING)
+        return kind if kind in sheets.SHEETS else sheets.DEFAULT_SHEET
+
+    def insert_sheet(self, kind: str | None = None) -> bool:
+        """Put a sheet to write on after the page being read."""
+        if kind is not None and kind in sheets.SHEETS:
+            self.settings.set(SHEET_SETTING, kind)
+            self.sheet_actions[kind].setChecked(True)
+        if not self.pdf_view.page_count:
+            self.statusBar().showMessage(
+                self.tr("Abre un documento para añadirle hojas."), STATUS_MESSAGE_MS
+            )
+            return False
+        page = self.pdf_view.current_page
+        if not self.pdf_view.insert_sheet(self.sheet_kind):
+            return False
+        self.statusBar().showMessage(
+            self.tr("Hoja añadida después de la página {0}. Deshacer (Ctrl+Z) la quita.").format(
+                max(page, 0) + 1
+            ),
+            STATUS_MESSAGE_MS,
+        )
+        return True
 
     # ---- favourite tools ---------------------------------------------------
 

@@ -42,7 +42,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.core import arrange, drawing, notes, pen
+from app.core import arrange, drawing, notes, pen, sheets
 from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
 from app.core.document import PageSize, PdfDocument
 from app.core.drawing import ARROW, BOX, DRAW, ERASER, INK, OVAL, SHAPE_TOOL, PageDrawing
@@ -263,6 +263,8 @@ class PdfView(QAbstractScrollArea):
     # The document was changed (a mark was made, undone or made again): the
     # pages that look different now. ``edit_failed`` says a change did not work.
     pages_changed = Signal(object)
+    # Pages were put in or taken away: every page from there on has another number.
+    pages_reshaped = Signal()
     edit_failed = Signal(str)
     history_changed = Signal()  # what can be undone or done again is different
     markup_tool_changed = Signal(str)  # the tool in hand ("" for none)
@@ -576,6 +578,10 @@ class PdfView(QAbstractScrollArea):
         if self.journal is not None and how not in (RECOVER, RECOVER_UNDO):
             # Written down at once: a power cut from here on does not lose it.
             self.journal.record(order, undone)
+        if hasattr(order, "page_change"):
+            self._reshape(*order.page_change(undone), getattr(order, "size", None))
+            if how in ("do", "redo"):
+                self.scroll_to_page(order.page_change(False)[0])
         # The pictures of those pages are old: they stay on screen until the
         # new ones arrive, so nothing blinks.
         self._stale.update(page for page in pages if 0 <= page < self.page_count)
@@ -585,6 +591,62 @@ class PdfView(QAbstractScrollArea):
         self._request_pages()
         self.history_changed.emit()
         self.pages_changed.emit(list(pages))
+
+    def _reshape(self, at: int, by: int, size) -> None:
+        """Follow a page put in at ``at`` (``by`` 1) or taken from there (-1).
+
+        The pictures already drawn move with their pages, so nothing blinks;
+        what was read from the pages (letters, notes, drawings) is read again.
+        """
+        if by > 0:
+            width, height = size if size else (self._sizes[min(at, len(self._sizes) - 1)])
+            self._sizes.insert(at, PageSize(float(width), float(height)))
+        elif 0 <= at < len(self._sizes) and len(self._sizes) > 1:
+            del self._sizes[at]
+        else:
+            return
+        place = self._place()
+
+        def moved(page: int) -> int | None:
+            if page < at:
+                return page
+            if by < 0 and page == at:
+                return None  # that page is gone
+            return page + by
+
+        cache, self._cache = self._cache, OrderedDict()
+        self._cache_bytes = 0
+        for page, kept in cache.items():
+            new = moved(page)
+            if new is not None:
+                self._cache[new] = kept
+                self._cache_bytes += kept[1].sizeInBytes()
+        self._stale = {new for new in map(moved, self._stale) if new is not None}
+        self._failed_pages = {new for new in map(moved, self._failed_pages) if new is not None}
+        self._marks = {}
+        self._current_mark = None
+        self._texts.clear()
+        self._asked_texts.clear()
+        self._notes.clear()
+        self._asked_notes.clear()
+        self._drawings.clear()
+        self._erased.clear()
+        self._sent_sketches.clear()
+        self._settling.clear()
+        self._latest.clear()
+        self._grab = None
+        self.pick(None)
+        self.close_note_panel()
+        self.clear_selection()
+        page, inside = place
+        moved_page = moved(page)
+        self._layout()
+        self._return_to(
+            (min(at, self.page_count - 1) if moved_page is None else moved_page, inside)
+        )
+        self._current_page = -1  # told again, with the new count
+        self._scrolled()
+        self.pages_reshaped.emit()
 
     def recover(self, entries) -> int:
         """Put back changes read from the journal: (order, undone) pairs.
@@ -1531,6 +1593,16 @@ class PdfView(QAbstractScrollArea):
         x = max(0.0, min(size.width - notes.NOTE_SIZE, x - half))
         y = max(0.0, min(size.height - notes.NOTE_SIZE, y - half))
         return self._do(notes.new_note(page, (x, y), text.strip(), self.note_color))
+
+    def insert_sheet(self, kind: str = sheets.DEFAULT_SHEET, after: int | None = None) -> bool:
+        """Put a sheet to write on after a page (the one being read, if not
+        said), the size of that page. Deshacer takes it away again."""
+        if self._document is None or not self._sizes:
+            return False
+        page = self.current_page if after is None else after
+        page = max(0, min(page, self.page_count - 1))
+        size = self._sizes[page]
+        return self._do(sheets.new_sheet(page + 1, kind, (size.width, size.height)))
 
     def put_text_box(
         self, page: int, x: float, y: float, text: str, width: float = 0.0, **look
