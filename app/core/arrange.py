@@ -14,6 +14,7 @@ from dataclasses import replace
 
 from app.core.commands import AddMarkup, Command, new_name
 from app.core.drawing import BRACE, LINE_SHAPES, MIN_SHAPE, AddInk, AddShape
+from app.core.foreign import Foreign
 from app.core.notes import (
     MAX_SIZE,
     MIN_BOX_WIDTH,
@@ -50,6 +51,8 @@ def can_resize(order: Command) -> bool:
 
 def bounds(order: Command, page_width: float = 1e9) -> Rect:
     """The rectangle around what an order puts, as the page is shown."""
+    if isinstance(order, Foreign):
+        return order.rect
     if isinstance(order, AddNote):
         x, y = order.point
         return (x, y, x + NOTE_SIZE, y + NOTE_SIZE)

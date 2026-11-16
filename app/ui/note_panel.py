@@ -47,6 +47,7 @@ class NotePanel(QFrame):
         existing: bool = False,
         editable: bool = True,
         parent: QWidget | None = None,
+        removable: bool | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("notePanel")
@@ -56,6 +57,8 @@ class NotePanel(QFrame):
         self.kind = kind
         self.existing = existing
         self.editable = editable
+        # One of another program cannot be changed, but it can be taken away.
+        self.removable = editable if removable is None else removable
         self._original = text
         self._done = False
 
@@ -63,7 +66,11 @@ class NotePanel(QFrame):
         layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(8)
         if not editable:
-            title = self.tr("Nota de otro programa (solo se puede leer)")
+            title = (
+                self.tr("Nota de otro programa (se puede leer y borrar)")
+                if self.removable
+                else self.tr("Nota de otro programa (solo se puede leer)")
+            )
         elif kind == NOTE:
             title = self.tr("Nota") if existing else self.tr("Nota nueva")
         else:
@@ -95,7 +102,7 @@ class NotePanel(QFrame):
             if kind == NOTE
             else self.tr("Quitar el texto de la página")
         )
-        self.remove_button.setVisible(existing and editable)
+        self.remove_button.setVisible(existing and self.removable)
         self.remove_button.clicked.connect(self.remove)
         row.addWidget(self.remove_button)
         row.addStretch(1)
@@ -165,7 +172,7 @@ class NotePanel(QFrame):
             self._finish()
 
     def remove(self) -> None:
-        if not self._done and self.existing and self.editable:
+        if not self._done and self.existing and self.removable:
             self._finish(self.removed)
 
     def cancel(self) -> None:

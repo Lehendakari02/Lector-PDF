@@ -22,7 +22,7 @@ program, to put the stroke again just the same after moving or erasing it.
 
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from app.core.commands import (
     MARKUP_KINDS,
@@ -36,6 +36,7 @@ from app.core.commands import (
     new_name,
     register_reader,
 )
+from app.core.foreign import OTHER, OTHER_TYPES, Foreign, families_of, foreign_of, key_of
 from app.core.search import Rect
 
 INK = "ink"
@@ -618,14 +619,22 @@ class PageDrawing:
     pressures: tuple[tuple[float, ...], ...] = ()  # ink drawn with a pen that feels it
     fill: bool = False  # a shape filled with a light tone of its colour
     dashed: bool = False
+    foreign: Foreign | None = None  # made by another program: only taken away
 
     @property
     def ours(self) -> bool:
         """Made by this program: it can be removed."""
         return self.name.startswith(NAME_PREFIX)
 
+    @property
+    def removable(self) -> bool:
+        """It can be taken away: made here, or by another program."""
+        return self.ours or self.foreign is not None
+
     def order(self) -> Command:
         """The order that would put it as it is."""
+        if self.foreign is not None:
+            return self.foreign
         if self.kind in MARKUP_KINDS:
             mark = Mark(self.page, self.rects, self.name)
             return AddMarkup(self.kind, (mark,), self.color, self.opacity)
@@ -659,6 +668,8 @@ class PageDrawing:
         if self.kind in MARKUP_KINDS:
             return any(x0 <= x <= x1 and y0 <= y <= y1 for x0, y0, x1, y1 in self.rects)
         x0, y0, x1, y1 = self.rect
+        if self.kind == OTHER:  # only its place is known: anywhere on it
+            return x0 - reach <= x <= x1 + reach and y0 - reach <= y <= y1 + reach
         if not (x0 - near <= x <= x1 + near and y0 - near <= y <= y1 + near):
             return False
         if self.kind == BOX:
@@ -758,7 +769,9 @@ def page_drawings(doc, page_number: int) -> list[PageDrawing]:
 
     found: list[PageDrawing] = []
     page = doc[page_number]
+    families = None  # read when the first annotation of another program comes
     for annotation in page.annots() or ():
+        before = len(found)
         kind = annotation.type[1]
         name = str(annotation.info.get("id") or "")
         color, width, opacity = _common(annotation)
@@ -865,6 +878,16 @@ def page_drawings(doc, page_number: int) -> list[PageDrawing]:
                     opacity,
                     tuple(rects),
                 )
+            )
+        if len(found) == before and kind in OTHER_TYPES:
+            found.append(PageDrawing(OTHER, page_number, name, rect, (), color, width, opacity))
+        if len(found) > before and not name.startswith(NAME_PREFIX):
+            # Made by another program: known by its place in the document.
+            families = families or families_of(doc, page_number)
+            found[-1] = replace(
+                found[-1],
+                name=key_of(annotation.xref),
+                foreign=foreign_of(doc, page_number, annotation, rect, families),
             )
     return found
 

@@ -6,6 +6,7 @@ import pymupdf
 import pytest
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QLabel
 
 from app.core.notes import MONO, NOTE, SERIF, TEXT_BOX
 from app.ui.features import Mode
@@ -193,7 +194,7 @@ def test_the_note_has_the_colour_chosen_for_the_tool(window, opened, wait_until)
     assert all(abs(a - b) < 0.01 for a, b in zip(note.color, (0.47, 0.82, 1.0), strict=True))
 
 
-def test_a_note_of_another_program_can_be_read_but_not_changed(
+def test_a_note_of_another_program_can_be_read_and_removed_but_not_changed(
     window, sample, tmp_path, wait_until
 ):
     path = tmp_path / "ajeno.pdf"
@@ -210,10 +211,15 @@ def test_a_note_of_another_program_can_be_read_but_not_changed(
     click(view, place(view, 0, 306, 206))
     panel = view.note_panel
     assert panel.edit.isReadOnly() and panel.edit.toPlainText() == "de otro programa"
-    assert not panel.save_button.isVisible() and not panel.remove_button.isVisible()
+    assert not panel.save_button.isVisible() and not panel.remove_button.isHidden()
+    assert "borrar" in panel.findChild(QLabel).text()
     panel.cancel()
-    assert not view.remove_note(note) and not view.change_note(note, "otra cosa")
+    assert not view.change_note(note, "otra cosa")
     assert not view.modified
+    assert view.remove_note(note)
+    wait_until(lambda: not view._changing and view._notes.get(0) == [])
+    assert view.undo()
+    wait_until(lambda: not view._changing and len(view._notes.get(0) or ()) == 1)
 
 
 # ---- text boxes ------------------------------------------------------------------
