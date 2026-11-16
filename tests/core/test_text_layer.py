@@ -170,3 +170,59 @@ def test_a_page_with_nothing_on_it_gets_its_text_too():
         assert hit(doc, "camion")
         order_for().undo(doc)
         assert doc[0].get_text().strip() == ""
+
+
+def bad_ocr_text(doc, number=0) -> str:
+    return doc[number].get_text()
+
+
+def test_recognising_again_takes_away_the_bad_text_and_undo_brings_it_back(sample):
+    with pymupdf.open(sample("ocr-malo.pdf")) as doc:
+        before_text = bad_ocr_text(doc)
+        before_picture = doc[0].get_pixmap(dpi=40).samples
+        assert "Articu1o" in before_text
+        order = AddTextLayer(order_for().layers, replace=True)
+        order.apply(doc)
+        text = doc[0].get_text()
+        assert "Articu1o" not in text and "camión" in text
+        assert doc[0].get_pixmap(dpi=40).samples == before_picture, "it looks the same"
+        order.undo(doc)
+        assert bad_ocr_text(doc) == before_text
+        assert not has_layer(doc, 0)
+        order.apply(doc)  # Rehacer
+        assert "Articu1o" not in doc[0].get_text()
+
+
+def test_recognising_our_own_text_again_twice_and_undoing_both(tmp_path):
+    with scanned_doc() as doc:
+        first = order_for()
+        first.apply(doc)
+        second = AddTextLayer(order_for(words=WORDS[:2]).layers, replace=True)
+        third = AddTextLayer(order_for(words=WORDS[2:4]).layers, replace=True)
+        second.apply(doc)
+        assert "camión" not in doc[0].get_text()
+        third.apply(doc)
+        assert "Artículo" not in doc[0].get_text() and "camión" in doc[0].get_text()
+        path = tmp_path / "otra-vez.pdf"
+        doc.save(path, garbage=0, deflate=True)
+    with pymupdf.open(path) as saved:
+        third.undo(saved)
+        assert saved[0].get_text().split() == ["Artículo", "14."]
+        second.undo(saved)
+        assert "camión año" in saved[0].get_text()
+        first.undo(saved)
+        assert saved[0].get_text().strip() == ""
+
+
+def test_visible_text_stays_when_recognising_again():
+    with scanned_doc() as doc:
+        doc[0].insert_text((300, 700), "Sello visible", fontsize=12)
+        doc[0].insert_text((72, 110), "Oculto", fontsize=12, render_mode=3)
+        AddTextLayer(order_for(words=WORDS[2:3]).layers, replace=True).apply(doc)
+        text = doc[0].get_text()
+    assert "Sello visible" in text and "Oculto" not in text and "camión" in text
+
+
+def test_replace_is_written_in_the_journal():
+    order = AddTextLayer(order_for().layers, replace=True)
+    assert command_from_dict(order.to_dict()) == order

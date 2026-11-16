@@ -69,6 +69,8 @@ def test_every_tool_has_a_name_a_description_and_a_big_button(window):
     for feature in FEATURES:
         action = window.feature_actions[feature.id]
         assert action.text() and action.toolTip()
+        if not feature.toolbar:
+            continue  # in the menu of another button
         button = window.mode_toolbars[feature.mode].widgetForAction(action)
         assert button.minimumHeight() >= MIN_BUTTON_HEIGHT
 

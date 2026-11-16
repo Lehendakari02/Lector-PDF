@@ -478,3 +478,20 @@ Con un documento abierto, en el modo Estudiar.
 9. Con un escaneado reconocido sin guardar, cierra el programa a la fuerza desde
    el Administrador de tareas. Al abrirlo, ofrece recuperar los cambios, y el
    texto reconocido vuelve.
+
+## Fase 2B – Tarea 2.17 – Volver a reconocer el texto
+
+1. Abre `tests/ejemplos/ocr-malo.pdf` (o un temario escaneado que ya traiga un
+   texto lleno de fallos). Busca "artículo": no lo encuentra, porque el texto
+   que trae dice "Articu1o".
+2. En el modo Estudiar, pulsa la flecha de **Reconocer texto** → **Volver a
+   reconocer texto**. Elige **Todas las páginas escaneadas** y pulsa
+   **Reconocer de nuevo**. Al terminar, busca otra vez "artículo": ahora sí.
+3. Pulsa Deshacer: vuelve el texto malo de antes ("Articu1o"). Rehacer lo
+   vuelve a quitar.
+4. Repite eligiendo **Estas páginas** y escribe solo una (por ejemplo "2"): solo
+   esa página cambia.
+5. Escribe una página que no sea escaneada en un PDF mezclado: dice que esas
+   páginas no están escaneadas y no cambia nada.
+6. Guarda y abre el PDF en **Adobe** y en **Edge**: se busca bien y la página
+   se ve igual.

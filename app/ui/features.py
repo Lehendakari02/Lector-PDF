@@ -36,6 +36,9 @@ class Feature:
     name: str
     description: str
     keywords: str = ""
+    # False: no button of its own (it is in the menu of another one); the
+    # finder (Ctrl+K) still has it.
+    toolbar: bool = True
 
 
 def translate(text: str) -> str:
@@ -43,8 +46,15 @@ def translate(text: str) -> str:
     return QCoreApplication.translate(_CONTEXT, text)
 
 
-def _f(feature_id: str, mode: Mode, name: str, description: str, keywords: str = "") -> Feature:
-    return Feature(feature_id, mode, name, description, keywords)
+def _f(
+    feature_id: str,
+    mode: Mode,
+    name: str,
+    description: str,
+    keywords: str = "",
+    toolbar: bool = True,
+) -> Feature:
+    return Feature(feature_id, mode, name, description, keywords, toolbar)
 
 
 READ, STUDY, FILL, ORGANIZE = Mode.READ, Mode.STUDY, Mode.FILL_SIGN, Mode.ORGANIZE
@@ -138,6 +148,14 @@ FEATURES: list[Feature] = [
         "Reconocer texto",
         "Leer el texto de las páginas escaneadas para poder buscar, subrayar y copiar",
         "ocr escaneado foto imagen",
+    ),
+    _f(
+        "ocr_again",
+        STUDY,
+        "Volver a reconocer texto",
+        "Rehacer el texto de páginas escaneadas que se buscan mal o tienen fallos",
+        "ocr escaneado repetir rehacer otra vez mal",
+        toolbar=False,
     ),
     _f(
         "annotations",
@@ -250,7 +268,8 @@ GROUP_STARTS = frozenset(
 
 
 def features_of(mode: Mode) -> list[Feature]:
-    return [feature for feature in FEATURES if feature.mode is mode]
+    """The functions with a button on the tool bar of a mode."""
+    return [feature for feature in FEATURES if feature.mode is mode and feature.toolbar]
 
 
 def search_features(query: str, features: list[Feature] | None = None) -> list[Feature]:

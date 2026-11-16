@@ -109,13 +109,25 @@ def is_available() -> bool:
     return (tessdata_dir() / f"{LANGUAGE}.traineddata").is_file()
 
 
+def _is_picture(page) -> bool:
+    page_area = abs(page.rect) or 1.0
+    covered = sum(abs(info["bbox"] and _rect(info["bbox"])) for info in page.get_image_info())
+    return covered / page_area >= BIG_PICTURE
+
+
 def looks_scanned(page) -> bool:
     """True if a PyMuPDF page is a picture of a page, without real text."""
     if len(page.get_text("text").strip()) >= FEW_LETTERS:
         return False
-    page_area = abs(page.rect) or 1.0
-    covered = sum(abs(info["bbox"] and _rect(info["bbox"])) for info in page.get_image_info())
-    return covered / page_area >= BIG_PICTURE
+    return _is_picture(page)
+
+
+def looks_recognised(page) -> bool:
+    """True if a page is a picture with invisible text on it: a scan whose
+    text was already recognised (here or by another program)."""
+    from app.core.text_layer import has_invisible_text
+
+    return _is_picture(page) and has_invisible_text(page)
 
 
 def _rect(box):

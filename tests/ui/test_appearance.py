@@ -71,6 +71,9 @@ def test_logo_is_sharp_at_any_screen_scale(qt_app):
 def test_tool_buttons_show_icon_and_name(window):
     for feature in FEATURES:
         action = window.feature_actions[feature.id]
+        if not feature.toolbar:
+            assert not action.icon().isNull()
+            continue  # in the menu of another button
         button = window.mode_toolbars[feature.mode].widgetForAction(action)
         assert isinstance(button, QToolButton)
         assert not action.icon().isNull()

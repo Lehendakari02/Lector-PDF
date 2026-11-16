@@ -122,6 +122,10 @@ ICONS: dict[str, str] = {
         '<path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2'
         'M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M9 9.5h6M12 9.5V15"/>'
     ),
+    "ocr_again": (
+        '<path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M8 20H6a2 2 0 0 1-2-2v-2"/>'
+        '<path d="M9 9.5h6M12 9.5V14"/><path d="M20 15a4 4 0 1 1-1.2-2.8M19 10.5v2.2h-2.2"/>'
+    ),
     "annotations": (
         '<rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M11 9h6M11 15h6"/>'
         '<circle cx="7.5" cy="9" r=".8"/><circle cx="7.5" cy="15" r=".8"/>'

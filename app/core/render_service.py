@@ -28,7 +28,7 @@ from pathlib import Path
 from app.core.commands import Color, Command, CommandError, markup_for_selection
 from app.core.drawing import PageDrawing, page_drawings
 from app.core.notes import PageNote, page_notes
-from app.core.ocr import looks_scanned, page_picture
+from app.core.ocr import looks_recognised, looks_scanned, page_picture
 from app.core.outline import OutlineEntry, read_outline
 from app.core.saving import FAILED as SAVE_FAILED
 from app.core.saving import SaveError, put_in_place, write_copy
@@ -272,21 +272,27 @@ def _save_document(doc, path: str, password: str | None, target: str):
 SCAN_CHECK_STEP = 10  # pages looked at between two looks at the messages
 
 
-def _check_scanned(connection, token: int, doc, start: int, scanned: list[int]) -> int | None:
-    """Look at a few more pages for scans. Returns where to go on, or None
-    once the whole document is seen (and the window has been told)."""
+def _check_scanned(
+    connection, token: int, doc, start: int, scanned: list[int], recognised: list[int]
+) -> int | None:
+    """Look at a few more pages for scans, and for scans whose text was
+    already recognised. Returns where to go on, or None once the whole
+    document is seen (and the window has been told)."""
     if doc is None:
         return None
     stop = min(doc.page_count, start + SCAN_CHECK_STEP)
     for number in range(start, stop):
         try:
-            if looks_scanned(doc[number]):
+            page = doc[number]
+            if looks_scanned(page):
                 scanned.append(number)
+            elif looks_recognised(page):
+                recognised.append(number)
         except Exception:  # noqa: S112 - a damaged page is not taken for a scan
             continue
     if stop < doc.page_count:
         return stop
-    connection.send(("scanned", token, list(scanned), doc.page_count))
+    connection.send(("scanned", token, list(scanned), doc.page_count, list(recognised)))
     return None
 
 
@@ -317,6 +323,7 @@ def _worker_main(connection: Connection) -> None:
     # picture (scanned): the next page to look at (None: done) and those found.
     checking: int | None = None
     scanned: list[int] = []
+    recognised: list[int] = []
     # Pages whose picture is wanted to read their text (OCR), drawn after the
     # pages being read and the printer, before the small pictures.
     readings: list[int] = []
@@ -350,7 +357,7 @@ def _worker_main(connection: Connection) -> None:
                     doc_path, doc_password = path, password
                     connection.send(("opened", token, doc.page_count))
                     connection.send(("outline", token, read_outline(doc)))
-                    checking, scanned = 0, []
+                    checking, scanned, recognised = 0, [], []
                 except Exception as exc:
                     doc = None
                     connection.send(("open_failed", token, str(exc)))
@@ -430,6 +437,7 @@ def _worker_main(connection: Connection) -> None:
                         if getattr(order, "text_change", False):
                             for page_index in pages:  # their letters are different now
                                 page_texts.pop(page_index, None)
+                            checking, scanned, recognised = 0, [], []  # looked at again
                         if hasattr(order, "page_change"):
                             # Pages were put or taken away: the letters read so
                             # far belong to other places now, and the index
@@ -437,7 +445,7 @@ def _worker_main(connection: Connection) -> None:
                             page_texts.clear()
                             search = None
                             connection.send(("outline", token, read_outline(doc)))
-                            checking, scanned = 0, []  # the pages have other numbers
+                            checking, scanned, recognised = 0, [], []  # other numbers now
                             readings = []  # the window asks again with the new numbers
             elif kind == "save":
                 _, save_token, save_id, target = message
@@ -471,7 +479,7 @@ def _worker_main(connection: Connection) -> None:
                 if not _search_next_page(connection, token, doc, search, page_texts):
                     search = None
             elif checking is not None:
-                checking = _check_scanned(connection, token, doc, checking, scanned)
+                checking = _check_scanned(connection, token, doc, checking, scanned, recognised)
             continue
 
         # The pages being read go first, then the printer, then the small
@@ -532,14 +540,14 @@ class RenderService:
         on_change_failed: Callable[[int, str], None] | None = None,
         on_notes: Callable[[int, list[PageNote]], None] | None = None,
         on_drawings: Callable[[int, list[PageDrawing]], None] | None = None,
-        on_scanned: Callable[[list[int], int], None] | None = None,
+        on_scanned: Callable[[list[int], int, list[int]], None] | None = None,
         on_reading: Callable[[int, int, int, int, bytes], None] | None = None,
         on_reading_failed: Callable[[int, str], None] | None = None,
     ) -> None:
         self._on_reading = on_reading or (lambda page, width, height, dpi, samples: None)
         self._on_reading_failed = on_reading_failed or (lambda page, details: None)
         self._readings: set[int] = set()  # pictures asked for to read, not yet back
-        self._on_scanned = on_scanned or (lambda pages, count: None)
+        self._on_scanned = on_scanned or (lambda pages, count, recognised: None)
         self._on_notes = on_notes or (lambda page, notes: None)
         self._on_drawings = on_drawings or (lambda page, drawings: None)
         self._on_changed = on_changed or (lambda number, order, pages, undo: None)
@@ -936,7 +944,7 @@ class RenderService:
                 self._readings.discard(message[2])
                 self._tell(self._on_reading_failed, message[2], message[3])
             elif kind == "scanned":
-                self._tell(self._on_scanned, message[2], message[3])
+                self._tell(self._on_scanned, message[2], message[3], message[4])
             elif kind == "text":
                 self._tell(self._on_text, message[2], message[3])
             elif kind == "copied":

@@ -32,7 +32,7 @@ class Collector:
             on_crashed=self._crashed,
             on_outline=lambda entries: self._add(self.outlines, entries),
             on_thumbnail=lambda page: self._add(self.thumbnails, page),
-            on_scanned=lambda pages, count: self._add(self.scanned, (pages, count)),
+            on_scanned=lambda pages, count, recognised: self._add(self.scanned, (pages, count)),
             on_reading=lambda *picture: self._add(self.readings, picture),
             on_reading_failed=lambda *failure: self._add(self.readings, failure),
         )
