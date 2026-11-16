@@ -408,7 +408,7 @@ Notas de la Fase 1:
 | 2.13c | Más formas y más cómodas | Hago un esquema con flechas, llaves y recuadros con texto sin volver a coger la herramienta cada vez | ✅ (texto dentro de un recuadro: con el texto encima, por ahora) |
 | 2.13d | Hoja en blanco, de rayas o cuadriculada (adelantada de la 2C) | Añado una hoja entre páginas y hago en ella un esquema | ✅ |
 | 2.13e | Borrar anotaciones de otros programas | Quito un subrayado hecho con Edge, y Deshacer lo devuelve igual | ✅ |
-| 2.14 | Versión 0.2 | Estudio un tema completo con el programa durante una sesión real | 🔶 número 0.2.0 puesto (16/11/2026); falta que Julen cree la Release v0.2.0 y lo use en una sesión real |
+| 2.14 | Versión 0.2 | Estudio un tema completo con el programa durante una sesión real | 🔶 Release v0.2.0 publicada (16/11/2026); falta usarla en una sesión real |
 
 
 Notas de la Fase 2A:
@@ -924,8 +924,8 @@ Notas de la Fase 2A:
 | 2.15 | Detectar páginas escaneadas y ofrecer "Reconocer texto" | Abro un temario escaneado y me lo ofrece sin molestar | ✅ |
 | 2.16 | OCR en español en segundo plano (progreso, cancelar), enderezando la imagen, guardado como capa de texto estándar | Reconozco un tema escaneado, sigo leyendo mientras tanto, y luego busco en él también en Adobe | ✅ |
 | 2.17 | Rehacer el OCR de PDFs que ya traen uno malo (todo o páginas) | Un PDF con OCR malo pasa a buscarse bien | ✅ |
-| 2.18 | Buscador y subrayado probados con texto de OCR real; búsqueda aproximada opcional | Subrayo y busco en un escaneado igual que en un PDF del BOE | 🔶 |
-| 2.19 | Versión 0.3 | Estudio un tema escaneado con el programa | ⬜ |
+| 2.18 | Buscador y subrayado probados con texto de OCR real; búsqueda aproximada opcional | Subrayo y busco en un escaneado igual que en un PDF del BOE | ✅ |
+| 2.19 | Versión 0.3 | Estudio un tema escaneado con el programa | 🔶 número 0.3.0 puesto (16/11/2026); falta que Julen cree la Release v0.3.0 y lo use con un tema escaneado |
 
 Notas de la Fase 2B:
 - **2.15: detectar escaneados y ofrecer "Reconocer texto" (16/11/2026).**
