@@ -61,6 +61,13 @@ class SearchPanel(QWidget):
         self.whole_word.setToolTip(self.tr("«ley» no encuentra «leyes»"))
         self.exact = QCheckBox(self.tr("Coincidencia exacta"))
         self.exact.setToolTip(self.tr("Tiene en cuenta las tildes y las mayúsculas"))
+        self.approximate = QCheckBox(self.tr("Aproximada, para escaneados"))
+        self.approximate.setToolTip(
+            self.tr(
+                "Encuentra también palabras mal reconocidas en un escaneado: «1» por «l», "
+                "«0» por «o», «rn» por «m», «n» por «ñ» o una palabra partida por un espacio"
+            )
+        )
 
         self.previous_button = self._icon_button(
             "previous",
@@ -102,6 +109,7 @@ class SearchPanel(QWidget):
         layout.addWidget(self.box)
         layout.addWidget(self.whole_word)
         layout.addWidget(self.exact)
+        layout.addWidget(self.approximate)
         layout.addLayout(navigation)
         layout.addWidget(self.results, 1)
 
@@ -114,6 +122,7 @@ class SearchPanel(QWidget):
         self.box.returnPressed.connect(self.enter_pressed)
         self.whole_word.toggled.connect(lambda _on: self.search_now())
         self.exact.toggled.connect(lambda _on: self.search_now())
+        self.approximate.toggled.connect(self._approximate_toggled)
         self.next_button.clicked.connect(self.go_next)
         self.previous_button.clicked.connect(self.go_previous)
         self.close_button.clicked.connect(self.close_search)
@@ -170,7 +179,17 @@ class SearchPanel(QWidget):
         self.box.selectAll()
 
     def options(self) -> SearchOptions:
-        return SearchOptions(whole_word=self.whole_word.isChecked(), exact=self.exact.isChecked())
+        return SearchOptions(
+            whole_word=self.whole_word.isChecked(),
+            exact=self.exact.isChecked(),
+            approximate=self.approximate.isChecked(),
+        )
+
+    def _approximate_toggled(self, on: bool) -> None:
+        # An approximate search is neither exact nor by whole words.
+        self.whole_word.setEnabled(not on)
+        self.exact.setEnabled(not on)
+        self.search_now()
 
     def search_now(self) -> None:
         """Search what is in the box, without waiting for the typing pause."""
@@ -267,6 +286,12 @@ class SearchPanel(QWidget):
             text = ""
         elif not has_hits:
             text = self.tr("Buscando…") if self._searching else self.tr("Sin resultados")
+            scanned = self.view.scanned_pages or self.view.recognised_pages
+            if not self._searching and scanned and not self.approximate.isChecked():
+                text += self.tr(
+                    ". En un escaneado, prueba la búsqueda aproximada: encuentra palabras "
+                    "mal reconocidas."
+                )
         else:
             text = self.tr("Resultado {0} de {1}").format(max(self.current, 0) + 1, len(self.hits))
             if self._searching:

@@ -218,3 +218,18 @@ def test_a_result_off_to_one_side_is_brought_into_view(window, opened, wait_unti
     zoom = view._render_zoom()
     left = view._page_left(hit.page) + hit.rects[0][0] * zoom
     assert 0 <= left <= view._to_pixels(view.viewport().width())
+
+
+def test_the_approximate_search_finds_badly_read_words(window, opened, wait_until):
+    panel = opened("ocr-malo.pdf")
+    wait_until(lambda: window.pdf_view.recognised_pages)
+    search(panel, "artículo", wait_until)
+    assert panel.results.count() == 0
+    assert "búsqueda aproximada" in panel.status.text()
+    panel.approximate.setChecked(True)
+    assert not panel.whole_word.isEnabled() and not panel.exact.isEnabled()
+    search(panel, "artículo", wait_until)
+    assert panel.results.count() > 0
+    assert "aproximada" not in panel.status.text()
+    panel.approximate.setChecked(False)
+    assert panel.whole_word.isEnabled() and panel.exact.isEnabled()
