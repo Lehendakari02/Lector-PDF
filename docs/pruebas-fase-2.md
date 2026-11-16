@@ -441,3 +441,17 @@ Con un documento abierto, en el modo Estudiar.
    no se pueden elegir ni borrar.
 7. Guarda y abre el PDF en Edge y en Adobe: lo borrado ya no está y lo demás
    sigue igual.
+
+## Fase 2B – Tarea 2.15 – Ofrecer reconocer el texto de un escaneado
+
+1. Abre un temario escaneado (o `tests/ejemplos/escaneado.pdf`): al momento sale
+   una franja azul encima del documento que dice que está escaneado, con
+   **Reconocer texto**, **Ahora no** y **No preguntar más en este documento**.
+   No sale ninguna ventana que interrumpa.
+2. Abre un PDF normal (uno del BOE): no sale nada.
+3. **Ahora no**: la franja se va. Cierra y vuelve a abrir el escaneado: sale otra vez.
+4. **No preguntar más en este documento**: ya no sale con ese documento, pero sí
+   con otros escaneados.
+5. En Ajustes, quita "Ofrecer reconocer el texto…": ya no sale con ninguno.
+6. Un PDF muy largo (500 páginas) se puede leer y desplazar con normalidad
+   mientras el programa lo revisa.

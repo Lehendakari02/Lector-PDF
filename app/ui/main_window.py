@@ -40,7 +40,7 @@ from PySide6.QtWidgets import (
 )
 
 from app import APP_NAME, BUILD_LABEL, __version__
-from app.core import pen, save_checks, save_settings, saving, sheets, symbols
+from app.core import ocr, pen, save_checks, save_settings, saving, sheets, symbols
 from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
 from app.core.document import PdfDocument, PdfOpenError, engine_version
 from app.core.drawing import (
@@ -2351,6 +2351,11 @@ class MainWindow(QMainWindow):
         view.document_failed.connect(self._document_failed)
         view.text_copied.connect(self._text_copied)
         view.no_text_to_select.connect(self._no_text_to_select)
+        view.scanned_found.connect(
+            lambda pages, count, p=page: self._scanned_found(p, pages, count)
+        )
+        page.ocr_banner.recognize_wanted.connect(lambda p=page: self._recognize_offered(p))
+        page.ocr_banner.never_wanted.connect(lambda p=page: self._ocr_declined(p))
         view.modified_changed.connect(lambda _modified, p=page: self._modified_changed(p))
         view.saved.connect(lambda number, path, p=page: self._document_saved(p, number, path))
         view.save_failed.connect(
@@ -3077,6 +3082,34 @@ class MainWindow(QMainWindow):
         else:
             message = self.tr("Selecciona antes el texto arrastrando el ratón sobre él.")
         self.statusBar().showMessage(message, STATUS_MESSAGE_MS)
+
+    def _scanned_found(self, page: DocumentPage, scanned: list[int], count: int) -> None:
+        """The document has been looked at: offer to recognise the text of
+        its scanned pages, unless the user said not to."""
+        wanted = bool(scanned) and ocr.offer_wanted(self.settings)
+        if wanted and page.path is not None and ocr.declined(self.settings, page.path):
+            wanted = False
+        if wanted:
+            page.ocr_banner.offer(len(scanned), count)
+        else:
+            page.ocr_banner.hide()
+
+    def _recognize_offered(self, page: DocumentPage) -> None:
+        page.ocr_banner.hide()
+        if page in self.documents:
+            self.document_tabs.setCurrentIndex(self.documents.index(page))
+        self.recognize_current_page()
+
+    def _ocr_declined(self, page: DocumentPage) -> None:
+        if page.path is not None:
+            ocr.decline(self.settings, page.path)
+        self.statusBar().showMessage(
+            self.tr(
+                "No te lo volveré a ofrecer en este documento. «Reconocer texto» sigue "
+                "en el modo Estudiar."
+            ),
+            STATUS_MESSAGE_MS,
+        )
 
     def _no_text_to_select(self) -> None:
         self.statusBar().showMessage(

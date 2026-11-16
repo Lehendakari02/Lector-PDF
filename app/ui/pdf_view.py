@@ -266,6 +266,10 @@ class PdfView(QAbstractScrollArea):
     pages_changed = Signal(object)
     # Pages were put in or taken away: every page from there on has another number.
     pages_reshaped = Signal()
+    # The pages that are only a picture (scanned), once the whole document has
+    # been looked at: their numbers (from 0) and how many pages there are.
+    scanned_found = Signal(object, int)
+    _scanned_ready = Signal(object, int)
     edit_failed = Signal(str)
     history_changed = Signal()  # what can be undone or done again is different
     markup_tool_changed = Signal(str)  # the tool in hand ("" for none)
@@ -353,7 +357,11 @@ class PdfView(QAbstractScrollArea):
             on_change_failed=self._change_failed.emit,
             on_notes=self._notes_ready.emit,
             on_drawings=self._drawings_ready.emit,
+            on_scanned=self._scanned_ready.emit,
         )
+        self.scanned_pages: list[int] = []  # known once the helper has looked
+        self.scanned_known = False  # whether it has looked at every page
+        self._scanned_ready.connect(self._store_scanned)
         self._notes_ready.connect(self._store_notes)
         self._drawings_ready.connect(self._store_drawings)
         # What is drawn or marked on each page, for the eraser.
@@ -593,6 +601,13 @@ class PdfView(QAbstractScrollArea):
         self.history_changed.emit()
         self.pages_changed.emit(list(pages))
 
+    def _store_scanned(self, pages: object, count: int) -> None:
+        if self._document is None or count != self.page_count:
+            return  # about another document, or before pages were put or taken
+        self.scanned_pages = sorted(pages)
+        self.scanned_known = True
+        self.scanned_found.emit(list(self.scanned_pages), count)
+
     def _reshape(self, at: int, by: int, size) -> None:
         """Follow a page put in at ``at`` (``by`` 1) or taken from there (-1).
 
@@ -755,6 +770,8 @@ class PdfView(QAbstractScrollArea):
         self._notes.clear()
         self._asked_notes.clear()
         self._drawings.clear()
+        self.scanned_pages = []
+        self.scanned_known = False
         self._erased.clear()
         self._erasing = False
         self._sketch = None

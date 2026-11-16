@@ -19,6 +19,7 @@ class Collector:
         self.pages: list[RenderedPage] = []
         self.thumbnails: list[RenderedPage] = []
         self.outlines: list[list] = []
+        self.scanned: list[tuple[list[int], int]] = []
         self.page_failures: list[tuple[int, float, str]] = []
         self.open_failures: list[str] = []
         self.crashes = 0
@@ -30,6 +31,7 @@ class Collector:
             on_crashed=self._crashed,
             on_outline=lambda entries: self._add(self.outlines, entries),
             on_thumbnail=lambda page: self._add(self.thumbnails, page),
+            on_scanned=lambda pages, count: self._add(self.scanned, (pages, count)),
         )
 
     def _add(self, where, item):
@@ -622,3 +624,38 @@ def test_the_helper_draws_pages_clean_when_asked(collector, tmp_path):
     clean, full = collector.pages
     assert not clean.annotations and full.annotations
     assert colour_at(clean, 100, 115) == (255, 255, 255) != colour_at(full, 100, 115)
+
+
+# ---- scanned pages ---------------------------------------------------------------
+
+
+def test_the_helper_finds_the_scanned_pages_by_itself(collector, sample):
+    collector.service.open(sample("escaneado.pdf"))
+    collector.wait(lambda: collector.scanned)
+    assert collector.scanned == [([0, 1, 2], 3)]
+
+
+def test_a_document_with_text_has_no_scanned_pages(collector, sample):
+    collector.service.open(sample("largo.pdf"))  # 520 pages, looked at in steps
+    collector.wait(lambda: collector.scanned)
+    assert collector.scanned == [([], 520)]
+
+
+def test_looking_for_scans_does_not_hold_up_the_pages(collector, sample):
+    collector.service.open(sample("largo.pdf"))
+    collector.service.want([RenderRequest(0, 1.0)])
+    collector.wait(lambda: collector.pages)
+    assert collector.pages[0].page == 0
+
+
+def test_a_mixed_document_says_which_pages(collector, sample, tmp_path):
+    path = tmp_path / "mezcla.pdf"
+    with pymupdf.open(sample("escaneado.pdf")) as scan, pymupdf.open(sample("boe.pdf")) as text:
+        mixed = pymupdf.open()
+        mixed.insert_pdf(text, from_page=0, to_page=1)
+        mixed.insert_pdf(scan, from_page=0, to_page=0)
+        mixed.save(path)
+        mixed.close()
+    collector.service.open(path)
+    collector.wait(lambda: collector.scanned)
+    assert collector.scanned == [([2], 3)]

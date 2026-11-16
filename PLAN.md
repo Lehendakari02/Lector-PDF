@@ -921,11 +921,25 @@ Notas de la Fase 2A:
 ## Fase 2B – Documentos escaneados (OCR)
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
-| 2.15 | Detectar páginas escaneadas y ofrecer "Reconocer texto" | Abro un temario escaneado y me lo ofrece sin molestar | ⬜ |
+| 2.15 | Detectar páginas escaneadas y ofrecer "Reconocer texto" | Abro un temario escaneado y me lo ofrece sin molestar | ✅ |
 | 2.16 | OCR en español en segundo plano (progreso, cancelar), enderezando la imagen, guardado como capa de texto estándar | Reconozco un tema escaneado, sigo leyendo mientras tanto, y luego busco en él también en Adobe | ⬜ |
 | 2.17 | Rehacer el OCR de PDFs que ya traen uno malo (todo o páginas) | Un PDF con OCR malo pasa a buscarse bien | ⬜ |
 | 2.18 | Buscador y subrayado probados con texto de OCR real; búsqueda aproximada opcional | Subrayo y busco en un escaneado igual que en un PDF del BOE | ⬜ |
 | 2.19 | Versión 0.3 | Estudio un tema escaneado con el programa | ⬜ |
+
+Notas de la Fase 2B:
+- **2.15: detectar escaneados y ofrecer "Reconocer texto" (16/11/2026).**
+  - Al abrir un documento, el ayudante mira todas sus páginas cuando no tiene
+    nada que dibujar (de 10 en 10, sin frenar el desplazamiento). Una página es
+    "escaneada" si casi no tiene texto y una imagen cubre al menos la mitad.
+  - Si hay alguna, sale una franja encima del documento, sin interrumpir:
+    "Este documento está escaneado…" (o "N de las M páginas…"), con
+    **Reconocer texto**, **Ahora no** (vuelve a salir al abrirlo otra vez) y
+    **No preguntar más en este documento** (se recuerda).
+  - Ajuste: "Ofrecer reconocer el texto al abrir un documento escaneado"
+    (activado por defecto).
+  - Por ahora el botón reconoce la página que se está viendo (lo de la Fase 0).
+    El documento entero, en segundo plano y guardado en el PDF, es la 2.16.
 
 ## Fase 2C – Herramientas de estudio
 Ordenadas por uso diario.

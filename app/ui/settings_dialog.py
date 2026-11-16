@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.core import file_association, pen, save_settings, symbols
+from app.core import file_association, ocr, pen, save_settings, symbols
 from app.core.history import RESTORE_SETTING
 from app.core.interface_size import NORMAL_SIZE, SIZE_SETTING, SIZES, wanted_size
 from app.core.paths import is_portable
@@ -160,6 +160,21 @@ class SettingsDialog(QDialog):
         self.typed_arrows_box.setChecked(symbols.typed_wanted(self.settings))
         self.typed_arrows_box.toggled.connect(self._typed_arrows_chosen)
         layout.addWidget(self.typed_arrows_box)
+
+        # ---- scanned documents ----
+        layout.addWidget(self._heading(self.tr("Documentos escaneados")))
+        self.ocr_offer_box = QCheckBox(
+            self.tr("Ofrecer &reconocer el texto al abrir un documento escaneado")
+        )
+        self.ocr_offer_box.setToolTip(
+            self.tr(
+                "Sale una franja encima del documento, sin interrumpir. "
+                "«Reconocer texto» sigue siempre en el modo Estudiar."
+            )
+        )
+        self.ocr_offer_box.setChecked(ocr.offer_wanted(self.settings))
+        self.ocr_offer_box.toggled.connect(lambda on: self.settings.set(ocr.OFFER_SETTING, on))
+        layout.addWidget(self.ocr_offer_box)
 
         # ---- when the program opens ----
         layout.addWidget(self._heading(self.tr("Al abrir el programa")))
