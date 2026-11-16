@@ -1,7 +1,7 @@
 """Lector-PDF: free, offline PDF reader, study tool, form filler and signer."""
 
 APP_NAME = "Lector-PDF"
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 try:
     # Written by packaging/build.py when a Windows build is created.
