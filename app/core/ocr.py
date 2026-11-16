@@ -15,6 +15,9 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.core.history import file_key
+from app.core.settings import Settings
+
 LANGUAGE = "spa"
 MIN_DPI = 150
 MAX_DPI = 300
@@ -23,6 +26,30 @@ FEW_LETTERS = 20
 BIG_PICTURE = 0.5  # part of the page the picture covers
 
 Rect = tuple[float, float, float, float]
+
+# Offering to recognise the text of a scanned document when it is opened.
+OFFER_SETTING = "ofrecer_reconocer_texto"
+DECLINED_SETTING = "reconocer_texto_no"  # documents where the user said "not again"
+MAX_DECLINED = 300
+
+
+def offer_wanted(settings: Settings) -> bool:
+    return settings.get(OFFER_SETTING, True) is not False
+
+
+def declined(settings: Settings, path: str | Path) -> bool:
+    """Whether the user asked not to be offered it again for this document."""
+    kept = settings.get(DECLINED_SETTING)
+    return isinstance(kept, list) and file_key(path) in kept
+
+
+def decline(settings: Settings, path: str | Path) -> None:
+    kept = settings.get(DECLINED_SETTING)
+    kept = [key for key in kept if isinstance(key, str)] if isinstance(kept, list) else []
+    key = file_key(path)
+    if key not in kept:
+        kept.append(key)
+    settings.set(DECLINED_SETTING, kept[-MAX_DECLINED:])
 
 
 class OcrError(Exception):

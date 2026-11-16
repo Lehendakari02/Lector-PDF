@@ -28,6 +28,7 @@ from pathlib import Path
 from app.core.commands import Color, Command, CommandError, markup_for_selection
 from app.core.drawing import PageDrawing, page_drawings
 from app.core.notes import PageNote, page_notes
+from app.core.ocr import looks_scanned
 from app.core.outline import OutlineEntry, read_outline
 from app.core.saving import FAILED as SAVE_FAILED
 from app.core.saving import SaveError, put_in_place, write_copy
@@ -268,6 +269,27 @@ def _save_document(doc, path: str, password: str | None, target: str):
     return _open_checked(target, password)
 
 
+SCAN_CHECK_STEP = 10  # pages looked at between two looks at the messages
+
+
+def _check_scanned(connection, token: int, doc, start: int, scanned: list[int]) -> int | None:
+    """Look at a few more pages for scans. Returns where to go on, or None
+    once the whole document is seen (and the window has been told)."""
+    if doc is None:
+        return None
+    stop = min(doc.page_count, start + SCAN_CHECK_STEP)
+    for number in range(start, stop):
+        try:
+            if looks_scanned(doc[number]):
+                scanned.append(number)
+        except Exception:  # noqa: S112 - a damaged page is not taken for a scan
+            continue
+    if stop < doc.page_count:
+        return stop
+    connection.send(("scanned", token, list(scanned), doc.page_count))
+    return None
+
+
 def _worker_main(connection: Connection) -> None:
     """The helper process: open documents and draw the pages asked for."""
     import pymupdf
@@ -280,12 +302,17 @@ def _worker_main(connection: Connection) -> None:
     token = 0
     search: _SearchJob | None = None
     page_texts: dict[int, PageText] = {}  # letters of pages already read
+    # Looking, when there is nothing else to do, for pages that are only a
+    # picture (scanned): the next page to look at (None: done) and those found.
+    checking: int | None = None
+    scanned: list[int] = []
     # Only for the automatic tests: pages that "kill" the helper when drawn.
     crash_pages = {int(n) for n in os.environ.get(TEST_CRASH_PAGES, "").split(",") if n.strip()}
     while True:
         # Read every waiting message before doing anything, so a newer list of
         # wanted pages (or a newer search) always wins over an older one.
-        if not (wanted or prints or thumbnails or search) or connection.poll():
+        busy = wanted or prints or thumbnails or search or checking is not None
+        if not busy or connection.poll():
             try:
                 message = connection.recv()
             except (EOFError, OSError):
@@ -309,6 +336,7 @@ def _worker_main(connection: Connection) -> None:
                     doc_path, doc_password = path, password
                     connection.send(("opened", token, doc.page_count))
                     connection.send(("outline", token, read_outline(doc)))
+                    checking, scanned = 0, []
                 except Exception as exc:
                     doc = None
                     connection.send(("open_failed", token, str(exc)))
@@ -388,6 +416,7 @@ def _worker_main(connection: Connection) -> None:
                             page_texts.clear()
                             search = None
                             connection.send(("outline", token, read_outline(doc)))
+                            checking, scanned = 0, []  # the pages have other numbers
             elif kind == "save":
                 _, save_token, save_id, target = message
                 if save_token == token and doc is not None:
@@ -402,6 +431,7 @@ def _worker_main(connection: Connection) -> None:
                         connection.send(("saved", token, save_id, target))
             elif kind == "close":
                 wanted, prints, thumbnails, search = [], [], [], None
+                checking = None
                 page_texts.clear()
                 if doc is not None:
                     doc.close()
@@ -411,8 +441,11 @@ def _worker_main(connection: Connection) -> None:
         if not wanted and not prints and not thumbnails:
             # Nothing to draw: search one more page. Drawing always goes first,
             # so searching a long document never slows the scrolling down.
-            if not _search_next_page(connection, token, doc, search, page_texts):
-                search = None
+            if search is not None:
+                if not _search_next_page(connection, token, doc, search, page_texts):
+                    search = None
+            elif checking is not None:
+                checking = _check_scanned(connection, token, doc, checking, scanned)
             continue
 
         # The pages being read go first, then the printer, then the small
@@ -473,7 +506,9 @@ class RenderService:
         on_change_failed: Callable[[int, str], None] | None = None,
         on_notes: Callable[[int, list[PageNote]], None] | None = None,
         on_drawings: Callable[[int, list[PageDrawing]], None] | None = None,
+        on_scanned: Callable[[list[int], int], None] | None = None,
     ) -> None:
+        self._on_scanned = on_scanned or (lambda pages, count: None)
         self._on_notes = on_notes or (lambda page, notes: None)
         self._on_drawings = on_drawings or (lambda page, drawings: None)
         self._on_changed = on_changed or (lambda number, order, pages, undo: None)
@@ -846,6 +881,8 @@ class RenderService:
                 self._tell(self._on_page if kind == "page" else self._on_thumbnail, drawn)
             elif kind == "outline":
                 self._tell(self._on_outline, message[2])
+            elif kind == "scanned":
+                self._tell(self._on_scanned, message[2], message[3])
             elif kind == "text":
                 self._tell(self._on_text, message[2], message[3])
             elif kind == "copied":

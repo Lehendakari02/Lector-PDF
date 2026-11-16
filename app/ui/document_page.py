@@ -7,9 +7,10 @@ draw the pages, so a document that gives trouble never disturbs the others.
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QHBoxLayout, QSplitter, QWidget
+from PySide6.QtWidgets import QSplitter, QVBoxLayout, QWidget
 
 from app.ui.features import Mode
+from app.ui.ocr_banner import OcrBanner
 from app.ui.pdf_view import PdfView
 from app.ui.search_panel import SearchPanel
 from app.ui.side_panel import SidePanel
@@ -57,9 +58,14 @@ class DocumentPage(QWidget):
         self.search_panel.hide()
         self._side_panel_sized = False
 
-        layout = QHBoxLayout(self)
+        # Offers to recognise the text when the document turns out to be scanned.
+        self.ocr_banner = OcrBanner()
+
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.splitter)
+        layout.setSpacing(0)
+        layout.addWidget(self.ocr_banner)
+        layout.addWidget(self.splitter, 1)
 
     @property
     def title(self) -> str:
