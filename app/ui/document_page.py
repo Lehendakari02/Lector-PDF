@@ -60,6 +60,8 @@ class DocumentPage(QWidget):
 
         # Offers to recognise the text when the document turns out to be scanned.
         self.ocr_banner = OcrBanner()
+        self.text_recognition = None  # reading the text of its scanned pages
+        self.recognize_when_known = False  # asked before the pages were looked at
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -82,4 +84,7 @@ class DocumentPage(QWidget):
 
     def shutdown(self) -> None:
         """Close the document and stop its helper process."""
+        if self.text_recognition is not None:
+            self.text_recognition.stop()
+            self.text_recognition = None
         self.view.shutdown()

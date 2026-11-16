@@ -1,10 +1,12 @@
 """The strip over a scanned document that offers to recognise its text.
 
 It never interrupts: it waits above the pages until it is answered or closed.
+While the text is being recognised it shows how far it has got, with a
+button to stop.
 """
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton, QWidget
 
 
 class OcrBanner(QFrame):
@@ -12,6 +14,7 @@ class OcrBanner(QFrame):
 
     recognize_wanted = Signal()
     never_wanted = Signal()  # not again for this document
+    cancel_wanted = Signal()  # stop recognising
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -37,9 +40,48 @@ class OcrBanner(QFrame):
         self.later_button.clicked.connect(self.hide)
         self.never_button = QPushButton(self.tr("No preguntar más en este documento"))
         self.never_button.clicked.connect(self._never)
-        for button in (self.recognize_button, self.later_button, self.never_button):
+        self.progress = QProgressBar()
+        self.progress.setObjectName("bannerProgress")
+        self.progress.setTextVisible(False)
+        self.progress.setFixedWidth(160)
+        self.progress.setAccessibleName(self.tr("Progreso del reconocimiento del texto"))
+        layout.addWidget(self.progress)
+        self.cancel_button = QPushButton(self.tr("Cancelar"))
+        self.cancel_button.setToolTip(
+            self.tr("Para de reconocer. Las páginas ya leídas conservan su texto.")
+        )
+        self.cancel_button.clicked.connect(self.cancel_wanted)
+        self._offer_buttons = (self.recognize_button, self.later_button, self.never_button)
+        for button in (*self._offer_buttons, self.cancel_button):
             button.setCursor(Qt.CursorShape.PointingHandCursor)
             layout.addWidget(button)
+        self.working = False
+        self._show_working(False)
+        self.hide()
+
+    def _show_working(self, working: bool) -> None:
+        self.working = working
+        for button in self._offer_buttons:
+            button.setVisible(not working)
+        self.progress.setVisible(working)
+        self.cancel_button.setVisible(working)
+
+    def show_progress(self, done: int, total: int) -> None:
+        """Recognising: how many of the pages are done."""
+        self._show_working(True)
+        self.progress.setRange(0, max(total, 1))
+        self.progress.setValue(done)
+        page = min(done + 1, total)
+        self.message.setText(
+            self.tr(
+                "Reconociendo el texto: página {0} de {1}. Puedes seguir leyendo mientras tanto."
+            ).format(page, total)
+        )
+        self.show()
+
+    def finish(self) -> None:
+        """Recognising is over: the strip goes away."""
+        self._show_working(False)
         self.hide()
 
     def offer(self, scanned: int, count: int) -> None:
@@ -59,6 +101,7 @@ class OcrBanner(QFrame):
                 "(son imágenes, sin texto)."
             ).format(scanned, count)
         self.message.setText(text)
+        self._show_working(False)
         self.show()
 
     def _never(self) -> None:

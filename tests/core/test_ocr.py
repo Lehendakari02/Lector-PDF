@@ -1,4 +1,5 @@
-"""Tests for recognising the text of scanned pages (task 0.9)."""
+"""Tests for recognising the text of scanned pages: straightening the
+picture, reading it and the process that reads one page after another."""
 
 import hashlib
 import time
@@ -7,8 +8,7 @@ import pymupdf
 import pytest
 
 from app.core import ocr
-from app.core.ocr import OcrError, OcrJob, add_text_layer, looks_scanned, recognize_page
-from app.core.search import find_in_page, read_page_text
+from app.core.ocr import OcrError, OcrFailure, Recognizer, looks_scanned, recognize_page
 
 WAIT_SECONDS = 120  # generous: test machines are slow and shared
 
@@ -22,15 +22,34 @@ def recognised():
         yield recognize_page(doc[0])
 
 
-def wait_for(job: OcrJob):
+def wait_for(recognizer: Recognizer, count: int = 1) -> list:
     deadline = time.monotonic() + WAIT_SECONDS
+    found = []
     while time.monotonic() < deadline:
-        result = job.poll()
-        if result is not None:
-            return result
+        found += recognizer.results()
+        if len(found) >= count:
+            return found
         time.sleep(0.05)
-    job.cancel()
+    recognizer.close()
     raise AssertionError("timed out")
+
+
+def tilted_page(degrees: float, rotation: int = 0):
+    """A page of known text, scanned slanted by ``degrees``, shown turned ``rotation``."""
+    from tests.ejemplos import generar
+
+    source = pymupdf.open()
+    page = source.new_page(width=595, height=842)
+    top = 72.0
+    for number in range(1, 4):
+        top = generar.write_article(page, top, number, generar.ARTICLE_TEXTS[number])
+    matrix = pymupdf.Matrix(150 / 72, 150 / 72).prerotate(degrees)
+    picture = page.get_pixmap(matrix=matrix, colorspace=pymupdf.csGRAY, alpha=False)
+    scanned = pymupdf.open()
+    new = scanned.new_page(width=595, height=842)
+    new.insert_image(new.rect, pixmap=picture)
+    new.set_rotation(rotation)
+    return scanned
 
 
 def test_the_spanish_language_file_is_the_published_one():
@@ -87,53 +106,59 @@ def test_the_scan_is_recognised_at_its_own_resolution(recognised, sample):
         assert ocr.best_dpi(doc[0]) == ocr.MAX_DPI  # no picture: the upper limit
 
 
-def test_after_adding_the_text_layer_the_search_works(sample, recognised, tmp_path):
-    """The whole point: a scanned page becomes a page you can search."""
+@pytest.mark.parametrize("degrees", [3.0, -1.3, 0.6, 0.0])
+def test_the_slant_of_the_lines_is_measured(degrees):
+    with tilted_page(degrees) as doc:
+        picture, _ = ocr.page_picture(doc[0])
+    slant, across = ocr.measure_slant(picture)
+    assert not across
+    assert slant == pytest.approx(degrees, abs=0.15)
+
+
+def test_a_slanted_scan_is_straightened_before_reading(recognised):
+    assert recognised.turned == pytest.approx(-1.3, abs=0.15)  # the sample's first page
+    # The words are on the straightened picture; on the page they are where
+    # the picture shows them.
+    word = recognised.words[0]
+    x0, y0, x1, y1 = recognised.shown_rect(word)
+    assert 60 < x0 < 80 and 70 < y0 < 90
+
+
+@pytest.mark.parametrize("rotation", [90, 180, 270])
+def test_a_page_upside_down_or_on_its_side_is_read_the_right_way(rotation):
+    with tilted_page(0.0, rotation) as doc:
+        result = recognize_page(doc[0])
+    assert "Artículo 1." in result.text
+    assert ocr.quality(word.text for word in result.words) > ocr.GOOD_WORDS
+
+
+def test_quality_tells_words_from_rubbish():
+    assert ocr.quality(["El", "camión", "de", "reparto,", "cada", "año."]) > 0.5
+    assert ocr.quality(["“¡e19os", "¡euosiad", "ap", "sejp", "ononuy"]) == 0.0
+    assert ocr.quality([]) == 0.0
+
+
+def test_the_reader_reads_in_another_process(sample):
     with pymupdf.open(sample("escaneado.pdf")) as doc:
-        page = doc[0]
-        assert find_in_page(read_page_text(page), "articulo") == []
-        before = page.get_pixmap(dpi=50).samples
-        add_text_layer(page, recognised)
-        assert page.get_pixmap(dpi=50).samples == before, "the page must look the same"
-        doc.save(tmp_path / "con-texto.pdf")
-
-    with pymupdf.open(tmp_path / "con-texto.pdf") as doc:
-        text = read_page_text(doc[0])
-        assert len(find_in_page(text, "articulo")) == 5
-        assert len(find_in_page(text, "administracion publica")) == 1
-        hit = find_in_page(text, "camion")[0]
-        assert hit.match == "camión"
-        # The mark falls on the word in the picture.
-        word = next(w for w in recognised.words if w.text.startswith("camión"))
-        assert abs(hit.rects[0][0] - word.rect[0]) < 3
-        assert word.rect[1] - 3 <= hit.rects[0][1] <= word.rect[3]
-        assert not looks_scanned(doc[0])
+        picture, dpi = ocr.page_picture(doc[1])
+    recognizer = Recognizer()
+    try:
+        recognizer.read(7, picture.width, picture.height, dpi, picture.samples)
+        recognizer.read(8, 10, 10, dpi, b"too short")  # a picture that makes no sense
+        first, second = wait_for(recognizer, 2)
+    finally:
+        recognizer.close()
+    assert first.page == 7 and "Artículo 6" in first.text
+    assert isinstance(second, OcrFailure) and second.page == 8
 
 
-def test_job_recognises_in_another_process(sample):
-    job = OcrJob(sample("escaneado.pdf"), 1)
-    assert job.poll() is None or job.poll().page == 1  # not blocking
-    result = wait_for(job)
-    assert result.page == 1
-    assert "Artículo 6" in result.text
-    assert job.poll() is result, "asking again gives the same result"
-
-
-def test_job_reports_problems(sample, tmp_path):
-    for path, page in ((sample("escaneado.pdf"), 99), (tmp_path / "nada.pdf", 0)):
-        job = OcrJob(path, page)
-        with pytest.raises(OcrError):
-            wait_for(job)
+def test_the_reader_stops_at_once():
+    recognizer = Recognizer()
+    recognizer.close()
+    assert not recognizer._process.is_alive()
+    assert recognizer.results() == []
     with pytest.raises(OcrError):
-        wait_for(OcrJob(sample("con-contrasena.pdf"), 0))
-
-
-def test_job_can_be_cancelled(sample):
-    job = OcrJob(sample("escaneado.pdf"), 0)
-    job.cancel()
-    assert not job._process.is_alive()
-    with pytest.raises(OcrError):
-        job.poll()
+        recognizer.read(0, 1, 1, 150, b"\0")
 
 
 def test_missing_language_file_is_a_clear_error(sample, monkeypatch, tmp_path):

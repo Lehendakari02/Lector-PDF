@@ -20,6 +20,7 @@ class Collector:
         self.thumbnails: list[RenderedPage] = []
         self.outlines: list[list] = []
         self.scanned: list[tuple[list[int], int]] = []
+        self.readings: list[tuple] = []
         self.page_failures: list[tuple[int, float, str]] = []
         self.open_failures: list[str] = []
         self.crashes = 0
@@ -32,6 +33,8 @@ class Collector:
             on_outline=lambda entries: self._add(self.outlines, entries),
             on_thumbnail=lambda page: self._add(self.thumbnails, page),
             on_scanned=lambda pages, count: self._add(self.scanned, (pages, count)),
+            on_reading=lambda *picture: self._add(self.readings, picture),
+            on_reading_failed=lambda *failure: self._add(self.readings, failure),
         )
 
     def _add(self, where, item):
@@ -659,3 +662,35 @@ def test_a_mixed_document_says_which_pages(collector, sample, tmp_path):
     collector.service.open(path)
     collector.wait(lambda: collector.scanned)
     assert collector.scanned == [([2], 3)]
+
+
+def test_the_picture_to_read_a_page_is_grey_and_at_the_scan_resolution(collector, sample):
+    collector.service.open(sample("escaneado.pdf"))
+    collector.service.want_reading(1)
+    collector.service.want_reading(99)  # no such page
+    collector.wait(lambda: len(collector.readings) == 2)
+    (page, width, height, dpi, samples), failed = collector.readings
+    assert page == 1 and 150 <= dpi <= 160
+    assert abs(width - 595 * dpi / 72) <= 1 and len(samples) == width * height
+    assert failed[0] == 99 and isinstance(failed[1], str)
+
+
+def test_after_writing_the_text_the_pages_are_searched_with_it(collector, sample):
+    from app.core.ocr import OcrPage, OcrWord
+    from app.core.text_layer import AddTextLayer, PageLayer
+
+    hits = []
+    done = []
+    collector.service._on_hits = lambda search_id, found: collector._add(hits, found)
+    collector.service._on_search_done = lambda *args: collector._add(done, args)
+    collector.service._on_changed = lambda *args: collector._add(done, args)
+    collector.service.open(sample("escaneado.pdf"))
+    collector.service.search("camion")
+    collector.wait(lambda: done)
+    assert not hits, "a picture has no letters"
+    word = OcrWord((72, 100, 120, 114), "camión")
+    collector.service.apply(AddTextLayer((PageLayer.of(OcrPage(2, (word,))),)))
+    collector.wait(lambda: len(done) == 2)
+    collector.service.search("camion")
+    collector.wait(lambda: hits)
+    assert hits[0][0].page == 2

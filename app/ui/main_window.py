@@ -72,7 +72,7 @@ from app.core.marker_styles import (
     MarkerStyles,
 )
 from app.core.notes import MONO, NOTE, SANS, SERIF, TEXT_BOX
-from app.core.ocr import OcrError, OcrJob, OcrPage
+from app.core.ocr import OcrError
 from app.core.paths import data_dir, is_portable
 from app.core.settings import Settings
 from app.core.signing import PasswordProtected, SigningError, sign_pdf
@@ -98,7 +98,6 @@ from app.ui.features import (
     features_of,
     translate,
 )
-from app.ui.ocr_dialog import OcrResultDialog
 from app.ui.page_box import PageBox
 from app.ui.password_dialog import PasswordDialog
 from app.ui.pdf_view import PdfView
@@ -110,6 +109,7 @@ from app.ui.settings_dialog import SettingsDialog
 from app.ui.shape_icons import shape_icon
 from app.ui.side_panel import SidePanel, Tab
 from app.ui.sign_dialog import CertificateDialog
+from app.ui.text_recognition import TextRecognition
 from app.ui.theme import PAPER_SETTING, THEME_SETTING, Paper, Theme, apply_theme
 from app.ui.unsaved_dialog import CANCEL, DISCARD, SAVE, UnsavedDialog
 from app.ui.updater import UpdateBanner, Updater
@@ -122,6 +122,7 @@ MIN_BUTTON_HEIGHT = 40
 # The row with the menu, the modes and the search box is a little lower.
 BAR_BUTTON_HEIGHT = 34
 STATUS_MESSAGE_MS = 6000
+STATUS_MESSAGE_LONG_MS = 12000  # a message with more to read
 LAST_FOLDER_SETTING = "ultima_carpeta"
 WELCOME_RECENT = 5  # recent documents offered on the welcome page
 # The tools of each mode with their names under the drawing, or only the drawings.
@@ -278,18 +279,12 @@ class MainWindow(QMainWindow):
         self.zoom_control = ZoomControl(self.pdf_view)
         self.statusBar().addPermanentWidget(self.zoom_control)
 
-        self._ocr_job: OcrJob | None = None
-        self.last_ocr: OcrPage | None = None
-        self._ocr_timer = QTimer(self)
-        self._ocr_timer.setInterval(100)
-        self._ocr_timer.timeout.connect(self._check_ocr)
-
         # Functions that already work. Every other one says it is not built yet.
         self.feature_handlers = {
             "open": self.choose_and_open,
             "search": self.show_search,
             "sign_certificate": self.sign_with_certificate,
-            "ocr": self.recognize_current_page,
+            "ocr": self.recognize_text,
             "zoom_in": lambda: self.pdf_view.zoom_in(),
             "zoom_out": lambda: self.pdf_view.zoom_out(),
             "fit_comfortable": lambda: self.pdf_view.fit_comfortable(),
@@ -2356,6 +2351,7 @@ class MainWindow(QMainWindow):
         )
         page.ocr_banner.recognize_wanted.connect(lambda p=page: self._recognize_offered(p))
         page.ocr_banner.never_wanted.connect(lambda p=page: self._ocr_declined(p))
+        page.ocr_banner.cancel_wanted.connect(lambda p=page: self.cancel_text_recognition(p))
         view.modified_changed.connect(lambda _modified, p=page: self._modified_changed(p))
         view.saved.connect(lambda number, path, p=page: self._document_saved(p, number, path))
         view.save_failed.connect(
@@ -2881,51 +2877,94 @@ class MainWindow(QMainWindow):
                 return True
         return super().eventFilter(watched, event)
 
-    # ---- text recognition (proof of concept of task 0.9) ---------------
+    # ---- text recognition (OCR) -----------------------------------------
 
-    def recognize_current_page(self) -> None:
-        """Read the text of the page on screen, in a separate process."""
-        source = self.pdf_view.document_path
-        if source is None:
+    def recognize_text(self, page: DocumentPage | None = None) -> bool:
+        """Read the text of the scanned pages of a document, in the background.
+
+        Its pages go on being read meanwhile; the strip above them shows how far
+        it has got, with Cancelar. False if there is nothing to start.
+        """
+        page = page or self.current_document
+        if page is None or page.view.page_count == 0:
             self.statusBar().showMessage(
                 self.tr("Abre un documento escaneado para reconocer su texto."), STATUS_MESSAGE_MS
             )
-            return
-        if self._ocr_job is not None:
-            return  # one at a time
-        page = max(self.pdf_view.current_page, 0)
-        self._ocr_job = OcrJob(source, page)
-        self.statusBar().showMessage(
-            self.tr("Reconociendo el texto de la página {0}…").format(page + 1)
-        )
-        self._ocr_timer.start()
-
-    def _check_ocr(self) -> None:
-        if self._ocr_job is None:
-            self._ocr_timer.stop()
-            return
-        try:
-            result = self._ocr_job.poll()
-        except OcrError as error:
-            self._ocr_job = None
-            self._ocr_timer.stop()
-            self.reporter.log.record(type(error), error, error.__traceback__, "reconocer texto")
+            return False
+        if page.text_recognition is not None:
+            return False  # already at it
+        if not ocr.is_available():
             self._show_problem(
-                self.tr("No se ha podido reconocer el texto"),
-                self.tr("Con Ayuda → «Copiar informe de error» puedes ver el detalle."),
+                self.tr("No se puede reconocer el texto"),
+                self.tr("Falta el archivo del idioma español. Vuelve a instalar el programa."),
             )
-            return
-        if result is None:
-            return
-        self._ocr_job = None
-        self._ocr_timer.stop()
-        self.last_ocr = result
-        self.statusBar().showMessage(
-            self.tr("Texto reconocido: {0} palabras.").format(len(result.words)),
-            STATUS_MESSAGE_MS,
+            return False
+        view = page.view
+        if not view.scanned_known:
+            # Still looking at the pages: it starts as soon as they are known.
+            page.recognize_when_known = True
+            self.statusBar().showMessage(
+                self.tr("Buscando las páginas escaneadas…"), STATUS_MESSAGE_MS
+            )
+            return True
+        if not view.scanned_pages:
+            page.ocr_banner.finish()
+            self.statusBar().showMessage(
+                self.tr("Este documento ya tiene texto: no hay páginas escaneadas que reconocer."),
+                STATUS_MESSAGE_MS,
+            )
+            return False
+        run = TextRecognition(view, view.scanned_pages, page)
+        page.text_recognition = run
+        run.progressed.connect(page.ocr_banner.show_progress)
+        run.finished.connect(
+            lambda written, total, failed, cancelled, p=page: self._text_recognised(
+                p, written, total, failed, cancelled
+            )
         )
-        if self.show_problem_dialogs:
-            OcrResultDialog(result, self).exec()
+        run.failed.connect(self._text_recognition_failed)
+        run.start()
+        return True
+
+    def _text_recognised(
+        self, page: DocumentPage, written: int, total: int, failed: int, cancelled: bool
+    ) -> None:
+        page.text_recognition = None
+        page.ocr_banner.finish()
+        if cancelled:
+            message = (
+                self.tr(
+                    "Reconocimiento cancelado. Las {0} páginas ya leídas tienen su texto."
+                ).format(written)
+                if written
+                else self.tr("Reconocimiento cancelado.")
+            )
+        elif written == 0:
+            message = self.tr("No se ha podido reconocer el texto de ninguna página.")
+        else:
+            message = self.tr(
+                "Texto reconocido en {0} páginas: ya puedes buscar, subrayar y copiar. "
+                "Se guarda en el PDF al guardar."
+            ).format(written)
+            if written == 1:
+                message = self.tr(
+                    "Texto reconocido en 1 página: ya puedes buscar, subrayar y copiar. "
+                    "Se guarda en el PDF al guardar."
+                )
+            if failed:
+                message += " " + self.tr("{0} no se han podido leer.").format(failed)
+        self.statusBar().showMessage(message, STATUS_MESSAGE_LONG_MS)
+        if written and page.search_panel.box.text():
+            page.search_panel.search_now()  # what is found may be more now
+
+    def cancel_text_recognition(self, page: DocumentPage | None = None) -> None:
+        page = page or self.current_document
+        if page is not None and page.text_recognition is not None:
+            page.text_recognition.cancel()
+
+    def _text_recognition_failed(self, details: str) -> None:
+        error = OcrError(details)
+        self.reporter.log.record(type(error), error, None, "reconocer texto")
 
     # ---- signing (proof of concept of task 0.8) ------------------------
 
@@ -3086,6 +3125,12 @@ class MainWindow(QMainWindow):
     def _scanned_found(self, page: DocumentPage, scanned: list[int], count: int) -> None:
         """The document has been looked at: offer to recognise the text of
         its scanned pages, unless the user said not to."""
+        if page.text_recognition is not None:
+            return  # being recognised: the strip shows how far it has got
+        if page.recognize_when_known:
+            page.recognize_when_known = False
+            self.recognize_text(page)
+            return
         wanted = bool(scanned) and ocr.offer_wanted(self.settings)
         if wanted and page.path is not None and ocr.declined(self.settings, page.path):
             wanted = False
@@ -3098,7 +3143,7 @@ class MainWindow(QMainWindow):
         page.ocr_banner.hide()
         if page in self.documents:
             self.document_tabs.setCurrentIndex(self.documents.index(page))
-        self.recognize_current_page()
+        self.recognize_text(page)
 
     def _ocr_declined(self, page: DocumentPage) -> None:
         if page.path is not None:
@@ -3185,9 +3230,6 @@ class MainWindow(QMainWindow):
                     self.restart_wanted = False
                     self.after_exit_command = None
                 return
-        if self._ocr_job is not None:
-            self._ocr_job.cancel()
-            self._ocr_job = None
         if self._print_run is not None:
             self._print_run.cancel()
         self.updater.cancel()

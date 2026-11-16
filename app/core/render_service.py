@@ -28,7 +28,7 @@ from pathlib import Path
 from app.core.commands import Color, Command, CommandError, markup_for_selection
 from app.core.drawing import PageDrawing, page_drawings
 from app.core.notes import PageNote, page_notes
-from app.core.ocr import looks_scanned
+from app.core.ocr import looks_scanned, page_picture
 from app.core.outline import OutlineEntry, read_outline
 from app.core.saving import FAILED as SAVE_FAILED
 from app.core.saving import SaveError, put_in_place, write_copy
@@ -290,6 +290,17 @@ def _check_scanned(connection, token: int, doc, start: int, scanned: list[int]) 
     return None
 
 
+def _send_reading(connection, token: int, doc, page_index: int) -> None:
+    """The grey picture of a page, to read its text (see ``app.core.ocr``)."""
+    try:
+        picture, dpi = page_picture(doc[page_index])
+    except Exception as exc:
+        connection.send(("reading_failed", token, page_index, str(exc)))
+        return
+    connection.send(("reading", token, page_index, picture.width, picture.height, dpi))
+    connection.send_bytes(picture.samples)
+
+
 def _worker_main(connection: Connection) -> None:
     """The helper process: open documents and draw the pages asked for."""
     import pymupdf
@@ -306,12 +317,15 @@ def _worker_main(connection: Connection) -> None:
     # picture (scanned): the next page to look at (None: done) and those found.
     checking: int | None = None
     scanned: list[int] = []
+    # Pages whose picture is wanted to read their text (OCR), drawn after the
+    # pages being read and the printer, before the small pictures.
+    readings: list[int] = []
     # Only for the automatic tests: pages that "kill" the helper when drawn.
     crash_pages = {int(n) for n in os.environ.get(TEST_CRASH_PAGES, "").split(",") if n.strip()}
     while True:
         # Read every waiting message before doing anything, so a newer list of
         # wanted pages (or a newer search) always wins over an older one.
-        busy = wanted or prints or thumbnails or search or checking is not None
+        busy = wanted or prints or readings or thumbnails or search or checking is not None
         if not busy or connection.poll():
             try:
                 message = connection.recv()
@@ -322,7 +336,7 @@ def _worker_main(connection: Connection) -> None:
                 return
             if kind == "open":
                 _, token, path, password = message
-                wanted, prints, thumbnails, search = [], [], [], None
+                wanted, prints, thumbnails, search, readings = [], [], [], None, []
                 page_texts.clear()
                 if doc is not None:
                     doc.close()
@@ -349,6 +363,10 @@ def _worker_main(connection: Connection) -> None:
             elif kind == "prints":
                 _, want_token, items = message
                 prints = list(items) if want_token == token and doc is not None else []
+            elif kind == "reading":
+                _, reading_token, page_index = message
+                if reading_token == token and doc is not None and page_index not in readings:
+                    readings.append(page_index)
             elif kind == "search":
                 _, search_token, search_id, query, whole_word, exact = message
                 search = None
@@ -409,6 +427,9 @@ def _worker_main(connection: Connection) -> None:
                         connection.send(("change_failed", token, change_id, str(exc)))
                     else:
                         connection.send(("changed", token, change_id, order, pages, undo))
+                        if getattr(order, "text_change", False):
+                            for page_index in pages:  # their letters are different now
+                                page_texts.pop(page_index, None)
                         if hasattr(order, "page_change"):
                             # Pages were put or taken away: the letters read so
                             # far belong to other places now, and the index
@@ -417,6 +438,7 @@ def _worker_main(connection: Connection) -> None:
                             search = None
                             connection.send(("outline", token, read_outline(doc)))
                             checking, scanned = 0, []  # the pages have other numbers
+                            readings = []  # the window asks again with the new numbers
             elif kind == "save":
                 _, save_token, save_id, target = message
                 if save_token == token and doc is not None:
@@ -430,12 +452,16 @@ def _worker_main(connection: Connection) -> None:
                         doc_path = target
                         connection.send(("saved", token, save_id, target))
             elif kind == "close":
-                wanted, prints, thumbnails, search = [], [], [], None
+                wanted, prints, thumbnails, search, readings = [], [], [], None, []
                 checking = None
                 page_texts.clear()
                 if doc is not None:
                     doc.close()
                     doc = None
+            continue
+
+        if readings and not wanted and not prints:
+            _send_reading(connection, token, doc, readings.pop(0))
             continue
 
         if not wanted and not prints and not thumbnails:
@@ -507,7 +533,12 @@ class RenderService:
         on_notes: Callable[[int, list[PageNote]], None] | None = None,
         on_drawings: Callable[[int, list[PageDrawing]], None] | None = None,
         on_scanned: Callable[[list[int], int], None] | None = None,
+        on_reading: Callable[[int, int, int, int, bytes], None] | None = None,
+        on_reading_failed: Callable[[int, str], None] | None = None,
     ) -> None:
+        self._on_reading = on_reading or (lambda page, width, height, dpi, samples: None)
+        self._on_reading_failed = on_reading_failed or (lambda page, details: None)
+        self._readings: set[int] = set()  # pictures asked for to read, not yet back
         self._on_scanned = on_scanned or (lambda pages, count: None)
         self._on_notes = on_notes or (lambda page, notes: None)
         self._on_drawings = on_drawings or (lambda page, drawings: None)
@@ -563,6 +594,7 @@ class RenderService:
             self._drawing = None
             self._bad_pages = set()
             self._unsaved = []
+            self._readings.clear()
             self._ensure_started()
             self._send(("open", self._token, str(self._path), password))
 
@@ -632,6 +664,20 @@ class RenderService:
                 )
             )
             return self._search_id
+
+    def want_reading(self, page: int) -> None:
+        """Ask for the grey picture of a page, to read its text (OCR).
+
+        It arrives in ``on_reading(page, width, height, dpi, samples)``, or
+        ``on_reading_failed(page, details)``; also if the helper ends first.
+        """
+        with self._lock:
+            if self._path is None:
+                return
+            if self._ensure_started():
+                self._reopen()
+            self._readings.add(page)
+            self._send(("reading", self._token, page))
 
     def want_text(self, page: int) -> None:
         """Ask for the letters of a page and where they are. Arrives in ``on_text``."""
@@ -751,6 +797,7 @@ class RenderService:
             self._searching = False
             self._token += 1
             self._unsaved = []
+            self._readings.clear()
             if self.is_running():
                 self._send(("close",))
 
@@ -849,7 +896,7 @@ class RenderService:
                     break
                 message = connection.recv()
                 kind = message[0]
-                has_picture = kind in ("page", "thumbnail", "print")
+                has_picture = kind in ("page", "thumbnail", "print", "reading")
                 samples = connection.recv_bytes() if has_picture else b""
             except (EOFError, OSError, ValueError, TypeError):
                 break
@@ -881,6 +928,13 @@ class RenderService:
                 self._tell(self._on_page if kind == "page" else self._on_thumbnail, drawn)
             elif kind == "outline":
                 self._tell(self._on_outline, message[2])
+            elif kind == "reading":
+                _, _, page, width, height, dpi = message
+                self._readings.discard(page)
+                self._tell(self._on_reading, page, width, height, dpi, samples)
+            elif kind == "reading_failed":
+                self._readings.discard(message[2])
+                self._tell(self._on_reading_failed, message[2], message[3])
             elif kind == "scanned":
                 self._tell(self._on_scanned, message[2], message[3])
             elif kind == "text":
@@ -921,6 +975,7 @@ class RenderService:
         lost_search = bad_page = None
         lost_prints: set[int] = set()
         lost_saves: set[int] = set()
+        lost_readings: set[int] = set()
         with self._lock:
             crashed = not self._closing and connection is self._connection
             if crashed:
@@ -940,10 +995,13 @@ class RenderService:
                 self._searching = False
                 lost_prints, self._printing = self._printing, set()
                 lost_saves, self._saving = self._saving, set()
+                lost_readings, self._readings = self._readings, set()
         # The printer is told about every page it was waiting for: it asks again
         # for the good ones and leaves out the one that killed the helper.
         for page in sorted(lost_prints):
             self._tell(self._on_print_failed if page == bad_page else self._on_print_lost, page)
+        for page in sorted(lost_readings):
+            self._tell(self._on_reading_failed, page, "the helper ended before drawing it")
         for number in sorted(lost_saves):
             self._tell(self._on_save_failed, number, SAVE_FAILED, "the helper ended while saving")
         if crashed and bad_page is not None:

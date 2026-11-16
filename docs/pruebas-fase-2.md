@@ -455,3 +455,26 @@ Con un documento abierto, en el modo Estudiar.
 5. En Ajustes, quita "Ofrecer reconocer el texto…": ya no sale con ninguno.
 6. Un PDF muy largo (500 páginas) se puede leer y desplazar con normalidad
    mientras el programa lo revisa.
+
+## Fase 2B – Tarea 2.16 – Reconocer el texto de todo el documento
+
+1. Abre un temario escaneado (o `tests/ejemplos/escaneado.pdf`) y pulsa
+   **Reconocer texto** en la franja. La franja pasa a decir "Reconociendo el
+   texto: página 1 de N" con una barra que avanza y un botón **Cancelar**.
+2. Mientras tanto, desplázate, cambia el zoom y subraya en un PDF normal en otra
+   pestaña: todo va con normalidad.
+3. Al terminar, la franja se va y abajo dice "Texto reconocido en N páginas".
+   Busca una palabra que se vea en la página (Ctrl+F): la encuentra, con tildes
+   o sin ellas, y la marca encima de la palabra de la imagen.
+4. Selecciona y copia un párrafo: se pega el texto.
+5. Pulsa Deshacer (Ctrl+Z): el texto reconocido se quita entero de una vez.
+   Rehacer (Ctrl+Y) lo vuelve a poner.
+6. Guarda (Ctrl+S), abre el PDF en **Adobe Reader** y en **Edge** y busca la misma
+   palabra: la encuentra en su sitio, y la página se ve igual que antes.
+7. Vuelve a abrir un escaneado largo y pulsa **Cancelar** a mitad: las páginas ya
+   leídas conservan su texto.
+8. Escanea una hoja torcida o del revés (o gira una página con Organizar) y
+   reconócela: el texto se encuentra igual.
+9. Con un escaneado reconocido sin guardar, cierra el programa a la fuerza desde
+   el Administrador de tareas. Al abrirlo, ofrece recuperar los cambios, y el
+   texto reconocido vuelve.
