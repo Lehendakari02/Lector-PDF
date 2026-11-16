@@ -31,9 +31,12 @@ class TextRecognition(QObject):
     finished = Signal(int, int, int, bool)
     failed = Signal(str)  # the reader stopped working: details for the log
 
-    def __init__(self, view, pages: list[int], parent: QObject | None = None) -> None:
+    def __init__(
+        self, view, pages: list[int], parent: QObject | None = None, replace: bool = False
+    ) -> None:
         super().__init__(parent)
         self.view = view
+        self.replace = replace  # recognising again: the text the pages had goes
         self._document = view._document
         # Every page has a number of its own here, which does not change when
         # sheets are put in or taken away: where it is now is in ``_where``.
@@ -183,7 +186,7 @@ class TextRecognition(QObject):
             if page is not None:
                 pages.append(replace(result, page=page))
         if pages and self._same_document():
-            self.view.add_text_layer(pages)
+            self.view.add_text_layer(pages, self.replace)
         else:
             pages = []
         failures = self.total - len(pages) if not cancelled else self.failures

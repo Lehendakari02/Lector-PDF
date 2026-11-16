@@ -275,7 +275,7 @@ class PdfView(QAbstractScrollArea):
     # The pages that are only a picture (scanned), once the whole document has
     # been looked at: their numbers (from 0) and how many pages there are.
     scanned_found = Signal(object, int)
-    _scanned_ready = Signal(object, int)
+    _scanned_ready = Signal(object, int, object)
     edit_failed = Signal(str)
     history_changed = Signal()  # what can be undone or done again is different
     markup_tool_changed = Signal(str)  # the tool in hand ("" for none)
@@ -368,6 +368,7 @@ class PdfView(QAbstractScrollArea):
             on_reading_failed=self.reading_failed.emit,
         )
         self.scanned_pages: list[int] = []  # known once the helper has looked
+        self.recognised_pages: list[int] = []  # scans that already have their text
         self.scanned_known = False  # whether it has looked at every page
         self._scanned_ready.connect(self._store_scanned)
         self._notes_ready.connect(self._store_notes)
@@ -615,10 +616,11 @@ class PdfView(QAbstractScrollArea):
         if getattr(order, "text_change", False):
             self.text_changed.emit(list(pages))
 
-    def _store_scanned(self, pages: object, count: int) -> None:
+    def _store_scanned(self, pages: object, count: int, recognised: object = ()) -> None:
         if self._document is None or count != self.page_count:
             return  # about another document, or before pages were put or taken
         self.scanned_pages = sorted(pages)
+        self.recognised_pages = sorted(recognised)
         self.scanned_known = True
         self.scanned_found.emit(list(self.scanned_pages), count)
 
@@ -786,6 +788,7 @@ class PdfView(QAbstractScrollArea):
         self._asked_notes.clear()
         self._drawings.clear()
         self.scanned_pages = []
+        self.recognised_pages = []
         self.scanned_known = False
         self._erased.clear()
         self._erasing = False
@@ -1632,15 +1635,19 @@ class PdfView(QAbstractScrollArea):
         if self._document is not None and 0 <= page < self.page_count:
             self.service.want_reading(page)
 
-    def add_text_layer(self, recognised: list) -> bool:
+    def add_text_layer(self, recognised: list, replace: bool = False) -> bool:
         """Write the text read on some pages (``app.core.ocr.OcrPage``) as
-        invisible text. One change: Deshacer takes all of it away."""
+        invisible text. One change: Deshacer takes all of it away.
+
+        With ``replace`` the invisible text the pages had is taken away first
+        (recognising them again); Deshacer brings it back.
+        """
         layers = tuple(
             PageLayer.of(page) for page in recognised if 0 <= page.page < self.page_count
         )
         if not layers:
             return False
-        return self._do(AddTextLayer(layers))
+        return self._do(AddTextLayer(layers, replace))
 
     def insert_sheet(self, kind: str = sheets.DEFAULT_SHEET, after: int | None = None) -> bool:
         """Put a sheet to write on after a page (the one being read, if not

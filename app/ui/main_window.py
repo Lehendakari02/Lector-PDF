@@ -18,6 +18,7 @@ from PySide6.QtGui import (
 from PySide6.QtPrintSupport import QPrinter, QPrinterInfo
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
     QFileDialog,
     QFrame,
     QGridLayout,
@@ -103,6 +104,7 @@ from app.ui.password_dialog import PasswordDialog
 from app.ui.pdf_view import PdfView
 from app.ui.print_dialog import PrintChoices, PrintDialog
 from app.ui.print_run import PrintRun
+from app.ui.recognize_again_dialog import RecognizeAgainDialog
 from app.ui.recovery_dialog import RecoveryDialog
 from app.ui.search_panel import SearchPanel
 from app.ui.settings_dialog import SettingsDialog
@@ -272,6 +274,8 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self.save_state_label)
         # For the tests: the answer to "save the changes?" without showing the question.
         self.unsaved_answer: str | None = None
+        # For the tests: the pages to recognise again, without asking.
+        self.recognize_again_answer: list[int] | None = None
         self._saving_to_close: list[DocumentPage] = []  # being saved before closing
         self._after_saving = None  # what to do once they are all saved
         self.statusBar().addPermanentWidget(self.speed_label)
@@ -285,6 +289,7 @@ class MainWindow(QMainWindow):
             "search": self.show_search,
             "sign_certificate": self.sign_with_certificate,
             "ocr": self.recognize_text,
+            "ocr_again": self.recognize_again,
             "zoom_in": lambda: self.pdf_view.zoom_in(),
             "zoom_out": lambda: self.pdf_view.zoom_out(),
             "fit_comfortable": lambda: self.pdf_view.fit_comfortable(),
@@ -513,6 +518,7 @@ class MainWindow(QMainWindow):
             self.mode_toolbars[mode] = toolbar
         self._build_color_menus()
         self._build_sheet_menu()
+        self._build_recognition_menu()
         self._build_favourites_bar()
         self.set_toolbar_icons_only(
             self.settings.get(TOOLBAR_SETTING) == TOOLBAR_ICONS, remember=False
@@ -575,6 +581,20 @@ class MainWindow(QMainWindow):
         button = self.mode_toolbars[Mode.STUDY].widgetForAction(
             self.feature_actions["insert_sheet"]
         )
+        button.setMenu(menu)
+        button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        button.setProperty("withMenu", True)
+
+    def _build_recognition_menu(self) -> None:
+        """Reconocer texto reads the pages without text; the arrow next to it
+        also offers to recognise again pages that already have it."""
+        menu = QMenu(self)
+        menu.setObjectName("recognitionMenu")
+        new = menu.addAction(self.tr("Reconocer las páginas escaneadas sin texto"))
+        new.triggered.connect(lambda _checked=False: self.recognize_text())
+        menu.addAction(self.feature_actions["ocr_again"])
+        menu.setToolTipsVisible(True)
+        button = self.mode_toolbars[Mode.STUDY].widgetForAction(self.feature_actions["ocr"])
         button.setMenu(menu)
         button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
         button.setProperty("withMenu", True)
@@ -2883,21 +2903,11 @@ class MainWindow(QMainWindow):
         """Read the text of the scanned pages of a document, in the background.
 
         Its pages go on being read meanwhile; the strip above them shows how far
-        it has got, with Cancelar. False if there is nothing to start.
+        it has got, with Cancelar. A document whose scans already have their
+        text asks which pages to recognise again. False if nothing starts.
         """
-        page = page or self.current_document
-        if page is None or page.view.page_count == 0:
-            self.statusBar().showMessage(
-                self.tr("Abre un documento escaneado para reconocer su texto."), STATUS_MESSAGE_MS
-            )
-            return False
-        if page.text_recognition is not None:
-            return False  # already at it
-        if not ocr.is_available():
-            self._show_problem(
-                self.tr("No se puede reconocer el texto"),
-                self.tr("Falta el archivo del idioma español. Vuelve a instalar el programa."),
-            )
+        page = self._page_for_recognition(page)
+        if page is None:
             return False
         view = page.view
         if not view.scanned_known:
@@ -2908,18 +2918,73 @@ class MainWindow(QMainWindow):
             )
             return True
         if not view.scanned_pages:
+            if view.recognised_pages:
+                return self.recognize_again(page)
             page.ocr_banner.finish()
             self.statusBar().showMessage(
                 self.tr("Este documento ya tiene texto: no hay páginas escaneadas que reconocer."),
                 STATUS_MESSAGE_MS,
             )
             return False
-        run = TextRecognition(view, view.scanned_pages, page)
+        return self._start_recognition(page, view.scanned_pages)
+
+    def recognize_again(self, page: DocumentPage | None = None) -> bool:
+        """Recognise again scanned pages that already have text (a poor one,
+        made by another program or here): all of them or the ones chosen."""
+        page = self._page_for_recognition(page)
+        if page is None:
+            return False
+        view = page.view
+        if not view.scanned_known:
+            self.statusBar().showMessage(
+                self.tr("Todavía estoy mirando las páginas. Prueba otra vez en un momento."),
+                STATUS_MESSAGE_MS,
+            )
+            return False
+        pictures = sorted({*view.scanned_pages, *view.recognised_pages})
+        if not pictures:
+            self.statusBar().showMessage(
+                self.tr("Este documento no tiene páginas escaneadas: su texto es el suyo propio."),
+                STATUS_MESSAGE_MS,
+            )
+            return False
+        if self.recognize_again_answer is not None:  # the tests answer without asking
+            pages = [number for number in self.recognize_again_answer if number in pictures]
+        else:
+            dialog = RecognizeAgainDialog(
+                pictures, max(view.current_page, 0), view.page_count, self
+            )
+            if dialog.exec() != QDialog.DialogCode.Accepted or not dialog.pages:
+                return False
+            pages = dialog.pages
+        if not pages:
+            return False
+        return self._start_recognition(page, pages, replace=True)
+
+    def _page_for_recognition(self, page: DocumentPage | None) -> DocumentPage | None:
+        page = page or self.current_document
+        if page is None or page.view.page_count == 0:
+            self.statusBar().showMessage(
+                self.tr("Abre un documento escaneado para reconocer su texto."), STATUS_MESSAGE_MS
+            )
+            return None
+        if page.text_recognition is not None:
+            return None  # already at it
+        if not ocr.is_available():
+            self._show_problem(
+                self.tr("No se puede reconocer el texto"),
+                self.tr("Falta el archivo del idioma español. Vuelve a instalar el programa."),
+            )
+            return None
+        return page
+
+    def _start_recognition(self, page: DocumentPage, pages: list[int], replace=False) -> bool:
+        run = TextRecognition(page.view, pages, page, replace)
         page.text_recognition = run
         run.progressed.connect(page.ocr_banner.show_progress)
         run.finished.connect(
             lambda written, total, failed, cancelled, p=page: self._text_recognised(
-                p, written, total, failed, cancelled
+                p, written, total, failed, cancelled, replace
             )
         )
         run.failed.connect(self._text_recognition_failed)
@@ -2927,7 +2992,13 @@ class MainWindow(QMainWindow):
         return True
 
     def _text_recognised(
-        self, page: DocumentPage, written: int, total: int, failed: int, cancelled: bool
+        self,
+        page: DocumentPage,
+        written: int,
+        total: int,
+        failed: int,
+        cancelled: bool,
+        again: bool = False,
     ) -> None:
         page.text_recognition = None
         page.ocr_banner.finish()
@@ -2941,6 +3012,11 @@ class MainWindow(QMainWindow):
             )
         elif written == 0:
             message = self.tr("No se ha podido reconocer el texto de ninguna página.")
+        elif again:
+            message = self.tr(
+                "Texto reconocido de nuevo en {0} páginas. Con Deshacer vuelve el de antes. "
+                "Se guarda en el PDF al guardar."
+            ).format(written)
         else:
             message = self.tr(
                 "Texto reconocido en {0} páginas: ya puedes buscar, subrayar y copiar. "

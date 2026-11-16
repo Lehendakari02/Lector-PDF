@@ -10,6 +10,14 @@ content stream of its own, added at the end of the page's list of contents,
 and a note on the page (``/LectorPDFOCR``) of which streams are ours: taking
 the text away removes exactly those and nothing else.
 
+Recognising a page again (``replace``) first takes away all the invisible
+text the page has: ours, or another program's. That is done with MuPDF's
+redaction, which writes the page's contents and resources anew and leaves the
+old ones untouched in the file; the page keeps a note of the old ones
+(``/LectorPDFOCRBefore``, one note per time, each pointing to the one before)
+so that Deshacer puts them back exactly. Visible text and pictures are never
+touched; only text that would also be marked over an invisible word could go.
+
 The words use Helvetica, which every reader has, with the Windows letters
 (WinAnsi): every Spanish letter is there (á, ñ, ü, ¿, ¡, €…). A letter outside
 them is written as "?", and the rest of the word is still found.
@@ -21,6 +29,8 @@ from dataclasses import dataclass
 from app.core.commands import CommandError, register_reader
 
 LAYER_KEY = "LectorPDFOCR"  # on the page: the content streams that are ours
+BEFORE_KEY = "LectorPDFOCRBefore"  # on the page: how it was before recognising it again
+INVISIBLE = 3  # the kind of text that is not drawn (``get_texttrace``)
 FONT_NAME = "LectorOCR"  # the name of the font in the page's resources
 FONT_OBJECT = "<</Type/Font/Subtype/Type1/BaseFont/Helvetica/Encoding/WinAnsiEncoding>>"
 ENCODING = "cp1252"
@@ -70,6 +80,8 @@ class AddTextLayer:
     """Write the text read on some pages. Undo takes it away again."""
 
     layers: tuple[PageLayer, ...]
+    # Recognised again: the invisible text the pages had is taken away first.
+    replace: bool = False
 
     text_change = True  # the letters of these pages are different afterwards
 
@@ -80,9 +92,11 @@ class AddTextLayer:
         for layer in self.layers:
             if not 0 <= layer.page < doc.page_count:
                 raise CommandError(f"no page {layer.page}")
-            if has_layer(doc, layer.page):
+            if not self.replace and has_layer(doc, layer.page):
                 raise CommandError(f"page {layer.page} already has its text written")
         for layer in self.layers:
+            if self.replace:
+                clear_invisible_text(doc, layer.page)
             _write(doc, layer)
         return self.pages()
 
@@ -90,13 +104,20 @@ class AddTextLayer:
         for layer in self.layers:
             if not 0 <= layer.page < doc.page_count or not has_layer(doc, layer.page):
                 raise CommandError(f"page {layer.page} has no text written by us")
+            if self.replace and doc.xref_get_key(doc.page_xref(layer.page), BEFORE_KEY)[0] != (
+                "xref"
+            ):
+                raise CommandError(f"page {layer.page} does not remember how it was")
         for layer in self.layers:
             remove_layer(doc, layer.page)
+            if self.replace:
+                _put_back(doc, layer.page)
         return self.pages()
 
     def to_dict(self) -> dict:
         return {
             "what": "text_layer",
+            "replace": self.replace,
             "layers": [
                 {"page": layer.page, "matrix": list(layer.matrix), "words": layer.words}
                 for layer in self.layers
@@ -117,10 +138,64 @@ class AddTextLayer:
             layers.append(PageLayer(int(item["page"]), matrix, words))
         if not layers:
             raise ValueError("no pages")
-        return cls(tuple(layers))
+        return cls(tuple(layers), bool(data.get("replace", False)))
 
 
 register_reader("text_layer", AddTextLayer.from_dict)
+
+
+def has_invisible_text(page) -> bool:
+    """Whether a page has text that is not drawn (what text recognition adds)."""
+    try:
+        return any(span["type"] == INVISIBLE for span in page.get_texttrace())
+    except Exception:
+        return False
+
+
+def _raw(doc, xref: int, key: str) -> str:
+    """A key of an object as written in the file ("null" when it has none)."""
+    kind, value = doc.xref_get_key(xref, key)
+    return value if kind in ("xref", "array", "dict") else "null"
+
+
+def clear_invisible_text(doc, page_number: int) -> None:
+    """Take away all the invisible text of a page, remembering how it was."""
+    import pymupdf
+
+    page = doc[page_number]
+    page_xref = page.xref
+    note = doc.get_new_xref()
+    doc.update_object(
+        note,
+        f"<</Contents {_raw(doc, page_xref, 'Contents')} "
+        f"/Resources {_raw(doc, page_xref, 'Resources')} "
+        f"/Layer {_raw(doc, page_xref, LAYER_KEY)} "
+        f"/Before {_raw(doc, page_xref, BEFORE_KEY)}>>",
+    )
+    spans = [span["bbox"] for span in page.get_texttrace() if span["type"] == INVISIBLE]
+    if spans:
+        for box in spans:
+            page.add_redact_annot(pymupdf.Rect(box))
+        page.apply_redactions(
+            images=pymupdf.PDF_REDACT_IMAGE_NONE,
+            graphics=pymupdf.PDF_REDACT_LINE_ART_NONE,
+            text=pymupdf.PDF_REDACT_TEXT_REMOVE,
+        )
+    doc.xref_set_key(page_xref, LAYER_KEY, "null")  # ours went with the rest
+    doc.xref_set_key(page_xref, BEFORE_KEY, f"{note} 0 R")
+
+
+def _put_back(doc, page_number: int) -> None:
+    """The page as it was before the last ``clear_invisible_text``."""
+    page_xref = doc.page_xref(page_number)
+    note = int(doc.xref_get_key(page_xref, BEFORE_KEY)[1].split()[0])
+    for key, page_key in (
+        ("Contents", "Contents"),
+        ("Resources", "Resources"),
+        ("Layer", LAYER_KEY),
+        ("Before", BEFORE_KEY),
+    ):
+        doc.xref_set_key(page_xref, page_key, _raw(doc, note, key))
 
 
 def has_layer(doc, page_number: int) -> bool:

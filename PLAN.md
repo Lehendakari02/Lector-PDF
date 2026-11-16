@@ -922,8 +922,8 @@ Notas de la Fase 2A:
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
 | 2.15 | Detectar páginas escaneadas y ofrecer "Reconocer texto" | Abro un temario escaneado y me lo ofrece sin molestar | ✅ |
-| 2.16 | OCR en español en segundo plano (progreso, cancelar), enderezando la imagen, guardado como capa de texto estándar | Reconozco un tema escaneado, sigo leyendo mientras tanto, y luego busco en él también en Adobe | 🔶 |
-| 2.17 | Rehacer el OCR de PDFs que ya traen uno malo (todo o páginas) | Un PDF con OCR malo pasa a buscarse bien | ⬜ |
+| 2.16 | OCR en español en segundo plano (progreso, cancelar), enderezando la imagen, guardado como capa de texto estándar | Reconozco un tema escaneado, sigo leyendo mientras tanto, y luego busco en él también en Adobe | ✅ |
+| 2.17 | Rehacer el OCR de PDFs que ya traen uno malo (todo o páginas) | Un PDF con OCR malo pasa a buscarse bien | 🔶 |
 | 2.18 | Buscador y subrayado probados con texto de OCR real; búsqueda aproximada opcional | Subrayo y busco en un escaneado igual que en un PDF del BOE | ⬜ |
 | 2.19 | Versión 0.3 | Estudio un tema escaneado con el programa | ⬜ |
 
@@ -966,6 +966,24 @@ Notas de la Fase 2B:
   - Comprobado aquí con PyMuPDF y con Poppler (el motor de otros lectores): las
     palabras se encuentran en su sitio. **Sin probar en Adobe ni en Edge.**
   - Velocidad medida aquí: unos 2 segundos por página escaneada a 150 ppp.
+- **2.17: volver a reconocer el texto (16/11/2026).**
+  - El ayudante distingue también las páginas escaneadas que ya tienen texto
+    (una imagen con texto invisible encima, de este programa o de otro).
+  - "Volver a reconocer texto" está en la flecha de **Reconocer texto** (modo
+    Estudiar) y en el buscador de funciones. Pregunta qué páginas: todas las
+    escaneadas, la que se está leyendo o las que se escriban ("3-5, 8"). Solo
+    se aceptan páginas escaneadas: el texto propio de un documento no se toca.
+  - Si el documento no tiene páginas sin texto pero sí escaneadas con texto,
+    **Reconocer texto** hace directamente esa pregunta.
+  - Antes de escribir el texto nuevo se quita todo el texto invisible de esas
+    páginas, el bueno y el malo. El texto visible y las imágenes no se tocan;
+    solo se perdería un texto visible que esté justo debajo de una palabra
+    invisible, cosa rara en un escaneo.
+  - Deshacer devuelve exactamente el texto de antes (la página guarda una nota
+    de cómo estaba). Funciona también después de guardar y si se reconoce dos
+    veces seguidas.
+  - No avisa solo de que un OCR es malo: medirlo bien sin un diccionario no es
+    fiable. Se pide con el botón cuando la búsqueda falla.
 
 ## Fase 2C – Herramientas de estudio
 Ordenadas por uso diario.
