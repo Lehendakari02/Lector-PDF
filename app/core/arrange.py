@@ -13,7 +13,7 @@ can be picked and removed, not moved.
 from dataclasses import replace
 
 from app.core.commands import AddMarkup, Command, new_name
-from app.core.drawing import BOX, MIN_SHAPE, OVAL, AddInk, AddShape
+from app.core.drawing import BRACE, LINE_SHAPES, MIN_SHAPE, AddInk, AddShape
 from app.core.notes import (
     MAX_SIZE,
     MIN_BOX_WIDTH,
@@ -83,14 +83,14 @@ def bounds(order: Command, page_width: float = 1e9) -> Rect:
 def handles(order: Command, page_width: float = 1e9) -> list[Point]:
     """Where an order can be grabbed to resize it.
 
-    A line or an arrow, by its two ends; the rest, by the four corners of its
+    A line or an arrow (any of them), by its two ends; the rest, by the four corners of its
     frame (``TOP_LEFT``…). A text also by the middle of its right and left
     sides (``RIGHT_SIDE``, ``LEFT_SIDE``): they change how wide it is, and its
     lines are cut again to fit. A note has none.
     """
     if not can_resize(order):
         return []
-    if isinstance(order, AddShape) and order.kind not in (BOX, OVAL):
+    if isinstance(order, AddShape) and order.kind in LINE_SHAPES:
         return [order.start, order.end]
     x0, y0, x1, y1 = bounds(order, page_width)
     corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
@@ -196,6 +196,12 @@ def _stretched(order: Command, fixed: Point, point: Point, old: Rect, page: Size
     x0, x1 = sorted((fixed[0], x))
     y0, y1 = sorted((fixed[1], y))
     if isinstance(order, AddShape):
+        if order.kind == BRACE:
+            # A brace keeps its tip on the side it had.
+            (sx, sy), (ex, ey) = order.start, order.end
+            xs = (x0, x1) if sx <= ex else (x1, x0)
+            ys = (y0, y1) if sy <= ey else (y1, y0)
+            return replace(order, start=(xs[0], ys[0]), end=(xs[1], ys[1]))
         return replace(order, start=(x0, y0), end=(x1, y1))
     old_width, old_height = old[2] - old[0], old[3] - old[1]
     if isinstance(order, AddInk):

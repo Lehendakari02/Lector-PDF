@@ -1,7 +1,10 @@
-"""Drawing on the page: freehand strokes, lines, arrows, boxes and ovals.
+"""Drawing on the page: freehand strokes, lines, arrows, boxes, ovals and more.
 
-All of them are ordinary PDF annotations ("Ink", "Line", "Square" and
-"Circle"), so Adobe Reader, Edge and any other viewer show them the same. Each
+All of them are ordinary PDF annotations ("Ink", "Line", "Square", "Circle",
+"Polygon" and "PolyLine"), so Adobe Reader, Edge and any other viewer show them
+the same. A closed shape can be filled with a light tone of its colour that
+lets the text underneath be read (it is mixed like a highlighter), and any
+shape can be drawn with a dashed line. Each
 one is put by an order, like every other change, and read back from the
 document by ``page_drawings`` with all it is made of, so that the eraser can
 take it away (and undo can bring it back exactly as it was).
@@ -38,9 +41,19 @@ from app.core.search import Rect
 INK = "ink"
 LINE = "line"
 ARROW = "arrow"
+DOUBLE_ARROW = "double_arrow"
+ELBOW = "elbow"  # an arrow that goes across and then up or down
 BOX = "box"
 OVAL = "oval"
-SHAPES = (LINE, ARROW, BOX, OVAL)
+TRIANGLE = "triangle"
+RHOMBUS = "rhombus"
+BRACE = "brace"  # a curly bracket, "{", that groups what is next to it
+SHAPES = (ARROW, DOUBLE_ARROW, ELBOW, LINE, BOX, OVAL, TRIANGLE, RHOMBUS, BRACE)
+# Drawn from one end to the other; the rest fill the frame between two corners.
+LINE_SHAPES = (LINE, ARROW, DOUBLE_ARROW, ELBOW)
+FRAMED_SHAPES = (BOX, OVAL, TRIANGLE, RHOMBUS, BRACE)
+# The ones that close and can be filled.
+FILLABLE = (BOX, OVAL, TRIANGLE, RHOMBUS)
 DRAWING_KINDS = (INK, *SHAPES)
 # The tools that are held in hand: the pen, the shapes and the eraser.
 DRAW = "draw"
@@ -61,6 +74,11 @@ _BOX_PADDING = 1.0
 # With pressure, a stroke goes from this much to this much of its thickness.
 THINNEST, THICKEST = 0.35, 1.65
 PRESSURE_KEY = "LectorPDFPressure"  # where the annotation keeps the pressures
+# Polygons and broken lines keep what they are and the two points they were
+# drawn between (the PDF only knows their corners).
+SHAPE_KEY = "LectorPDFShape"
+ENDS_KEY = "LectorPDFEnds"
+FILL_LIGHTNESS = 0.72  # how much white the fill has (the rest is the colour)
 _CIRCLE = 0.5523  # how far the handles of a Bézier quarter of circle go
 _NUMBER = re.compile(r"-?\d*\.?\d+")
 _LIST = re.compile(r"\[([^\[\]]*)\]")
@@ -206,6 +224,8 @@ class AddShape:
     width: float
     opacity: float
     name: str
+    fill: bool = False  # a closed shape: filled with a light tone of its colour
+    dashed: bool = False
 
     def pages(self) -> list[int]:
         return [self.page]
@@ -218,23 +238,50 @@ class AddShape:
         try:
             page = doc[self.page]
             if find_annotation(page, self.name) is None:
-                first = pymupdf.Point(self.start) * page.derotation_matrix
-                last = pymupdf.Point(self.end) * page.derotation_matrix
-                if self.kind in (LINE, ARROW):
+                turn = page.derotation_matrix
+                first = pymupdf.Point(self.start) * turn
+                last = pymupdf.Point(self.end) * turn
+                none, arrow = pymupdf.PDF_ANNOT_LE_NONE, pymupdf.PDF_ANNOT_LE_OPEN_ARROW
+                if self.kind in (LINE, ARROW, DOUBLE_ARROW):
                     annotation = page.add_line_annot(first, last)
-                    if self.kind == ARROW:
-                        annotation.set_line_ends(
-                            pymupdf.PDF_ANNOT_LE_NONE, pymupdf.PDF_ANNOT_LE_OPEN_ARROW
-                        )
-                else:
+                    if self.kind != LINE:
+                        start_end = arrow if self.kind == DOUBLE_ARROW else none
+                        annotation.set_line_ends(start_end, arrow)
+                elif self.kind in (BOX, OVAL):
                     rect = pymupdf.Rect(first, last).normalize()
                     add = page.add_rect_annot if self.kind == BOX else page.add_circle_annot
                     annotation = add(rect)
-                annotation.set_border(width=clamp_width(self.width))
-                annotation.set_colors(stroke=self.color)
+                else:
+                    corners = [
+                        pymupdf.Point(point) * turn
+                        for point in shape_points(self.kind, self.start, self.end)
+                    ]
+                    if self.kind in (TRIANGLE, RHOMBUS):
+                        annotation = page.add_polygon_annot(corners)
+                    else:
+                        annotation = page.add_polyline_annot(corners)
+                        if self.kind == ELBOW:
+                            annotation.set_line_ends(none, arrow)
+                width = clamp_width(self.width)
+                if self.dashed:
+                    dash, gap = max(3, round(3 * width)), max(2, round(2 * width))
+                    annotation.set_border(width=width, dashes=[dash, gap])
+                else:
+                    annotation.set_border(width=width)
+                if self.fill and self.kind in FILLABLE:
+                    annotation.set_colors(stroke=self.color, fill=fill_tone(self.color))
+                    # Mixed like a highlighter: the text underneath is still read.
+                    annotation.set_blendmode(pymupdf.PDF_BM_Multiply)
+                else:
+                    annotation.set_colors(stroke=self.color)
                 annotation.set_opacity(max(0.05, _unit(self.opacity)))
                 annotation.update()
                 _name_it(doc, annotation, self.name)
+                if self.kind not in (LINE, ARROW, DOUBLE_ARROW, BOX, OVAL):
+                    ends = [*(pymupdf.Point(self.start) * turn), *(pymupdf.Point(self.end) * turn)]
+                    doc.xref_set_key(annotation.xref, SHAPE_KEY, f"/{self.kind}")
+                    numbers = " ".join(f"{value:.3f}" for value in ends)
+                    doc.xref_set_key(annotation.xref, ENDS_KEY, f"[{numbers}]")
         except CommandError:
             raise
         except Exception as error:
@@ -245,17 +292,21 @@ class AddShape:
         return _remove(doc, self.page, self.name)
 
     def to_dict(self) -> dict:
-        return {
-            "what": "add_shape",
-            "kind": self.kind,
-            "page": self.page,
-            "start": list(self.start),
-            "end": list(self.end),
-            "color": list(self.color),
-            "width": self.width,
-            "opacity": self.opacity,
-            "name": self.name,
-        }
+        return (
+            {
+                "what": "add_shape",
+                "kind": self.kind,
+                "page": self.page,
+                "start": list(self.start),
+                "end": list(self.end),
+                "color": list(self.color),
+                "width": self.width,
+                "opacity": self.opacity,
+                "name": self.name,
+            }
+            | ({"fill": True} if self.fill else {})
+            | ({"dashed": True} if self.dashed else {})
+        )
 
     @classmethod
     def from_dict(cls, data: dict) -> "AddShape":
@@ -269,7 +320,88 @@ class AddShape:
             float(data["width"]),
             float(data.get("opacity", 1.0)),
             str(data["name"]),
+            data.get("fill") is True,
+            data.get("dashed") is True,
         )
+
+
+def fill_tone(color: Color) -> Color:
+    """The light tone a shape is filled with."""
+    return tuple(FILL_LIGHTNESS + (1 - FILL_LIGHTNESS) * part for part in color)
+
+
+def _quadratic(first: Point, control: Point, last: Point, steps: int = 8) -> list[Point]:
+    """Points along a curve from ``first`` to ``last`` pulled towards ``control``."""
+    points = []
+    for step in range(1, steps + 1):
+        t = step / steps
+        a, b, c = (1 - t) ** 2, 2 * (1 - t) * t, t * t
+        points.append(
+            (
+                a * first[0] + b * control[0] + c * last[0],
+                a * first[1] + b * control[1] + c * last[1],
+            )
+        )
+    return points
+
+
+def _brace(length: float, across: float) -> list[Point]:
+    """A curly bracket lying along ``length``, its tip at across 0 and its arms at
+    ``across``, as (along, across) points."""
+    half, bend = across / 2, min(across / 2, length * 0.12)
+    middle = length / 2
+    points: list[Point] = [(0.0, across)]
+    points += _quadratic((0.0, across), (0.0, half), (bend, half))
+    points.append((middle - bend, half))
+    points += _quadratic((middle - bend, half), (middle, half), (middle, 0.0))
+    points += _quadratic((middle, 0.0), (middle, half), (middle + bend, half))
+    points.append((length - bend, half))
+    points += _quadratic((length - bend, half), (length, half), (length, across))
+    return points
+
+
+def straightened(kind: str, start: Point, end: Point) -> Point:
+    """Where ``end`` goes with Shift held: a line keeps to steps of 45 degrees,
+    and a frame is as wide as it is tall (a square, a circle)."""
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    if kind in FRAMED_SHAPES:
+        side = max(abs(dx), abs(dy))
+        return (start[0] + math.copysign(side, dx or 1), start[1] + math.copysign(side, dy or 1))
+    if kind == ELBOW:
+        return end
+    length = math.hypot(dx, dy)
+    angle = round(math.atan2(dy, dx) / (math.pi / 4)) * (math.pi / 4)
+    return (start[0] + length * math.cos(angle), start[1] + length * math.sin(angle))
+
+
+def shape_points(kind: str, start: Point, end: Point) -> list[Point]:
+    """The corners a shape is drawn through, as the page is shown.
+
+    A triangle points up and a rhombus stands on a corner, in the frame from
+    ``start`` to ``end``. An elbow goes across from ``start`` and then up or
+    down to ``end``. A brace has its tip on the side it was started from: from
+    left to right it is "{", the other way "}"; in a frame wider than tall it
+    lies down.
+    """
+    (sx, sy), (ex, ey) = start, end
+    x0, x1 = sorted((sx, ex))
+    y0, y1 = sorted((sy, ey))
+    if kind == TRIANGLE:
+        return [((x0 + x1) / 2, y0), (x1, y1), (x0, y1)]
+    if kind == RHOMBUS:
+        mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+        return [(mx, y0), (x1, my), (mx, y1), (x0, my)]
+    if kind == ELBOW:
+        return [start, (ex, sy), end]
+    if kind == BRACE:
+        if y1 - y0 >= x1 - x0:  # standing
+            way = 1.0 if sx <= ex else -1.0
+            return [(sx + way * across, y0 + along) for along, across in _brace(y1 - y0, x1 - x0)]
+        way = 1.0 if sy <= ey else -1.0
+        return [(x0 + along, sy + way * across) for along, across in _brace(x1 - x0, y1 - y0)]
+    if kind in (BOX, OVAL):
+        return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+    return [start, end]
 
 
 register_reader("add_ink", AddInk.from_dict)
@@ -299,12 +431,17 @@ def new_shape(
     color: Color = SHAPE_COLOR,
     width: float = DEFAULT_WIDTH,
     opacity: float = 1.0,
+    fill: bool = False,
+    dashed: bool = False,
 ) -> AddShape | None:
     """The order for a shape, or None if it is too small to be meant."""
     (start, end) = _points((start, end))
     if math.dist(start, end) < MIN_SHAPE:
         return None
-    return AddShape(kind, page, start, end, color, clamp_width(width), opacity, new_name())
+    fill = bool(fill) and kind in FILLABLE
+    return AddShape(
+        kind, page, start, end, color, clamp_width(width), opacity, new_name(), fill, bool(dashed)
+    )
 
 
 def thinned(points, apart: float = 0.7) -> tuple[Point, ...]:
@@ -479,6 +616,8 @@ class PageDrawing:
     opacity: float = 1.0
     rects: tuple[Rect, ...] = ()  # a text mark: one rectangle per line
     pressures: tuple[tuple[float, ...], ...] = ()  # ink drawn with a pen that feels it
+    fill: bool = False  # a shape filled with a light tone of its colour
+    dashed: bool = False
 
     @property
     def ours(self) -> bool:
@@ -502,7 +641,16 @@ class PageDrawing:
             )
         start, end = self.strokes[0]
         return AddShape(
-            self.kind, self.page, start, end, self.color, self.width, self.opacity, self.name
+            self.kind,
+            self.page,
+            start,
+            end,
+            self.color,
+            self.width,
+            self.opacity,
+            self.name,
+            self.fill,
+            self.dashed,
         )
 
     def touches(self, x: float, y: float, reach: float = 3.0) -> bool:
@@ -515,14 +663,33 @@ class PageDrawing:
             return False
         if self.kind == BOX:
             inside = x0 + near < x < x1 - near and y0 + near < y < y1 - near
-            return not inside
+            return self.fill or not inside
         if self.kind == OVAL:
-            return _near_oval(self.rect, x, y, near)
+            return _near_oval(self.rect, x, y, near) or (
+                self.fill and _near_oval(self.rect, x, y, 0.0)
+            )
+        if self.kind in (TRIANGLE, RHOMBUS, ELBOW, BRACE):
+            start, end = self.strokes[0]
+            corners = shape_points(self.kind, start, end)
+            closed = self.kind in (TRIANGLE, RHOMBUS)
+            if closed and self.fill and _in_polygon((x, y), corners):
+                return True
+            pairs = zip(corners, corners[1:] + corners[:1] if closed else corners[1:], strict=False)
+            return any(_to_segment((x, y), first, second) <= near for first, second in pairs)
         return any(
             _to_segment((x, y), first, second) <= near
             for stroke in self.strokes
             for first, second in zip(stroke, stroke[1:], strict=False)
         )
+
+
+def _in_polygon(point: Point, corners: list[Point]) -> bool:
+    x, y = point
+    inside = False
+    for (ax, ay), (bx, by) in zip(corners, corners[1:] + corners[:1], strict=True):
+        if (ay > y) != (by > y) and x < ax + (y - ay) * (bx - ax) / (by - ay):
+            inside = not inside
+    return inside
 
 
 def _to_segment(point: Point, first: Point, second: Point) -> float:
@@ -565,6 +732,26 @@ def _common(annotation) -> tuple[Color, float, float]:
     return color, clamp_width(width), 1.0 if opacity is None or opacity < 0 else float(opacity)
 
 
+def _look(annotation) -> tuple[bool, bool]:
+    """Whether a shape is filled and whether its line is dashed."""
+    fill = bool((annotation.colors or {}).get("fill"))
+    dashed = bool((annotation.border or {}).get("dashes"))
+    return fill, dashed
+
+
+def _our_shape(doc, page, annotation) -> tuple[str, tuple[Point, Point]] | None:
+    """A polygon or a broken line made here: what it is and its two points."""
+    kind = doc.xref_get_key(annotation.xref, SHAPE_KEY)
+    ends = doc.xref_get_key(annotation.xref, ENDS_KEY)
+    if kind[0] != "name" or ends[0] != "array":
+        return None
+    numbers = [float(n) for n in _NUMBER.findall(ends[1])]
+    shape = kind[1].lstrip("/")
+    if shape not in SHAPES or len(numbers) != 4:
+        return None
+    return shape, (_shown(page, numbers[:2]), _shown(page, numbers[2:]))
+
+
 def page_drawings(doc, page_number: int) -> list[PageDrawing]:
     """What is drawn or marked on a page, by this program or by any other."""
     import pymupdf
@@ -588,11 +775,52 @@ def page_drawings(doc, page_number: int) -> list[PageDrawing]:
             )
         elif kind == "Line" and len(vertices) == 2:
             ends = (_shown(page, vertices[0]), _shown(page, vertices[1]))
-            arrow = annotation.line_ends[1] != pymupdf.PDF_ANNOT_LE_NONE
-            shape = ARROW if arrow else LINE
+            at_start, at_end = (end != pymupdf.PDF_ANNOT_LE_NONE for end in annotation.line_ends)
+            if at_start and at_end:
+                shape = DOUBLE_ARROW
+            elif at_start or at_end:
+                shape = ARROW
+                if at_start:  # made elsewhere, pointing back: the same arrow
+                    ends = (ends[1], ends[0])
+            else:
+                shape = LINE
             found.append(
-                PageDrawing(shape, page_number, name, rect, (ends,), color, width, opacity)
+                PageDrawing(
+                    shape,
+                    page_number,
+                    name,
+                    rect,
+                    (ends,),
+                    color,
+                    width,
+                    opacity,
+                    (),
+                    (),
+                    False,
+                    _look(annotation)[1],
+                )
             )
+        elif kind in ("Polygon", "PolyLine"):
+            ours = _our_shape(doc, page, annotation)
+            if ours is not None:
+                shape, ends = ours
+                fill, dashed = _look(annotation)
+                found.append(
+                    PageDrawing(
+                        shape,
+                        page_number,
+                        name,
+                        rect,
+                        (ends,),
+                        color,
+                        width,
+                        opacity,
+                        (),
+                        (),
+                        fill,
+                        dashed,
+                    )
+                )
         elif kind in ("Square", "Circle"):
             inner = (
                 whole.x0 + _BOX_PADDING,
@@ -602,8 +830,22 @@ def page_drawings(doc, page_number: int) -> list[PageDrawing]:
             )
             corners = ((inner[0], inner[1]), (inner[2], inner[3]))
             shape = BOX if kind == "Square" else OVAL
+            fill, dashed = _look(annotation)
             found.append(
-                PageDrawing(shape, page_number, name, inner, (corners,), color, width, opacity)
+                PageDrawing(
+                    shape,
+                    page_number,
+                    name,
+                    inner,
+                    (corners,),
+                    color,
+                    width,
+                    opacity,
+                    (),
+                    (),
+                    fill,
+                    dashed,
+                )
             )
         elif kind in _MARKUP_TYPES and len(vertices) >= 4:
             rects = []

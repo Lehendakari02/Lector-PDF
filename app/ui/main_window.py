@@ -43,7 +43,21 @@ from app import APP_NAME, BUILD_LABEL, __version__
 from app.core import pen, save_checks, save_settings, saving, symbols
 from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
 from app.core.document import PdfDocument, PdfOpenError, engine_version
-from app.core.drawing import ARROW, BOX, DRAW, ERASER, LINE, OVAL, SHAPE_TOOL, WIDTHS
+from app.core.drawing import (
+    ARROW,
+    BOX,
+    BRACE,
+    DOUBLE_ARROW,
+    DRAW,
+    ELBOW,
+    ERASER,
+    LINE,
+    OVAL,
+    RHOMBUS,
+    SHAPE_TOOL,
+    TRIANGLE,
+    WIDTHS,
+)
 from app.core.error_log import running_from_source_or_test_build
 from app.core.favourites import MAX_FAVOURITES, Favourites, apply_to, favourite_of
 from app.core.history import History, file_key
@@ -93,6 +107,7 @@ from app.ui.print_run import PrintRun
 from app.ui.recovery_dialog import RecoveryDialog
 from app.ui.search_panel import SearchPanel
 from app.ui.settings_dialog import SettingsDialog
+from app.ui.shape_icons import shape_icon
 from app.ui.side_panel import SidePanel, Tab
 from app.ui.sign_dialog import CertificateDialog
 from app.ui.theme import PAPER_SETTING, THEME_SETTING, Paper, Theme, apply_theme
@@ -565,6 +580,10 @@ class MainWindow(QMainWindow):
         if kind == SHAPE_TOOL:
             tool = self.shape_actions[favourite.shape].text()
         parts = [tool, self.color_menus[kind].swatch_name(favourite.color).lower()]
+        if kind == SHAPE_TOOL and favourite.fill:
+            parts.append(self.tr("relleno"))
+        if kind == SHAPE_TOOL and favourite.dashed:
+            parts.append(self.tr("discontinua"))
         named = self.width_actions.get(kind, {})
         if favourite.width in named and favourite.width != WIDTHS[1]:
             parts.append(named[favourite.width].text().lower())
@@ -687,16 +706,41 @@ class MainWindow(QMainWindow):
         first = menu.actions()[0]
         for shape, name in (
             (ARROW, self.tr("Flecha")),
+            (DOUBLE_ARROW, self.tr("Flecha doble")),
+            (ELBOW, self.tr("Flecha en codo")),
             (LINE, self.tr("Línea")),
             (BOX, self.tr("Recuadro")),
             (OVAL, self.tr("Óvalo")),
+            (TRIANGLE, self.tr("Triángulo")),
+            (RHOMBUS, self.tr("Rombo")),
+            (BRACE, self.tr("Llave { }")),
         ):
-            action = QAction(name, menu)
+            action = QAction(shape_icon(shape), name, menu)
             action.setCheckable(True)
             action.triggered.connect(lambda _checked=False, k=shape: self.set_shape(k))
             group.addAction(action)
             menu.insertAction(first, action)
             self.shape_actions[shape] = action
+        self.shape_actions[BRACE].setToolTip(
+            self.tr("Arrastrando hacia la derecha sale {, hacia la izquierda }")
+        )
+        menu.insertSeparator(first)
+        self.shape_fill_action = QAction(self.tr("Relleno claro"), menu)
+        self.shape_fill_action.setCheckable(True)
+        self.shape_fill_action.setToolTip(
+            self.tr(
+                "Recuadros, óvalos, triángulos y rombos, rellenos de un tono claro que deja leer"
+            )
+        )
+        self.shape_fill_action.toggled.connect(self.set_shape_fill)
+        menu.insertAction(first, self.shape_fill_action)
+        self.shape_dashed_action = QAction(self.tr("Línea discontinua"), menu)
+        self.shape_dashed_action.setCheckable(True)
+        self.shape_dashed_action.toggled.connect(self.set_shape_dashed)
+        menu.insertAction(first, self.shape_dashed_action)
+        note = QAction(self.tr("Con Mayús: líneas rectas, cuadrados y círculos"), menu)
+        note.setEnabled(False)
+        menu.insertAction(first, note)
         menu.insertSeparator(first)
 
     def _add_width_choices(self, menu: ColorMenu, kind: str) -> None:
@@ -721,6 +765,18 @@ class MainWindow(QMainWindow):
         """Choose the shape that is drawn (arrow, line, box or oval) and take it."""
         self.marker_styles.set_shape(shape)
         self._line_style_chosen(SHAPE_TOOL)
+
+    def set_shape_fill(self, fill: bool) -> None:
+        """Fill the closed shapes with a light tone, or not."""
+        if fill != self.marker_styles.shape_fill:
+            self.marker_styles.set_shape_fill(fill)
+            self._line_style_chosen(SHAPE_TOOL)
+
+    def set_shape_dashed(self, dashed: bool) -> None:
+        """Draw the shapes with a dashed line, or not."""
+        if dashed != self.marker_styles.shape_dashed:
+            self.marker_styles.set_shape_dashed(dashed)
+            self._line_style_chosen(SHAPE_TOOL)
 
     def set_line_width(self, kind: str, width: float) -> None:
         """Choose how thick the pen or the shapes draw, and take that tool."""
@@ -770,6 +826,13 @@ class MainWindow(QMainWindow):
             action.setChecked(size == self.marker_styles.text_size)
         for shape, action in self.shape_actions.items():
             action.setChecked(shape == self.marker_styles.shape)
+        for action, on in (
+            (self.shape_fill_action, self.marker_styles.shape_fill),
+            (self.shape_dashed_action, self.marker_styles.shape_dashed),
+        ):
+            action.blockSignals(True)
+            action.setChecked(on)
+            action.blockSignals(False)
         for kind, actions in self.width_actions.items():
             for width, action in actions.items():
                 action.setChecked(width == self.marker_styles.width_of(kind))
@@ -823,6 +886,8 @@ class MainWindow(QMainWindow):
         view.shape_color, view.shape_opacity = shapes.color, shapes.opacity
         view.shape_width = self.marker_styles.width_of(SHAPE_TOOL)
         view.shape_kind = self.marker_styles.shape
+        view.shape_fill = self.marker_styles.shape_fill
+        view.shape_dashed = self.marker_styles.shape_dashed
 
     def set_marker_color(self, kind: str, color: tuple[float, float, float]) -> None:
         """Choose the colour of a marking tool and use it at once.

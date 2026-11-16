@@ -391,3 +391,22 @@ Con un documento abierto, en el modo Estudiar.
    convierte en flecha". Ahora `->` se queda como está.
 6. Guarda y abre el PDF en Edge y en Adobe Reader: las flechas y los símbolos
    se ven igual.
+
+## Tarea 2.13c – Más formas y más cómodas
+
+1. Abre la flecha del botón **Formas**: están Flecha, Flecha doble, Flecha en
+   codo, Línea, Recuadro, Óvalo, Triángulo, Rombo y Llave, cada una con su
+   dibujito.
+2. Elige **Llave** y arrastra de arriba a abajo, un poco hacia la derecha:
+   sale "{". Arrastra hacia la izquierda: sale "}".
+3. Dibuja un recuadro: queda elegido, con sus tiradores. Arrastra una esquina:
+   cambia de tamaño. Arrástralo por su borde: se mueve. Pulsa Supr: se va.
+4. Dibuja otro recuadro lejos del primero: se empieza uno nuevo.
+5. Marca **Relleno claro** y dibuja un recuadro encima de una frase: se ve
+   coloreado y la frase se sigue leyendo.
+6. Marca **Línea discontinua** y dibuja un rombo: sale con rayas.
+7. Con **Mayús** pulsada al soltar: una línea sale recta y un óvalo, redondo.
+8. Guarda una favorita con el relleno y comprueba que al usarla vuelve el
+   relleno.
+9. Guarda y abre el PDF en Edge y en Adobe Reader: las formas se ven igual,
+   con su relleno y sus rayas.

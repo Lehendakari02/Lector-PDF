@@ -42,6 +42,8 @@ class Favourite:
     font: str = SANS  # the text
     size: float = TEXT_SIZE  # the text
     name: str = ""  # given by the user; empty: the program describes it
+    fill: bool = False  # the shapes
+    dashed: bool = False  # the shapes
 
     def same_tool(self, other: "Favourite") -> bool:
         """Whether both are the same tool used the same way (the name aside)."""
@@ -57,6 +59,10 @@ class Favourite:
             data["width"] = self.width
         if self.kind == SHAPE_TOOL:
             data["shape"] = self.shape
+            if self.fill:
+                data["fill"] = True
+            if self.dashed:
+                data["dashed"] = True
         if self.kind == TEXT_BOX:
             data["font"], data["size"] = self.font, self.size
         if self.name:
@@ -73,6 +79,7 @@ class Favourite:
         if color is None:
             return None
         shape, font, name = data.get("shape"), data.get("font"), data.get("name")
+        shaped = kind == SHAPE_TOOL
         return cls(
             kind,
             color,
@@ -82,6 +89,8 @@ class Favourite:
             font if kind == TEXT_BOX and font in FONTS else SANS,
             clamp_size(data.get("size")) if kind == TEXT_BOX else TEXT_SIZE,
             clean_name(name),
+            shaped and data.get("fill") is True,
+            shaped and data.get("dashed") is True,
         )
 
 
@@ -103,6 +112,8 @@ def favourite_of(styles: MarkerStyles, kind: str) -> Favourite:
         styles.shape if kind == SHAPE_TOOL else DEFAULT_SHAPE,
         styles.text_font if kind == TEXT_BOX else SANS,
         styles.text_size if kind == TEXT_BOX else TEXT_SIZE,
+        fill=kind == SHAPE_TOOL and styles.shape_fill,
+        dashed=kind == SHAPE_TOOL and styles.shape_dashed,
     )
 
 
@@ -116,6 +127,8 @@ def apply_to(styles: MarkerStyles, favourite: Favourite) -> None:
         styles.set_width(kind, favourite.width)
     if kind == SHAPE_TOOL:
         styles.set_shape(favourite.shape)
+        styles.set_shape_fill(favourite.fill)
+        styles.set_shape_dashed(favourite.dashed)
     if kind == TEXT_BOX:
         styles.set_text_font(favourite.font)
         styles.set_text_size(favourite.size)
