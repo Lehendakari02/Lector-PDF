@@ -484,3 +484,82 @@ def test_typed_arrows_are_turned_off_in_the_settings(window, opened):
     QTest.keyClicks(editor.edit, "a -> b")
     assert editor.edit.toPlainText() == "a -> b"
     editor.cancel()
+
+
+# ---- moving it, and what is under it (16/11 test) ----------------------------------
+
+
+def drag(widget, start: QPoint, by: QPoint) -> None:
+    """Press, move and let go, as a hand would: the widget may move under it."""
+    first = widget.mapToGlobal(start)
+    QTest.mousePress(widget, LEFT, NO_KEYS, start)
+    for step in range(1, 5):
+        QTest.mouseMove(widget, widget.mapFromGlobal(first + by * step / 4))
+    QTest.mouseRelease(widget, LEFT, NO_KEYS, widget.mapFromGlobal(first + by))
+
+
+def test_bigger_letters_on_the_left_and_smaller_on_the_right(window, opened):
+    view, _ = opened()
+    editor = start(window, view)
+    assert editor.bigger_button.x() < editor.size_label.x() < editor.smaller_button.x()
+    editor.cancel()
+
+
+def test_an_open_text_is_moved_by_its_handle(window, with_text, wait_until):
+    view, _ = with_text
+    editor = open_it(view)
+    assert editor.mover.isVisible()
+    centre = editor.mover.rect().center()
+    drag(editor.mover, centre, QPoint(round(40 * view._zoom), round(30 * view._zoom)))
+    spot, first = place(view, 0, 100, 330), text_start(editor)
+    assert abs(first.x() - spot.x()) <= 2, "the editor goes with the hand"
+    editor.save()
+    settle(view, wait_until)
+    (box,) = view.notes_of(0)
+    assert box.text == "antes" and box.rect[:2] == pytest.approx((100, 330), abs=1.5)
+    view.undo()
+    settle(view, wait_until)
+    assert view.notes_of(0)[0].rect[:2] == pytest.approx((60, 300), abs=0.01)
+
+
+def test_a_new_text_is_moved_before_it_is_left(window, opened, wait_until):
+    view, _ = opened()
+    editor = start(window, view, 60, 300)
+    QTest.keyClicks(editor.edit, "nuevo")
+    origin = view._editor_place[1:]
+    centre = editor.mover.rect().center()
+    drag(editor.mover, centre, QPoint(round(-20 * view._zoom), round(50 * view._zoom)))
+    editor.save()
+    settle(view, wait_until)
+    (box,) = view.notes_of(0)
+    assert box.rect[:2] == pytest.approx((origin[0] - 20, origin[1] + 50), abs=1.5)
+
+
+def test_with_the_text_tool_in_hand_a_text_is_dragged_and_removed_with_supr(
+    window, with_text, wait_until
+):
+    view, _ = with_text
+    window.use_writing_tool(TEXT_BOX)
+    drag(
+        view.viewport(), place(view, 0, 70, 310), place(view, 0, 170, 410) - place(view, 0, 70, 310)
+    )
+    settle(view, wait_until)
+    assert view.note_panel is None, "dragged: moved, not opened"
+    (box,) = view.notes_of(0)
+    assert box.rect[:2] == pytest.approx((160, 400), abs=1.5)
+    assert view.picked_item() is not None
+    QTest.keyClick(view, Qt.Key.Key_Delete)
+    settle(view, wait_until)
+    assert view.notes_of(0) == []
+
+
+def test_while_a_text_is_changed_the_page_under_it_is_seen(window, with_text, wait_until):
+    view, _ = with_text
+    name = view.notes_of(0)[0].name
+    editor = open_it(view)
+    assert view._look(0) == (name,)
+    wait_until(lambda: not editor._covering)
+    assert "transparent" in editor.box.styleSheet(), "no white frame over the page"
+    editor.cancel()
+    assert view._look(0) is True
+    wait_until(lambda: 0 not in view._stale)

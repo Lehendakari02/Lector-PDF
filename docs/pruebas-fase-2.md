@@ -509,3 +509,16 @@ Con un documento abierto, en el modo Estudiar.
 5. Marca **Aproximada, para escaneados**: ahora encuentra "Articu1o".
    "Palabra completa" y "Coincidencia exacta" se apagan mientras está marcada.
 6. Desmárcala: vuelve la búsqueda normal.
+
+## Arreglos 2.19a – Mover textos y que no tapen
+
+1. Con la herramienta **Texto**, escribe un texto entre dos líneas del temario
+   y pulsa fuera. Vuelve a hacer clic en él: se abre y **no sale ningún fondo
+   blanco**; se sigue viendo el temario alrededor de las letras.
+2. A la izquierda del texto abierto hay un asa azul con cuatro flechas.
+   Arrástrala: el texto va contigo. Pulsa **Hecho**: se queda en su sitio
+   nuevo. Deshacer lo devuelve a donde estaba.
+3. Con la herramienta Texto todavía en la mano, **arrastra** un texto ya puesto
+   (sin abrirlo): se mueve. Queda elegido: pulsa **Supr** y se borra.
+4. En la barra del texto, **A+** (más grande) está a la izquierda y **A−**
+   (más pequeña) a la derecha.

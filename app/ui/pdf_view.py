@@ -393,6 +393,9 @@ class PdfView(QAbstractScrollArea):
         self._settling: dict[int, list[tuple]] = {}
         # False: the pages are seen clean, without marks, notes or drawings.
         self._annotations_shown = True
+        # A text being changed in its editor: (page, its name). Its page is
+        # drawn without it, so that only the editor shows it.
+        self._hiding: tuple[int, str] | None = None
         # The pen and the fingers (the window gives what the user chose).
         self.pen_pressure = True  # a stroke is thicker where the pen presses more
         self.finger_mode = pen.AUTO
@@ -1164,12 +1167,16 @@ class PdfView(QAbstractScrollArea):
             if page in self._failed_pages:
                 continue  # it cannot be drawn: asking again would only fail again
             if page not in self._cache or self._cache[page][0] != zoom or page in self._stale:
-                self._wanted.append(
-                    RenderRequest(page, zoom, self._rotation, self._annotations_shown)
-                )
+                self._wanted.append(RenderRequest(page, zoom, self._rotation, self._look(page)))
         self.service.want(self._wanted)
         for page in visible:
             self._want_notes(page)
+
+    def _look(self, page: int) -> bool | tuple[str, ...]:
+        """What of the annotations a page is drawn with (see ``RenderRequest``)."""
+        if self._hiding is not None and self._hiding[0] == page and self._annotations_shown:
+            return (self._hiding[1],)
+        return self._annotations_shown
 
     def _helper_restarted(self) -> None:
         """The helper died and a new one takes over: ask again for what was pending."""
@@ -1195,7 +1202,7 @@ class PdfView(QAbstractScrollArea):
             return
         if result.rotation != self._rotation:
             return  # drawn before the view was turned
-        if result.annotations != self._annotations_shown:
+        if result.annotations != self._look(result.page):
             return  # drawn before the annotations were hidden or shown
         image = QImage(
             result.samples,
@@ -1214,6 +1221,8 @@ class PdfView(QAbstractScrollArea):
         self._cache_bytes += image.sizeInBytes()
         self._trim_cache()
         self.page_drawn.emit(result.page, result.seconds)
+        if isinstance(result.annotations, tuple) and isinstance(self.note_panel, TextEditor):
+            self.note_panel.set_covering(False)  # the page no longer shows the old text
         self._want_text(result.page)  # a page on screen can be selected at once
         if result.page in self._visible_pages():
             self.viewport().update()
@@ -1721,7 +1730,33 @@ class PdfView(QAbstractScrollArea):
     def _panel_closed(self) -> None:
         self.note_panel = None
         self._editor_place = None
+        if self._hiding is not None:
+            page, self._hiding = self._hiding[0], None
+            self._stale.add(page)  # drawn again with the text in its place
+            self._request_pages()
         self.setFocus()
+
+    def _hide_while_editing(self, page: int, name: str) -> None:
+        self._hiding = (page, name)
+        self._stale.add(page)
+        self._request_pages()
+
+    def _editor_origin(self, origin: tuple[float, float]) -> tuple[float, float]:
+        """Where the text being written starts now: it may have been moved."""
+        if self._editor_place is None:
+            return origin
+        return self._editor_place[1], self._editor_place[2]
+
+    def _editor_moved(self, dx: float, dy: float) -> None:
+        """The text being written was dragged by its handle (points of the page)."""
+        if self._editor_place is None:
+            return
+        page, x, y = self._editor_place
+        size = self._sizes[page]
+        x = max(0.0, min(size.width - notes.MIN_BOX_WIDTH, x + dx))
+        y = max(0.0, min(size.height - 4.0, y + dy))
+        self._editor_place = (page, x, y)
+        self._place_editor()
 
     def start_note(
         self, kind: str, page: int, x: float, y: float, near: QPoint
@@ -1747,8 +1782,7 @@ class PdfView(QAbstractScrollArea):
             editor.saved.connect(
                 lambda text: self.put_text_box(
                     page,
-                    x,
-                    y,
+                    *self._editor_origin((x, y)),
                     text,
                     editor.width_chosen,
                     font=editor.font_name,
@@ -1791,11 +1825,14 @@ class PdfView(QAbstractScrollArea):
                     color=editor.color,
                     bold=editor.bold,
                     width=editor.width_chosen,
+                    origin=self._editor_origin(now.origin),
                 )
             )
             editor.removed.connect(lambda: self.remove_note(note))
             self.pick(None)
-            return self._show_editor(editor, now.page, *now.origin)
+            shown = self._show_editor(editor, now.page, *now.origin)
+            self._hide_while_editing(now.page, now.name)
+            return shown
         panel = NotePanel(
             note.kind,
             note.text,
@@ -1822,6 +1859,7 @@ class PdfView(QAbstractScrollArea):
         self._editor_place = (page, x, y)
         editor.closed.connect(self._panel_closed)
         editor.style_chosen.connect(self.text_style_chosen)
+        editor.moved.connect(self._editor_moved)
         self._place_editor()
         editor.start()
         return editor
@@ -2066,7 +2104,7 @@ class PdfView(QAbstractScrollArea):
         grab, self._grab = self._grab, None
         if grab["change"] is not None:
             self._do(grab["change"])
-        elif not grab["moved"] and grab["item"].kind == NOTE:
+        elif not grab["moved"] and (grab["item"].kind == NOTE or grab.get("open")):
             self.open_note(grab["item"], position)  # a plain click on a note opens it
         self.viewport().update()
 
@@ -2253,10 +2291,16 @@ class PdfView(QAbstractScrollArea):
             self.pick(None)
         note = self.note_under(position)
         writing = self._markup_tool in (NOTE, TEXT_BOX)
+        if writing and note is not None and note.ours and note.kind == TEXT_BOX:
+            # Dragged, the text moves; a plain click opens it to write.
+            self._start_grab(note, None, position)
+            self._grab["open"] = True
+            return
         if note is not None and (note.kind == NOTE or writing):
             self.open_note(note, position)
             return
         if writing:
+            self.pick(None)
             point = self._point_on_page(position)
             if point is not None:
                 self.start_note(self._markup_tool, *point, position)

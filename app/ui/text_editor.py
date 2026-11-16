@@ -55,6 +55,7 @@ FIRST_BASELINE = 0.8
 LINE_STEP = 1.2
 INSET = 5  # between the frame and the text, on the screen
 GRIP_WIDTH = 10
+MOVER_SIZE = 20  # the handle that moves the text, on its left
 BAR_GAP = 6
 MIN_SHOWN_WIDTH = 60  # of an empty text, so that there is somewhere to see the caret
 # The colours to write with that are one click away: black, blue, red, green.
@@ -129,6 +130,55 @@ class _Grip(QWidget):
         )
 
 
+class _Mover(QWidget):
+    """The handle on the top left corner of the frame: dragged, the text moves."""
+
+    dragged = Signal(QPoint)  # how far it went since the last time, in screen units
+    released = Signal()
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.setCursor(Qt.CursorShape.SizeAllCursor)
+        self.setToolTip(self.tr("Arrastra para mover el texto"))
+        self.setAccessibleName(self.tr("Mover el texto"))
+        self._last: QPoint | None = None
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        self._last = event.globalPosition().toPoint()
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        if self._last is not None:
+            now = event.globalPosition().toPoint()
+            self.dragged.emit(now - self._last)
+            self._last = now
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        if self._last is not None:
+            self._last = None
+            self.released.emit()
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        from PySide6.QtGui import QPainter, QPen
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        accent = QColor(theme.colours().accent)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(accent)
+        painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 4, 4)
+        # Four little arrows: "it moves every way".
+        painter.setPen(QPen(QColor("white"), 1.6))
+        middle = self.rect().center()
+        reach = self.width() // 2 - 4
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            tip = middle + QPoint(dx * reach, dy * reach)
+            painter.drawLine(middle, tip)
+            side = QPoint(dy * 2, dx * 2)
+            back = tip - QPoint(dx * 3, dy * 3)
+            painter.drawLine(tip, back + side)
+            painter.drawLine(tip, back - side)
+
+
 class _Edit(QTextEdit):
     """Where the text is typed, always with the letter it will have on the page."""
 
@@ -160,6 +210,7 @@ class TextEditor(QWidget):
 
     saved = Signal(str)
     removed = Signal()
+    moved = Signal(float, float)  # dragged by its handle, by so many points of the page
     closed = Signal()
     style_chosen = Signal(dict)
 
@@ -195,6 +246,10 @@ class TextEditor(QWidget):
         self._room = notes.MAX_BOX_WIDTH  # points up to the right edge of the page
         self._origin = QPoint(0, 0)  # where the box starts, in the parent
         self._drag_width = 0.0
+        # An existing text covers its old look on the page until the page is
+        # drawn without it.
+        self._covering = existing
+        self._shift = (0.0, 0.0)  # how far it was moved by its handle, in points
 
         self.box = QFrame(self)
         self.box.setObjectName("textEditorBox")
@@ -222,21 +277,25 @@ class TextEditor(QWidget):
         self.grip.dragged.connect(self._grip_dragged)
         self.grip.released.connect(self._grip_released)
         self.grip.reset.connect(lambda: self.set_width(0.0))
+        self.mover = _Mover(self)
+        self.mover.dragged.connect(self._mover_dragged)
+        self.mover.released.connect(self.edit.setFocus)
 
         self.bar = QFrame(self)
         self.bar.setObjectName("textEditorBar")
         row = QHBoxLayout(self.bar)
         row.setContentsMargins(6, 4, 6, 4)
         row.setSpacing(4)
-        self.smaller_button = self._button("A−", self.tr("Letra más pequeña"), self.smaller)
-        row.addWidget(self.smaller_button)
+        # Bigger on the left, smaller on the right (as Julen reads them).
+        self.bigger_button = self._button("A+", self.tr("Letra más grande"), self.bigger)
+        row.addWidget(self.bigger_button)
         self.size_label = QLabel()
         self.size_label.setObjectName("textEditorSize")
         self.size_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.size_label.setMinimumWidth(26)
         row.addWidget(self.size_label)
-        self.bigger_button = self._button("A+", self.tr("Letra más grande"), self.bigger)
-        row.addWidget(self.bigger_button)
+        self.smaller_button = self._button("A−", self.tr("Letra más pequeña"), self.smaller)
+        row.addWidget(self.smaller_button)
         self.bold_button = self._button("N", self.tr("Negrita (Ctrl+B)"), self.set_bold)
         self.bold_button.setCheckable(True)
         self.bold_button.setObjectName("textEditorBold")
@@ -428,12 +487,24 @@ class TextEditor(QWidget):
         self.bigger_button.setEnabled(self.size < TEXT_SIZES[-1])
         tone = on_paper(self.color)
         accent = theme.colours().accent
-        paper = on_paper((1.0, 1.0, 1.0)).name() if self.existing else "transparent"
+        paper = on_paper((1.0, 1.0, 1.0)).name() if self._covering else "transparent"
         self.box.setStyleSheet(
             f"QFrame#textEditorBox {{ background: {paper}; border: 1px dashed {accent}; }}"
             f"QTextEdit#textEditorEdit {{ background: transparent; color: {tone.name()}; }}"
         )
         self._arrange()
+
+    def set_covering(self, covering: bool) -> None:
+        """Whether the frame hides the page under it (the old look of the text)."""
+        if covering != self._covering:
+            self._covering = covering
+            self._show_style()
+
+    def _mover_dragged(self, by: QPoint) -> None:
+        if self._zoom > 0:
+            dx, dy = by.x() / self._zoom, by.y() / self._zoom
+            self._shift = (self._shift[0] + dx, self._shift[1] + dy)
+            self.moved.emit(dx, dy)
 
     def _screen_font(self) -> QFont:
         font = QFont()
@@ -515,18 +586,27 @@ class TextEditor(QWidget):
             if bar.right() > parent.width() - 4:
                 bar.moveLeft(max(4, parent.width() - 4 - bar.width()))
         grip = QRect(box.right() + 1 - GRIP_WIDTH // 2, box.top(), GRIP_WIDTH, box.height())
-        whole = box.united(bar).united(grip)
+        mover = QRect(
+            box.left() - MOVER_SIZE - 2,
+            box.top() + (box.height() - MOVER_SIZE) // 2,
+            MOVER_SIZE,
+            MOVER_SIZE,
+        )
+        whole = box.united(bar).united(grip).united(mover)
         self.setGeometry(whole)
         self.box.setGeometry(box.translated(-whole.topLeft()))
         self.edit.move(INSET, INSET)
         self.bar.move(bar.topLeft() - whole.topLeft())
         self.grip.setGeometry(grip.translated(-whole.topLeft()))
         self.grip.raise_()
+        self.mover.setGeometry(mover.translated(-whole.topLeft()))
+        self.mover.raise_()
         # Only its pieces take the clicks: between them, the page is still there.
         self.setMask(
             QRegion(self.box.geometry())
             .united(QRegion(self.bar.geometry()))
             .united(QRegion(self.grip.geometry()))
+            .united(QRegion(self.mover.geometry()))
         )
 
     def _grip_dragged(self, moved: int) -> None:
@@ -560,6 +640,10 @@ class TextEditor(QWidget):
     def _look(self) -> tuple:
         return (self.text, self.font_name, self.size, self.color, self.bold, self.width_chosen)
 
+    @property
+    def was_moved(self) -> bool:
+        return abs(self._shift[0]) > 0.01 or abs(self._shift[1]) > 0.01
+
     def save(self) -> None:
         """Keep what is written. Emptied, an existing one is taken away."""
         if self._done:
@@ -567,7 +651,7 @@ class TextEditor(QWidget):
         original = (self._original[0].strip(), *self._original[1:])
         if not self.text:
             self._finish(self.removed) if self.existing else self._finish()
-        elif self.existing and self._look() == original:
+        elif self.existing and self._look() == original and not self.was_moved:
             self._finish()
         else:
             self._finish(self.saved, self.text)
