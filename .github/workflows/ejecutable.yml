@@ -96,6 +96,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "The packaged program cannot sign." }
           python packaging/run_check.py dist\Lector-PDF\Lector-PDF.exe --check-ocr tests\ejemplos\escaneado.pdf Artículo
           if ($LASTEXITCODE -ne 0) { throw "The packaged program cannot recognise text." }
+          python packaging/run_check.py dist\Lector-PDF\Lector-PDF.exe --check-symbols
+          if ($LASTEXITCODE -ne 0) { throw "The packaged program cannot write arrows and symbols." }
           python packaging/run_check.py dist\Lector-PDF\Lector-PDF.exe --check-print tests\ejemplos\boe.pdf "$env:RUNNER_TEMP\impreso.pdf"
           if ($LASTEXITCODE -ne 0) { throw "The packaged program cannot print." }
 
@@ -106,7 +108,7 @@ jobs:
 
       - name: Check the licences are inside the program
         run: |
-          foreach ($file in "AVISOS.txt", "AGPL-3.0.txt", "LGPL-3.0.txt", "Apache-2.0.txt") {
+          foreach ($file in "AVISOS.txt", "AGPL-3.0.txt", "LGPL-3.0.txt", "Apache-2.0.txt", "DejaVu-Bitstream-Vera.txt") {
             if (-not (Test-Path "dist\Lector-PDF\licencias\$file")) { throw "Missing licence file: $file" }
           }
           if ((Get-ChildItem dist\Lector-PDF\licencias\paquetes -Directory).Count -lt 8) {

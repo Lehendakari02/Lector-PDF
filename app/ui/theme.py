@@ -467,6 +467,8 @@ QFrame#textEditorBar QToolButton:checked {{
 QFrame#textEditorBar QToolButton#textEditorBold {{ font-weight: 800; }}
 QFrame#textEditorBar QPushButton {{ padding: 3px 10px; }}
 QLabel#textEditorSize {{ color: {c.text}; }}
+QFrame#textEditorBar QToolButton::menu-indicator {{ image: none; }}
+QLabel#textEditorSymbolsTitle {{ color: {c.muted}; font-size: 9pt; padding: 4px 2px 1px 2px; }}
 QLabel#dialogError {{ color: {c.danger}; font-weight: 600; }}
 """
 

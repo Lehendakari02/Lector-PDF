@@ -7,7 +7,7 @@ import pytest
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
 
-from app.core import notes
+from app.core import notes, symbols
 from app.core.marker_styles import MarkerStyles
 from app.core.notes import NOTE, SERIF, TEXT_BOX
 from app.ui.main_window import MARKERS_SETTING
@@ -416,3 +416,71 @@ def test_with_the_tool_in_hand_a_click_on_an_earlier_text_opens_it_again(
     view.note_panel.cancel()
     settle(view, wait_until)
     assert sorted(box.text for box in view.notes_of(0)) == ["el primero, corregido", "el segundo"]
+
+
+# ---- arrows and symbols ----------------------------------------------------------
+
+
+def test_a_symbol_is_put_with_a_click(window, opened, wait_until):
+    view, path = opened()
+    editor = start(window, view)
+    QTest.keyClicks(editor.edit, "Art. 81 ")
+    assert set(editor.symbol_buttons) == set(symbols.SYMBOLS)
+    editor.symbol_buttons["→"].click()
+    QTest.keyClicks(editor.edit, " mayor")
+    assert editor.edit.toPlainText() == "Art. 81 → mayor" and editor.edit.hasFocus()
+    editor.save()
+    settle(view, wait_until)
+    (box,) = view.notes_of(0)
+    assert box.text == "Art. 81 → mayor"
+    window.save_document()
+    wait_until(lambda: not view.modified)
+    with pymupdf.open(path) as doc:
+        assert "→" in doc[0].get_text()
+
+
+def test_typing_plain_keys_gives_an_arrow(window, opened):
+    view, _ = opened()
+    editor = start(window, view)
+    QTest.keyClicks(editor.edit, "a -> b <- c <-> d => e")
+    assert editor.edit.toPlainText() == "a → b ← c ↔ d ⇒ e"
+    QTest.keyClicks(editor.edit, " x->")
+    editor.edit.undo()  # Ctrl+Z right after: as it was typed
+    assert editor.edit.toPlainText().endswith("x->")
+    editor.cancel()
+
+
+def test_typed_arrows_follow_the_setting(window, opened):
+    view, _ = opened()
+    window.settings.set(symbols.TYPED_SETTING, False)
+    window.apply_pen_settings()
+    editor = start(window, view)
+    QTest.keyClicks(editor.edit, "a -> b")
+    assert editor.edit.toPlainText() == "a -> b"
+    editor.cancel()
+
+
+def test_a_text_with_symbols_is_seen_and_opened_again(window, opened, wait_until, capsys):
+    view, _ = opened()
+    assert view.put_text_box(0, 60, 300, "① uno ⇒ dos ✓")
+    settle(view, wait_until)
+    wait_until(lambda: 0 not in view._stale)
+    QTest.mouseDClick(view.viewport(), LEFT, NO_KEYS, place(view, 0, 70, 308))
+    editor = view.note_panel
+    assert isinstance(editor, TextEditor) and editor.edit.toPlainText() == "① uno ⇒ dos ✓"
+    editor.cancel()
+    view.viewport().grab()
+    assert "Traceback" not in capsys.readouterr().err
+
+
+def test_typed_arrows_are_turned_off_in_the_settings(window, opened):
+    view, _ = opened()
+    dialog = window.open_settings()
+    assert dialog.typed_arrows_box.isChecked()
+    dialog.typed_arrows_box.setChecked(False)
+    dialog.close()
+    assert window.settings.get(symbols.TYPED_SETTING) is False and not view.typed_arrows
+    editor = start(window, view)
+    QTest.keyClicks(editor.edit, "a -> b")
+    assert editor.edit.toPlainText() == "a -> b"
+    editor.cancel()

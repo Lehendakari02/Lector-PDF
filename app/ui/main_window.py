@@ -40,7 +40,7 @@ from PySide6.QtWidgets import (
 )
 
 from app import APP_NAME, BUILD_LABEL, __version__
-from app.core import pen, save_checks, save_settings, saving
+from app.core import pen, save_checks, save_settings, saving, symbols
 from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
 from app.core.document import PdfDocument, PdfOpenError, engine_version
 from app.core.drawing import ARROW, BOX, DRAW, ERASER, LINE, OVAL, SHAPE_TOOL, WIDTHS
@@ -1771,6 +1771,7 @@ class MainWindow(QMainWindow):
         view.pen_pressure = pen.pressure_wanted(self.settings)
         view.finger_mode = pen.finger_mode(self.settings)
         view.pen_seen = pen.pen_seen(self.settings)
+        view.typed_arrows = symbols.typed_wanted(self.settings)  # the keyboard, while at it
 
     def _pen_was_seen(self) -> None:
         """A pen has been used: from now on the fingers leave the drawing to it

@@ -404,7 +404,7 @@ Notas de la Fase 1:
 | 2.12 | Mostrar/ocultar anotaciones (también al imprimir/exportar) | Con un botón veo el documento limpio | ✅ (exportar llegará con la Fase 5) |
 | 2.13 | Atajos de teclado para cada herramienta | Cambio de herramienta sin usar el ratón | ✅ |
 | 2.13a | Escribir texto directamente sobre la página (tras la prueba del 15/11) | Hago clic y escribo ahí mismo; elijo tamaño, negrita, color y ancho sin salir del texto | ✅ |
-| 2.13b | Símbolos y flechas dentro del texto | Pongo →, ⇒, ✓, • … mientras escribo, sin buscarlos fuera | ⬜ |
+| 2.13b | Símbolos y flechas dentro del texto | Pongo →, ⇒, ✓, • … mientras escribo, sin buscarlos fuera | ✅ |
 | 2.13c | Más formas y más cómodas | Hago un esquema con flechas, llaves y recuadros con texto sin volver a coger la herramienta cada vez | ⬜ |
 | 2.13d | Hoja en blanco, de rayas o cuadriculada (adelantada de la 2C) | Añado una hoja entre páginas y hago en ella un esquema | ⬜ |
 | 2.13e | Borrar anotaciones de otros programas | Quito un subrayado hecho con Edge, y Deshacer lo devuelve igual | ⬜ |
@@ -833,6 +833,34 @@ Notas de la Fase 2A:
     antes: es raro y así no hay que escribir de lado.
   - Las notas adhesivas no cambian: se escriben en su panel.
   - Sin probar en Adobe Reader ni con pantalla táctil real.
+- **2.13b: flechas y símbolos dentro del texto (16/11/2026).**
+  - En la barra del texto hay un botón **"→ ✓"** con 77 símbolos en grupos:
+    flechas, marcas (✓ ✗ ★ ☐ ☑), puntos y figuras, números en círculo,
+    matemáticas y letras griegas. Un clic lo escribe donde está el cursor.
+  - **Tecleando sale la flecha:** `->` o `-->` da →, `<-` da ←, `<->` da ↔,
+    `=>` da ⇒ y `<=>` da ⇔. Ctrl+Z justo después lo deja como se tecleó.
+    **Ajuste nuevo** (Ajustes → General → Teclado), activado: "Al escribir
+    un texto, -> se convierte en flecha".
+  - **Dependencia nueva, aprobada por Julen el 15/11:** una letra libre. Las
+    letras que todo lector de PDF trae (Helvetica, Times, Courier) no tienen
+    flechas ni marcas. El programa lleva un archivo pequeño (10 KB) solo con
+    esos símbolos, sacado de DejaVu Sans (licencia libre Bitstream Vera, con
+    otro nombre como pide la licencia; aviso y licencia en "Acerca de"). La
+    primera vez que se usa un símbolo en un documento, esa letra se guarda
+    dentro del PDF (una sola vez), y así se ve en cualquier lector.
+  - Se descartó dejar que el motor PDF eligiera la letra por su cuenta: metía
+    varias letras enteras (casi 1 MB por documento), cambiaba el aspecto del
+    texto con remates y perdía la negrita.
+  - Las letras normales siguen con su letra de siempre; solo los símbolos
+    usan la nueva. Dentro del PDF el texto es texto de verdad, con sus
+    símbolos (otro lector lo puede copiar).
+  - `packaging/make_symbol_font.py` rehace el archivo de la letra (solo hace
+    falta si se añaden símbolos; usa fontTools, que el programa no lleva).
+  - Las pruebas automáticas del programa empaquetado comprueban que la letra
+    va dentro (`--check-symbols`).
+  - De paso: Ctrl+Z dentro de un texto deshace lo tecleado (antes podía hacer
+    falta pulsarlo dos veces).
+  - Comprobado con el motor de Chrome. Sin probar en Adobe Reader.
 
 ## Fase 2B – Documentos escaneados (OCR)
 | # | Tarea | Terminado cuando… | Estado |

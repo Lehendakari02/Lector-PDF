@@ -48,6 +48,7 @@ EXCLUDED_MODULES = [
 DATA_FOLDERS = [
     "app/recursos/tessdata",  # Spanish language file for text recognition
     "app/recursos/interfaz",  # small pictures of the interface
+    "app/recursos/letras",  # the font of the arrows and symbols written on the pages
 ]
 ICON = ROOT / "packaging" / "lector-pdf.ico"  # drawn by packaging/make_images.py
 

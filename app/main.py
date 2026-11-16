@@ -43,6 +43,9 @@ EXIT_OCR_FAILED = 5
 CHECK_PRINT_FLAG = "--check-print"
 EXIT_PRINT_FAILED = 6
 EXIT_UPDATE_FAILED = 7
+# Hidden option of the automatic builds: --check-symbols
+CHECK_SYMBOLS_FLAG = "--check-symbols"
+EXIT_SYMBOLS_FAILED = 8
 UPDATE_CHECK_DELAY_MS = 4000  # after starting: first let the user see their documents
 
 
@@ -61,6 +64,24 @@ def check_signing(source: str, certificate_file: str, password: str) -> int:
         signer = load_p12_signer(certificate_file, password)
         signed = sign_pdf(source, Path(folder) / "firmado.pdf", signer)
         return 0 if signed.stat().st_size > Path(source).stat().st_size else EXIT_SIGNING_FAILED
+
+
+def check_symbols() -> int:
+    """Write a text with arrows on a page; 0 if the font of the symbols is in it.
+
+    Used by the automatic builds to check that the font really is inside the
+    packaged program.
+    """
+    import pymupdf
+
+    from app.core import notes
+
+    with pymupdf.open() as doc:
+        doc.new_page()
+        notes.new_text_box(0, (60, 80), "uno → dos ✓").apply(doc)
+        page = doc[0]
+        kept = doc.xref_get_key(doc.pdf_catalog(), notes.SYMBOL_FONT_KEY)[0] == "xref"
+        return 0 if kept and "→" in page.get_text() else EXIT_SYMBOLS_FAILED
 
 
 def _run_check(check, failure_code: int) -> int:
@@ -179,6 +200,8 @@ def main(argv: list[str] | None = None) -> int:
         if len(values) < 2:
             return EXIT_OCR_FAILED
         return _run_check(lambda: check_ocr(*values[:2]), EXIT_OCR_FAILED)
+    if CHECK_SYMBOLS_FLAG in args:
+        return _run_check(check_symbols, EXIT_SYMBOLS_FAILED)
     if APPLY_FLAG in args:
         # Run by a NEW version just unpacked: take the place of the old one.
         values = [arg for arg in args[args.index(APPLY_FLAG) + 1 :] if arg != NO_START_FLAG]

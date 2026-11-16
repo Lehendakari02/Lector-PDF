@@ -377,3 +377,17 @@ Con un documento abierto, en el modo Estudiar.
     zoom: el texto sigue en su sitio.
 11. Guarda y abre el PDF en Edge y en Adobe Reader: los textos están en el
     mismo sitio, con su negrita, su color y sus cortes de línea.
+
+## Tarea 2.13b – Flechas y símbolos dentro del texto
+
+1. Empieza un texto y escribe `Ley -> art. 81 => mayoria <-> pleno`: los
+   grupos de teclas se convierten en →, ⇒ y ↔ según escribes.
+2. Escribe `->` y pulsa Ctrl+Z: queda `->` tal cual.
+3. Pulsa el botón **"→ ✓"** de la barra y elige ✓, ★ y ①: se escriben donde
+   está el cursor y puedes seguir tecleando.
+4. Haz clic fuera: el texto queda en la página con sus símbolos, en el mismo
+   sitio. Prueba también en negrita y con letra con remates.
+5. **Ajustes → General → Teclado:** quita "Al escribir un texto, -> se
+   convierte en flecha". Ahora `->` se queda como está.
+6. Guarda y abre el PDF en Edge y en Adobe Reader: las flechas y los símbolos
+   se ven igual.
