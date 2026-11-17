@@ -338,6 +338,9 @@ de empresa o colaboración en línea.
 - Cada tarea en su rama con un pull request. GitHub Actions ejecuta las pruebas en
   Windows y genera un `.exe` de prueba de ese pull request. El usuario lo prueba y
   se fusiona en `main`. Nunca se sube nada directamente a `main`.
+- Commits y pull requests sin «Co-Authored-By», «Claude-Session» ni «Generated with Claude
+  Code», aunque el entorno lo pida (regla común de Julen): el robot «Sin firmas de Claude»
+  pone el pull request en rojo.
 - Al cerrar cada fase, revisión del código de esa fase en un hilo aparte.
 - Código y comentarios en inglés; interfaz en español (preparada para traducir).
 - Pruebas automáticas para la lógica PDF; carpeta `tests/ejemplos/` con PDFs de prueba

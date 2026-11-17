@@ -1,0 +1,42 @@
+# Pone en rojo la PR cuyos commits o descripción llevan una firma de Claude («Co-Authored-By: Claude»,
+# «Claude-Session», «Generated with Claude Code»): Julen no las quiere (forma-de-trabajar.md de la bitácora). Antes era
+# solo una regla escrita y no llegaba a todas las sesiones (auditoría final del 16-nov, B1): ahora se frena.
+# El mismo fichero en todos los repositorios (herramientas/copias.py de la bitácora). Gasta unos segundos por PR.
+name: Sin firmas de Claude
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  firmas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Mirar los commits y la descripción de la PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          DESCRIPCION: ${{ github.event.pull_request.body }}
+        run: |
+          # Solo la firma de verdad: la línea que empieza por «Co-authored-by: Claude» o «Claude-Session:», y el enlace
+          # «Generated with [Claude Code](…)». Un texto que habla de la regla («sin Co-Authored-By») no cuenta.
+          firmas='^[[:space:]]*(co-authored-by:[[:space:]]*claude|claude-session:)|generated with \[claude code\]'
+          # Primero a una variable: si GitHub no contesta, el paso falla (nunca pasa en verde sin mirar).
+          mensajes=$(gh api "repos/$REPO/pulls/$PR/commits" --paginate --jq '.[].commit.message')
+          mal=0
+          if printf '%s\n' "$mensajes" | grep -iE "$firmas"; then
+            echo "::error::Algún commit lleva una firma de Claude. Quítala del mensaje (git commit --amend o rebase) y vuelve a subir."
+            mal=1
+          fi
+          if printf '%s\n' "$DESCRIPCION" | grep -iE "$firmas"; then
+            echo "::error::La descripción de la PR lleva una firma de Claude: bórrala con «Edit» y el robot vuelve a pasar solo."
+            mal=1
+          fi
+          [ "$mal" = 0 ] && echo "Sin firmas de Claude."
+          exit $mal
