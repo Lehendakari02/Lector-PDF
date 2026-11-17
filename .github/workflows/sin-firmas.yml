@@ -24,7 +24,9 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           DESCRIPCION: ${{ github.event.pull_request.body }}
         run: |
-          firmas='co-authored-by: claude|claude-session:|generated with \[?claude code'
+          # Solo la firma de verdad: la línea que empieza por «Co-authored-by: Claude» o «Claude-Session:», y el enlace
+          # «Generated with [Claude Code](…)». Un texto que habla de la regla («sin Co-Authored-By») no cuenta.
+          firmas='^[[:space:]]*(co-authored-by:[[:space:]]*claude|claude-session:)|generated with \[claude code\]'
           # Primero a una variable: si GitHub no contesta, el paso falla (nunca pasa en verde sin mirar).
           mensajes=$(gh api "repos/$REPO/pulls/$PR/commits" --paginate --jq '.[].commit.message')
           mal=0
