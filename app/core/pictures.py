@@ -119,6 +119,68 @@ class AddPicture:
 register_reader("add_picture", AddPicture.from_dict)
 
 
+@dataclass(frozen=True)
+class AddPictures:
+    """One picture put in several places at once (one's initials on every
+    page): one change, undone at once. The picture is kept once, not once for
+    each page, so the journal stays small."""
+
+    png: bytes
+    places: tuple[tuple[int, Rect, str], ...]  # page, rect as shown, name
+    what: str = ""
+
+    def _each(self) -> list[AddPicture]:
+        return [
+            AddPicture(page, rect, self.png, name, self.what) for page, rect, name in self.places
+        ]
+
+    def pages(self) -> list[int]:
+        return sorted({page for page, _rect, _name in self.places})
+
+    def apply(self, doc) -> list[int]:
+        done = []
+        try:
+            for picture in self._each():
+                picture.apply(doc)
+                done.append(picture)
+        except CommandError:
+            for picture in reversed(done):  # all or nothing
+                picture.undo(doc)
+            raise
+        return self.pages()
+
+    def undo(self, doc) -> list[int]:
+        for picture in reversed(self._each()):
+            picture.undo(doc)
+        return self.pages()
+
+    def to_dict(self) -> dict:
+        return {
+            "what": "add_pictures",
+            "png": base64.b64encode(self.png).decode("ascii"),
+            "places": [[page, list(rect), name] for page, rect, name in self.places],
+            "description": self.what,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> AddPictures:
+        places = []
+        for page, rect, name in data["places"]:
+            x0, y0, x1, y1 = (float(value) for value in rect)
+            places.append((int(page), (x0, y0, x1, y1), str(name)))
+        return cls(base64.b64decode(data["png"]), tuple(places), str(data.get("description", "")))
+
+
+register_reader("add_pictures", AddPictures.from_dict)
+
+
+def puts_picture(order) -> bool:
+    """Whether a change puts a new picture (a signature or initials)."""
+    if isinstance(order, AddPicture | AddPictures):
+        return True
+    return any(puts_picture(part) for part in getattr(order, "orders", ()))
+
+
 def picture_of(doc, page, annotation) -> bytes:
     """The picture of a picture annotation, upright as the page is shown
     (b"" if it has none that can be read)."""

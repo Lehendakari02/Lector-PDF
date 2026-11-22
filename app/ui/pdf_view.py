@@ -89,7 +89,7 @@ from app.core.render_service import (
 )
 from app.core.search import PageText, SearchHit
 from app.core.selection import caret_at, is_on_text, selected_text, selection_rects, word_at
-from app.core.stamps import MARKS, Stamp, mark_order, text_look
+from app.core.stamps import MARKS, Stamp, mark_order, stamp_width, text_look
 from app.core.text_layer import AddTextLayer, PageLayer
 from app.ui import theme
 from app.ui.field_editor import FieldEditor
@@ -545,7 +545,8 @@ class PdfView(QAbstractScrollArea):
         # wide it goes, and the date written under it ("" for none).
         self.picture_in_hand: tuple[bytes, str, float] | None = None
         self.date_under = ""
-        self.signed_by_hand = False  # a signature was put since it was opened
+        # Saving what was just signed asks once about a copy "-firmado".
+        self._signing_asked = False
         self.on_every_page = False  # the picture in hand goes on every page
         self.stamp_size = 12.0
         self._asked_notes: set[int] = set()
@@ -597,6 +598,7 @@ class PdfView(QAbstractScrollArea):
         self._document = document
         self._sizes = document.page_sizes()
         self.service.open(document.path, password or document.password)
+        self.service.want_fields()  # a whole form, not only the pages seen
         self._fit = Fit.COMFORTABLE
         self._rotation = 0
         self._layout()
@@ -805,6 +807,8 @@ class PdfView(QAbstractScrollArea):
         self._fields.clear()
         self._form_told = False
         self._end_field_editing()
+        if self._document is not None:
+            self.service.want_fields()  # the pages moved: read the form again
         self._asked_notes.clear()
         self._drawings.clear()
         self._erased.clear()
@@ -941,6 +945,7 @@ class PdfView(QAbstractScrollArea):
         self.journal = None
         self._stale.clear()
         self._changing.clear()
+        self._signing_asked = False
         if self._undo or self._redo:
             self._undo.clear()
             self._redo.clear()
@@ -2224,6 +2229,15 @@ class PdfView(QAbstractScrollArea):
         if field.read_only:
             self.field_refused.emit(self.tr("Este campo no se puede cambiar."))
             return False
+        if field.several:
+            # The engine can only write one choice: changing it would lose the others.
+            self.field_refused.emit(
+                self.tr(
+                    "Esta lista tiene varias opciones elegidas y este programa aún no sabe "
+                    "cambiarla sin perder alguna. Rellénala con otro lector."
+                )
+            )
+            return False
         if field.kind == CHECK:
             return self.fill(field, "" if field.checked else field.on)
         if field.kind == RADIO:
@@ -2549,7 +2563,10 @@ class PdfView(QAbstractScrollArea):
         and waits (a moment) for it to come back from the helper, so that
         ``modified`` already counts it.
         """
-        if self.note_panel is None:
+        if self.field_editor is not None:
+            # A box of a form being written in: what it has is a change now.
+            self.field_editor.finish(0)
+        elif self.note_panel is None:
             return
         self.close_note_panel(keep=True)
         deadline = time.monotonic() + seconds
@@ -2850,6 +2867,16 @@ class PdfView(QAbstractScrollArea):
             )
         )
 
+    @property
+    def signed_by_hand(self) -> bool:
+        """A signature or initials were put since it was opened (and are not
+        undone), and saving it has not been asked about since."""
+        return not self._signing_asked and any(map(pictures.puts_picture, self._undo))
+
+    @signed_by_hand.setter
+    def signed_by_hand(self, signed: bool) -> None:
+        self._signing_asked = not signed
+
     def use_stamp(self, stamp: Stamp | None) -> None:
         """Take a mark or a stamp in hand (None: leave it): each click puts one."""
         self.stamp = stamp
@@ -2889,13 +2916,13 @@ class PdfView(QAbstractScrollArea):
         dy = max(-y0, min(size.height - y1, 0.0))
         rect = (x0 + dx, y0 + dy, x1 + dx, y1 + dy)
         if self.on_every_page:
-            order = Together(
+            order = pictures.AddPictures(
+                png,
                 tuple(
-                    pictures.AddPicture(
-                        number, _same_place(rect, size, other), png, new_name(), description
-                    )
+                    (number, _same_place(rect, size, other), new_name())
                     for number, other in enumerate(self._sizes)
-                )
+                ),
+                description,
             )
             if not self._do(order):
                 return False
@@ -2903,10 +2930,13 @@ class PdfView(QAbstractScrollArea):
             return True
         order = pictures.AddPicture(page, rect, png, new_name(), description)
         if self.date_under:
-            top = min(rect[3] + 2, size.height - DATE_SIZE * 1.4)
+            line = DATE_SIZE * 1.4
+            top = rect[3] + 2
+            if top + line > size.height:
+                top = rect[1] - 2 - line  # no room under it: over it
             date = notes.new_text_box(
                 page,
-                (max(0.0, rect[0]), max(0.0, top)),
+                (max(0.0, rect[0]), max(0.0, min(size.height - line, top))),
                 self.date_under,
                 notes.SANS,
                 DATE_SIZE,
@@ -2931,8 +2961,9 @@ class PdfView(QAbstractScrollArea):
         if not text:
             return False
         look = text_look(stamp, size)
-        # The middle of its line at the click; it starts a little to the left.
-        start = max(0.0, x - 0.25 * size * len(text))
+        # The middle of its line at the click, and all of it inside the page.
+        width = stamp_width(text, size, look["bold"])
+        start = max(0.0, min(self._sizes[page].width - width - 2.0, x - width / 2))
         return self.put_text_box(page, start, y - 0.55 * size, text, **look)
 
     def draw_shape(self, kind: str, page: int, start, end) -> bool:

@@ -2081,19 +2081,6 @@ class MainWindow(QMainWindow):
         if not page.view.modified:
             self.statusBar().showMessage(self.tr("No hay cambios que guardar."), STATUS_MESSAGE_MS)
             return False
-        if (
-            page.view.signed_by_hand
-            and page is self.current_document
-            and not page.path.stem.lower().endswith("-firmado")
-        ):
-            # Just signed: a copy "-firmado" keeps the original as it was.
-            page.view.signed_by_hand = False  # asked once
-            choice = self._signed_save_choice(page)
-            if choice is None:
-                page.view.signed_by_hand = True
-                return False
-            if choice == "copy":
-                return self.save_document_as(suggested=signed_name(page.path))
         return self._save_checked(page)
 
     def _signed_save_choice(self, page: DocumentPage) -> str | None:
@@ -2124,6 +2111,23 @@ class MainWindow(QMainWindow):
         signed, another program has changed the file, or it is in a temporary
         folder. Returns True if a saving has started.
         """
+        if page.view.signed_by_hand and not page.path.stem.lower().endswith("-firmado"):
+            # Just signed: a copy "-firmado" keeps the original as it was. Asked
+            # however the saving is wanted (Ctrl+S, or "Guardar" when closing);
+            # the saving by itself never asks (the original stays in "Versiones
+            # anteriores").
+            page.view.signed_by_hand = False  # asked once
+            choice = self._signed_save_choice(page)
+            if choice is None:
+                page.view.signed_by_hand = True
+                return False
+            if choice == "copy":
+                if page in self.documents:
+                    self.document_tabs.setCurrentIndex(self.documents.index(page))
+                if self.save_document_as(suggested=signed_name(page.path)):
+                    return True
+                page.view.signed_by_hand = True  # not saved: asked again next time
+                return False
         reasons = [r for r in self._save_warnings(page) if r not in page.accepted_warnings]
         if reasons:
             answer = self._ask_save_warning(page, reasons[0])  # the gravest one
@@ -2251,6 +2255,7 @@ class MainWindow(QMainWindow):
                 ).format(target.name),
             )
             return False
+        page.view.signed_by_hand = False  # a name of one's own was chosen: not asked again
         self._start_saving(page, target)
         return True
 
@@ -3326,7 +3331,7 @@ class MainWindow(QMainWindow):
             return False
         if view.focus_field(+1) is None:
             self.statusBar().showMessage(
-                self.tr("Este documento no tiene campos de formulario en las páginas que se ven."),
+                self.tr("Este documento no tiene campos de formulario."),
                 STATUS_MESSAGE_MS,
             )
             return False

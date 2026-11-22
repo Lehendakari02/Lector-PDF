@@ -102,3 +102,29 @@ def test_together_puts_all_or_nothing(signature):
     with pytest.raises(CommandError):
         broken.apply(doc)
     assert not list(doc[0].annots()), "the signature put first went away again"
+
+
+def test_one_picture_on_many_pages_is_kept_once(signature):
+    # Review of Phase 3, B1: the journal had the picture once for each page.
+    import json
+
+    from app.core.commands import command_from_dict
+    from app.core.pictures import AddPictures, puts_picture
+
+    doc = pymupdf.open()
+    for _ in range(100):
+        doc.new_page()
+    order = AddPictures(
+        signature,
+        tuple((page, (450.0, 780.0, 498.0, 800.0), f"lectorpdf-i{page}") for page in range(100)),
+        "Iniciales",
+    )
+    written = json.dumps(order.to_dict())
+    assert len(written) < 2 * len(signature) + 20_000
+    assert command_from_dict(json.loads(written)) == order
+    assert puts_picture(order)
+    order.apply(doc)
+    order.apply(doc)  # again, as when recovering: not twice
+    assert all(len(list(page.annots())) == 1 for page in doc)
+    order.undo(doc)
+    assert not any(list(page.annots()) for page in doc)

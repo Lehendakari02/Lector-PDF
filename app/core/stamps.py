@@ -100,3 +100,11 @@ def text_look(stamp: Stamp, size: float = DEFAULT_SIZE) -> dict:
     if stamp.kind == TODAY:
         return {"font": notes.SANS, "size": size, "color": MARK_COLOR, "bold": False}
     return {"font": notes.SANS, "size": size, "color": STAMP_COLOR, "bold": True}
+
+
+def stamp_width(text: str, size: float, bold: bool = False) -> float:
+    """How wide the words of a stamp are on the page, in points (about: the
+    letters of the PDF's own sans serif)."""
+    import pymupdf
+
+    return pymupdf.get_text_length(text, fontname="hebo" if bold else "helv", fontsize=size)

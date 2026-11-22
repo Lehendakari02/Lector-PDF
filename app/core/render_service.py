@@ -365,6 +365,28 @@ def _send_reading(connection, token: int, doc, page_index: int) -> None:
     connection.send_bytes(picture.samples)
 
 
+def _form_fields(doc) -> dict:
+    """page -> its form fields, for the pages that have some."""
+    found: dict = {}
+    try:
+        if not doc.is_form_pdf:
+            return found
+        for number in range(doc.page_count):
+            # Only pages with annotations can have fields (no page is loaded for
+            # the others: a long document with a form on page 1 stays quick).
+            if doc.xref_get_key(doc.page_xref(number), "Annots")[0] == "null":
+                continue
+            try:
+                fields = page_fields(doc, number)
+            except Exception:
+                continue
+            if fields:
+                found[number] = fields
+    except Exception:
+        pass  # a damaged document: the pages seen still give theirs
+    return found
+
+
 def _worker_main(connection: Connection) -> None:
     """The helper process: open documents and draw the pages asked for."""
     import pymupdf
@@ -481,6 +503,10 @@ def _worker_main(connection: Connection) -> None:
                     except Exception:
                         fields = []
                     connection.send(("notes", token, page_index, found, drawn, linked, fields))
+            elif kind == "fields":
+                _, fields_token = message
+                if fields_token == token and doc is not None:
+                    connection.send(("fields", token, _form_fields(doc)))
             elif kind == "annotations":
                 list_token, list_id = message[1], message[2]
                 whole = len(message) > 3 and message[3]  # for the summary: nothing cut
@@ -832,6 +858,17 @@ class RenderService:
                 self._reopen()
             self._send(("notes", self._token, page))
 
+    def want_fields(self) -> None:
+        """Ask for the fields of a form on every page at once (a form is
+        filled as a whole, not only the pages seen). They arrive through
+        ``on_fields(page, fields)``, one call for each page that has some."""
+        with self._lock:
+            if self._path is None:
+                return
+            if self._ensure_started():
+                self._reopen()
+            self._send(("fields", self._token))
+
     def copy_text(self, start: tuple[int, int], stop: tuple[int, int]) -> int:
         """Ask for the text between two places, each (page, caret).
 
@@ -1115,6 +1152,9 @@ class RenderService:
                     self._tell(self._on_place, message[2], message[3])
             elif kind == "annotations":
                 self._tell(self._on_annotations, message[2], message[3])
+            elif kind == "fields":
+                for page, fields in message[2].items():
+                    self._tell(self._on_fields, page, fields)
             elif kind == "notes":
                 if len(message) > 5:
                     self._tell(self._on_links, message[2], message[5])
