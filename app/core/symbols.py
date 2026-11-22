@@ -5,6 +5,10 @@ and no ticks. For those, the program carries a small font with only symbols
 (taken from DejaVu Sans, a free font) and puts it inside the PDF the first time
 one is used, so that every reader shows them. Normal letters keep their font.
 
+The same font also carries the letters of other languages that those built-in
+letters lack (Polish, Czech, Romanian, Turkish, Greek…: «Łódź», «Ştefan»,
+«Ελλάδα»), so that a name written in a text looks the same everywhere.
+
 Typing "->" gives an arrow, for those who want it (it can be turned off).
 """
 
@@ -28,6 +32,9 @@ GROUPS: tuple[tuple[str, str], ...] = (
     ("greek", "αβγδεθλμπσφωΔΣΩ"),
 )
 SYMBOLS = frozenset("".join(symbols for _, symbols in GROUPS))
+# Where the letters of other languages are (Unicode), for the font of the symbols:
+# Latin Extended-A, the Romanian ș and ț, and Greek.
+EXTRA_RANGES = ((0x0100, 0x017F), (0x0218, 0x021B), (0x0370, 0x03FF))
 
 # Whether what is typed with plain keys turns into an arrow.
 TYPED_SETTING = "texto_flechas"
@@ -63,19 +70,34 @@ def font_file() -> Path:
     return base.joinpath(*_FONT_PATH)
 
 
+@cache
 def is_symbol(letter: str) -> bool:
-    return letter in SYMBOLS
+    """Whether a letter is written with the font of the symbols: a symbol, or a
+    letter of another language that the built-in letters (WinAnsi) lack."""
+    if letter in SYMBOLS:
+        return True
+    if len(letter) != 1 or ord(letter) < 0x100:
+        return False
+    try:
+        letter.encode("cp1252")
+        return False  # the built-in letters have it (€, Œ, š…)
+    except UnicodeEncodeError:
+        pass
+    try:
+        return _font().has_glyph(ord(letter)) != 0
+    except Exception:  # the font is missing: written as the engine can
+        return False
 
 
 def has_symbols(text: str) -> bool:
-    return any(letter in SYMBOLS for letter in text)
+    return any(is_symbol(letter) for letter in text)
 
 
 def runs(line: str) -> list[tuple[bool, str]]:
     """A line cut into pieces of one kind: (written with the symbols, the piece)."""
     pieces: list[tuple[bool, str]] = []
     for letter in line:
-        kind = letter in SYMBOLS
+        kind = is_symbol(letter)
         if pieces and pieces[-1][0] == kind:
             pieces[-1] = (kind, pieces[-1][1] + letter)
         else:
