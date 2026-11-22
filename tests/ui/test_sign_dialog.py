@@ -3,8 +3,10 @@
 import pytest
 from pyhanko.pdf_utils.reader import PdfFileReader
 
+from app.core import certificate_settings
 from app.core.signing import load_p12_signer
 from app.core.windows_store import describe
+from app.ui.pdf_view import PLACE_TOOL
 from app.ui.sign_dialog import CertificateDialog
 from tests import certificates
 
@@ -112,9 +114,18 @@ def test_the_open_document_is_signed_in_its_place_and_shown_again(
     asked = []
     window.sign_target_answer = lambda suggested: asked.append(suggested) or str(suggested)
     assert window.sign_with_certificate()
+    assert view.markup_tool == PLACE_TOOL, "first, where the signature goes"
+    assert "Haz clic" in window.statusBar().currentMessage()
+    assert view.put_certificate_place(2, 300, 400)
     assert asked == [copy], "already a «-firmado» document: signed in its place"
     with copy.open("rb") as handle:
         assert len(PdfFileReader(handle).embedded_signatures) == 1
+    import pymupdf
+
+    with pymupdf.open(copy) as doc:
+        (box,) = doc[2].widgets()
+        middle = (box.rect * doc[2].rotation_matrix).tl + (85, 28)
+        assert abs(middle.x - 300) < 1 and abs(middle.y - 400) < 1, "visible where clicked"
     assert len(window.documents) == 1 and window.current_document.path == copy
     wait_until(lambda: window.pdf_view.page_count > 2 and window.pdf_view.current_page == 2)
     assert window.versions.of(copy), "how it was is kept among the earlier versions"
@@ -135,6 +146,7 @@ def test_changes_not_saved_are_saved_first_then_signed_into_a_copy(
     wait_until(lambda: view.modified)
     window.signer_answer = load_p12_signer(sample("certificado-prueba.p12"), "prueba")
     window.sign_target_answer = str
+    window.settings.set(certificate_settings.VISIBLE_SETTING, False)  # straight away
 
     window.sign_save_answer = False
     assert not window.sign_with_certificate()
@@ -212,3 +224,90 @@ def test_the_window_remembers_where_the_file_is_but_not_its_password(
     assert window._choose_signer() is not None
     assert window.settings.get("firma/archivo") == str(p12)
     assert "prueba" not in window.settings.path.read_text(encoding="utf-8")
+
+
+def test_choosing_the_place_can_be_left_with_escape(window, sample, tmp_path, wait_until):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    copy = tmp_path / "carta.pdf"
+    copy.write_bytes(sample("formulario.pdf").read_bytes())
+    assert window.open_document(copy)
+    view = window.pdf_view
+    wait_until(lambda: view.page_count > 0)
+    window.signer_answer = "never asked"
+    assert window.sign_with_certificate()
+    assert view.markup_tool == PLACE_TOOL
+    x0, y0, x1, y1 = view.certificate_box(0, 2, 2)
+    assert (x0, y0) == (0, 0) and (x1, y1) == (170, 56), "kept inside the page"
+    QTest.keyClick(view, Qt.Key.Key_Escape)
+    assert view.markup_tool == ""
+    assert not view.put_certificate_place(0, 100, 100), "nothing to place any more"
+    assert not list(tmp_path.glob("*firmado*"))
+
+
+def test_the_handwritten_signature_goes_in_the_box_unless_not_wanted(
+    window, sample, tmp_path, wait_until, monkeypatch
+):
+    from app.ui import main_window as module
+
+    window.show_problem_dialogs = False
+    copy = tmp_path / "carta.pdf"
+    copy.write_bytes(sample("formulario.pdf").read_bytes())
+    assert window.open_document(copy)
+    wait_until(lambda: window.pdf_view.page_count > 0)
+    window.signer_answer = load_p12_signer(sample("certificado-prueba.p12"), "prueba")
+    window.sign_target_answer = str
+    asked = []
+    monkeypatch.setattr(
+        module,
+        "sign_pdf",
+        lambda source, target, signer, visible=None, server="": (
+            asked.append((visible, server)) or target.write_bytes(source.read_bytes())
+        ),
+    )
+    monkeypatch.setattr(window, "saved_signature", lambda kind: b"PNG")
+    view = window.pdf_view
+    assert window.sign_with_certificate() and view.put_certificate_place(0, 200, 300)
+    ((visible, server),) = asked
+    assert visible.page == 0 and visible.png == b"PNG" and server == ""
+
+    window.settings.set(certificate_settings.HANDWRITTEN_SETTING, False)
+    window.settings.set(certificate_settings.TIMESTAMP_SETTING, True)
+    window.sign_target_answer = lambda suggested: str(tmp_path / "otra.pdf")
+    view = window.pdf_view  # the signed copy, opened in its own tab
+    wait_until(lambda: view.page_count > 0)
+    assert window.sign_with_certificate() and view.put_certificate_place(0, 200, 300)
+    visible, server = asked[-1]
+    assert visible.png is None
+    assert server == certificate_settings.timestamp_server(window.settings)
+
+
+def test_without_the_timestamp_server_signing_without_it_is_offered(
+    window, sample, tmp_path, wait_until, monkeypatch
+):
+    from app.core.signing import TimestampFailed
+
+    window.show_problem_dialogs = False
+    window.reporter.show_dialogs = False
+    window.settings.set(certificate_settings.VISIBLE_SETTING, False)
+    window.settings.set(certificate_settings.TIMESTAMP_SETTING, True)
+    window.settings.set(certificate_settings.TIMESTAMP_SERVER_SETTING, "http://127.0.0.1:9/tsa")
+    copy = tmp_path / "carta.pdf"
+    copy.write_bytes(sample("formulario.pdf").read_bytes())
+    assert window.open_document(copy)
+    wait_until(lambda: window.pdf_view.page_count > 0)
+    window.signer_answer = load_p12_signer(sample("certificado-prueba.p12"), "prueba")
+    window.sign_target_answer = str
+    target = tmp_path / "carta-firmado.pdf"
+
+    window.timestamp_failed_answer = False
+    assert not window.sign_with_certificate()
+    assert not target.exists()
+    assert "cancelada" in window.statusBar().currentMessage()
+
+    window.timestamp_failed_answer = True
+    assert window.sign_with_certificate()
+    with target.open("rb") as handle:
+        assert len(PdfFileReader(handle).embedded_signatures) == 1
+    assert TimestampFailed  # the kind of failure that offers it

@@ -1424,7 +1424,7 @@ Notas de la Fase 3:
 |---|-------|-------------------|--------|
 | 4.1 | Firmar con certificado instalado en Windows (FNMT), partiendo de la prueba 0.8 | El PDF firmado sale válido en VALIDe y en Adobe | 🔶 hecho; falta tu prueba con el certificado FNMT real en VALIDe y Adobe |
 | 4.2 | Firmar con archivo .p12/.pfx | Ídem | 🔶 hecho; falta tu prueba con tu copia .pfx del certificado FNMT |
-| 4.3 | Firma visible o invisible; sello de tiempo opcional; recordar preferencias | Firmar es elegir dónde y poner el PIN | ⬜ |
+| 4.3 | Firma visible o invisible; sello de tiempo opcional; recordar preferencias | Firmar es elegir dónde y poner el PIN | 🔶 hecho; falta tu prueba en Adobe, Edge y VALIDe |
 | 4.4 | Firmar varios documentos de una vez | Firmo 10 documentos poniendo el PIN una vez | ⬜ |
 | 4.5 | Firmar con DNIe y lector de tarjetas | Firmo con el DNIe (cuando tenga lector) | ⬜ |
 | 4.6 | Ver y verificar firmas existentes | Abro un PDF firmado y me dice quién lo firmó y si es válido | ⬜ |
@@ -1454,6 +1454,23 @@ Notas de la Fase 4:
   - Un certificado caducado (o que aún no vale) o que no sirve para firmar se
     rechaza al abrirlo, con una explicación, en vez de hacer una firma que
     VALIDe daría por mala.
+- **4.3: Firma visible o invisible y sello de tiempo (22/11/2026).**
+  - **Por defecto, visible:** al pulsar "Firmar con certificado", un recuadro
+    azul discontinuo sigue al ratón y un clic dice dónde va (Esc cancela).
+    Luego, el certificado y el PIN. El recuadro (6 × 2 cm) lleva la firma
+    manuscrita guardada a la izquierda, si la hay, y "Firmado digitalmente
+    por", el nombre del certificado y la fecha. Es el aspecto estándar del
+    campo de firma (se ve igual en otros lectores) y sale derecho en páginas
+    giradas.
+  - **Ajustes → Firma** (pestaña nueva): visible o invisible, firma manuscrita
+    en el recuadro sí/no, sello de tiempo sí/no y su servidor.
+  - **Sello de tiempo: apagado por defecto**, para que nada salga del
+    ordenador sin pedirlo (principio 1). Solo se envía una huella del
+    documento. Servidor por defecto: DigiCert (gratuito, Adobe confía en él);
+    se puede cambiar por otro, por ejemplo uno español cualificado. Sin
+    conexión, avisa y ofrece firmar sin sello.
+  - Sin dependencias nuevas: el sello se pide con la biblioteca estándar de
+    Python.
 
 ## Fase 5 – Organizar y convertir
 | # | Tarea | Terminado cuando… | Estado |

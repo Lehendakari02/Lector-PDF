@@ -194,3 +194,163 @@ def test_a_certificate_file_validators_would_refuse_is_refused_now(tmp_path, mad
     p12.write_bytes(certificates.make_p12("viejo", key, certificate))
     with pytest.raises(refused):
         load_p12_signer(p12, certificates.PASSWORD)
+
+
+# Task 4.3: visible signature and timestamp.
+
+
+def blank_page(path, rotation=0, crop=None):
+    import pymupdf
+
+    with pymupdf.open() as doc:
+        page = doc.new_page(width=595, height=842)
+        if crop is not None:
+            page.set_cropbox(pymupdf.Rect(crop))
+        page.set_rotation(rotation)
+        doc.save(path)
+    return path
+
+
+@pytest.fixture
+def handwritten() -> bytes:
+    """A blue line with a red end at its left, like the picture tests."""
+    import pymupdf
+
+    from app.core import my_signature
+
+    pix = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 1200, 800), 0)
+    pix.clear_with(215)
+    pix.set_rect(pymupdf.IRect(300, 400, 900, 430), (20, 30, 120))
+    pix.set_rect(pymupdf.IRect(300, 400, 330, 438), (200, 0, 0))
+    return my_signature.clean(pix.tobytes("png"))
+
+
+@pytest.mark.parametrize("rotation", [0, 90, 180, 270])
+def test_a_visible_signature_is_where_it_was_put_and_upright(
+    signer, handwritten, tmp_path, rotation
+):
+    import pymupdf
+
+    source = blank_page(tmp_path / "hoja.pdf", rotation)
+    rect = (100.0, 100.0, 270.0, 156.0)
+    target = sign_pdf(
+        source, tmp_path / "firmado.pdf", signer, signing.Visible(0, rect, handwritten)
+    )
+    ((_signature, status),) = check_signatures(target, signer.signing_cert)
+    assert status.intact and status.valid and status.trusted
+    with pymupdf.open(target) as doc:
+        page = doc[0]
+        (widget,) = page.widgets()
+        shown = widget.rect * page.rotation_matrix
+        assert all(abs(a - b) < 0.6 for a, b in zip(shown, rect, strict=True))
+        picture = page.get_pixmap(dpi=72)
+        red = picture.pixel(104, 128)
+        assert red[0] > 150 and red[2] < 100, "the handwritten signature, red end at the left"
+        assert picture.pixel(140, 128)[2] > 80, "its blue line goes right"
+        inked = [picture.pixel(x, y) for x in range(180, 268) for y in range(102, 154)]
+        assert any(max(pixel) < 120 for pixel in inked), "the name and date at the right"
+
+
+def test_a_visible_signature_on_a_cropped_page_and_without_handwriting(signer, tmp_path):
+    import pymupdf
+
+    source = blank_page(tmp_path / "recortada.pdf", crop=(40, 60, 555, 800))
+    rect = (20.0, 30.0, 190.0, 86.0)
+    target = sign_pdf(source, tmp_path / "firmado.pdf", signer, signing.Visible(0, rect))
+    with pymupdf.open(target) as doc:
+        (widget,) = doc[0].widgets()
+        assert all(abs(a - b) < 0.6 for a, b in zip(widget.rect, rect, strict=True))
+        inked = doc[0].get_pixmap(dpi=72, clip=pymupdf.Rect(rect), annots=True)
+        assert any(min(inked.pixel(x, y)) < 120 for x in range(5, 60) for y in range(5, 50)), (
+            "without handwriting, the text starts at the left"
+        )
+
+
+def test_the_box_says_who_signs_and_when():
+    import pymupdf
+
+    picture = signing.appearance(170, 56, "MUÑOZ ÁLVAREZ ÍÑIGO", "22/11/2026 10:30", None)
+    with pymupdf.open(stream=picture, filetype="pdf") as doc:
+        text = doc[0].get_text()
+    assert "Firmado digitalmente por" in text
+    assert "MUÑOZ ÁLVAREZ ÍÑIGO" in text
+    assert "22/11/2026 10:30" in text
+
+
+def test_a_box_outside_the_page_is_refused(signer, tmp_path):
+    source = blank_page(tmp_path / "hoja.pdf")
+    with pytest.raises(SigningError):
+        sign_pdf(source, tmp_path / "a.pdf", signer, signing.Visible(0, (700, 900, 800, 950)))
+    with pytest.raises(SigningError):
+        sign_pdf(source, tmp_path / "b.pdf", signer, signing.Visible(3, (10, 10, 100, 50)))
+    assert not list(tmp_path.glob("*.tmp")) and not (tmp_path / "a.pdf").exists()
+
+
+@pytest.fixture
+def timestamp_server():
+    """A timestamping server on this computer, as the real ones answer."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    from asn1crypto import keys, tsp
+    from cryptography.hazmat.primitives import serialization
+    from pyhanko.sign.timestamps import DummyTimeStamper
+
+    key = certificates.new_key()
+    certificate = certificates.make_certificate("SELLO DE TIEMPO DE PRUEBA", key)
+    stamper = DummyTimeStamper(
+        tsa_cert=asn1_x509.Certificate.load(certificates.der(certificate)),
+        tsa_key=keys.PrivateKeyInfo.load(
+            key.private_bytes(
+                serialization.Encoding.DER,
+                serialization.PrivateFormat.PKCS8,
+                serialization.NoEncryption(),
+            )
+        ),
+    )
+    asked = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            body = self.rfile.read(int(self.headers["Content-Length"]))
+            asked.append(self.headers["Content-Type"])
+            answer = stamper.request_tsa_response(tsp.TimeStampReq.load(body)).dump()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/timestamp-reply")
+            self.send_header("Content-Length", str(len(answer)))
+            self.end_headers()
+            self.wfile.write(answer)
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{server.server_port}/tsa", asked
+    server.shutdown()
+
+
+def test_a_timestamp_is_added_when_asked(sample, signer, tmp_path, timestamp_server):
+    url, asked = timestamp_server
+    target = sign_pdf(sample("formulario.pdf"), tmp_path / "f.pdf", signer, timestamp_server=url)
+    assert asked and set(asked) == {"application/timestamp-query"}
+    ((_signature, status),) = check_signatures(target, signer.signing_cert)
+    assert status.intact and status.valid
+    assert status.timestamp_validity is not None
+
+
+def test_no_timestamp_unless_asked(sample, signer, tmp_path):
+    target = sign_pdf(sample("formulario.pdf"), tmp_path / "f.pdf", signer)
+    ((_signature, status),) = check_signatures(target, signer.signing_cert)
+    assert status.timestamp_validity is None
+
+
+def test_an_unreachable_timestamp_server_fails_clearly_and_leaves_nothing(sample, signer, tmp_path):
+    with pytest.raises(signing.TimestampFailed):
+        sign_pdf(
+            sample("formulario.pdf"),
+            tmp_path / "f.pdf",
+            signer,
+            timestamp_server="http://127.0.0.1:9/tsa",
+        )
+    assert list(tmp_path.iterdir()) == []

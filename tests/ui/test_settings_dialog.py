@@ -212,3 +212,44 @@ def test_the_toolbar_style_is_chosen_in_the_settings(window, settings):
     _choose(dialog.toolbar_box, False)
     assert not window.toolbar_icons_only
     dialog.close()
+
+
+# ---- signing with a certificate (task 4.3) ----
+
+
+def test_signing_preferences_have_coherent_defaults_and_are_kept(window, settings):
+    from app.core import certificate_settings as wanted
+    from app.core.signing import DEFAULT_TIMESTAMP_SERVER
+
+    dialog = window.open_settings()
+    assert dialog.visible_box.currentData() is True, "visible by default"
+    assert dialog.handwritten_box.isChecked() and dialog.handwritten_box.isEnabled()
+    assert not dialog.timestamp_box.isChecked(), "nothing goes on the internet by default"
+    assert not dialog.server_edit.isEnabled()
+    assert dialog.server_edit.text() == DEFAULT_TIMESTAMP_SERVER
+
+    _choose(dialog.visible_box, False)
+    assert settings.get(wanted.VISIBLE_SETTING) is False
+    assert not dialog.handwritten_box.isEnabled(), "no box, no handwriting in it"
+    dialog.timestamp_box.setChecked(True)
+    assert wanted.timestamp_wanted(settings) and dialog.server_edit.isEnabled()
+    dialog.server_edit.setText("  https://sello.example/tsa ")
+    dialog.server_edit.editingFinished.emit()
+    assert wanted.timestamp_server(settings) == "https://sello.example/tsa"
+    dialog.server_edit.setText("no es una dirección")
+    dialog.server_edit.editingFinished.emit()
+    assert dialog.server_edit.text() == DEFAULT_TIMESTAMP_SERVER, "nonsense: the default"
+    dialog.close()
+
+
+def test_strange_stored_signing_preferences_mean_the_defaults():
+    from app.core import certificate_settings as wanted
+    from app.core.signing import DEFAULT_TIMESTAMP_SERVER
+
+    class Stored:
+        def get(self, key, default=None):
+            return "rubbish"
+
+    assert wanted.visible_wanted(Stored()) and wanted.handwritten_wanted(Stored())
+    assert not wanted.timestamp_wanted(Stored())
+    assert wanted.timestamp_server(Stored()) == DEFAULT_TIMESTAMP_SERVER

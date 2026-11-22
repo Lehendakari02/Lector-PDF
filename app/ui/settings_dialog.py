@@ -4,7 +4,8 @@ Every change is applied and saved at once; there is nothing to accept. The
 only exception is the size of the interface, which needs a restart: the window
 says so and offers to do it.
 
-Two tabs, so that the window fits in a small screen: "General" and "Guardado".
+Several tabs, so that the window fits in a small screen: "General",
+"Guardado", "Lápiz y dedo" and "Firma".
 """
 
 from PySide6.QtCore import Qt
@@ -16,13 +17,14 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from app.core import file_association, ocr, pen, save_settings, symbols
+from app.core import certificate_settings, file_association, ocr, pen, save_settings, symbols
 from app.core.history import RESTORE_SETTING
 from app.core.interface_size import NORMAL_SIZE, SIZE_SETTING, SIZES, wanted_size
 from app.core.paths import is_portable
@@ -49,6 +51,7 @@ class SettingsDialog(QDialog):
         self.tabs.addTab(general, self.tr("General"))
         self.tabs.addTab(self._build_saving(), self.tr("Guardado"))
         self.tabs.addTab(self._build_pen(), self.tr("Lápiz y dedo"))
+        self.tabs.addTab(self._build_signing(), self.tr("Firma"))
 
         layout = QVBoxLayout(general)
         layout.setContentsMargins(16, 12, 16, 12)
@@ -326,6 +329,85 @@ class SettingsDialog(QDialog):
                 "En cuanto se use un lápiz, el dedo solo moverá la página."
             )
         self.finger_note.setText(text)
+
+    # ---- signing with a certificate ---------------------------------------
+
+    def _build_signing(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(10)
+        settings = self.settings
+
+        layout.addWidget(self._heading(self.tr("Firma con certificado")))
+        self.visible_box = QComboBox()
+        self.visible_box.setAccessibleName(self.tr("Cómo se ve la firma con certificado"))
+        self.visible_box.addItem(
+            self.tr("Visible: un recuadro con el nombre y la fecha, donde hagas clic"), True
+        )
+        self.visible_box.addItem(
+            self.tr("Invisible: solo se ve en el panel de firmas del lector"), False
+        )
+        self._choose(self.visible_box, certificate_settings.visible_wanted(settings))
+        self.visible_box.activated.connect(
+            lambda _index: self._set_signing(
+                certificate_settings.VISIBLE_SETTING, self.visible_box.currentData()
+            )
+        )
+        layout.addWidget(self.visible_box)
+        self.handwritten_box = QCheckBox(self.tr("Poner mi &firma manuscrita en el recuadro"))
+        self.handwritten_box.setToolTip(
+            self.tr(
+                "La firma guardada en «Mi firma e iniciales». Si no hay ninguna, solo va el texto."
+            )
+        )
+        self.handwritten_box.setChecked(certificate_settings.handwritten_wanted(settings))
+        self.handwritten_box.toggled.connect(
+            lambda on: self._set_signing(certificate_settings.HANDWRITTEN_SETTING, on)
+        )
+        layout.addWidget(self.handwritten_box)
+
+        layout.addWidget(self._heading(self.tr("Sello de tiempo")))
+        self.timestamp_box = QCheckBox(self.tr("Añadir un &sello de tiempo (necesita internet)"))
+        self.timestamp_box.setChecked(certificate_settings.timestamp_wanted(settings))
+        self.timestamp_box.toggled.connect(
+            lambda on: self._set_signing(certificate_settings.TIMESTAMP_SETTING, on)
+        )
+        layout.addWidget(self.timestamp_box)
+        note = QLabel(
+            self.tr(
+                "Demuestra ante cualquiera la hora exacta de la firma. Se pide a un "
+                "servidor de sellos de tiempo, al que solo se envía una huella del "
+                "documento, nunca el documento. Sin él la firma vale igual."
+            )
+        )
+        note.setObjectName("dialogNote")
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        row = QFormLayout()
+        self.server_edit = QLineEdit(certificate_settings.timestamp_server(settings))
+        self.server_edit.setAccessibleName(self.tr("Servidor de sellos de tiempo"))
+        self.server_edit.editingFinished.connect(self._server_chosen)
+        row.addRow(self.tr("Servidor:"), self.server_edit)
+        layout.addLayout(row)
+
+        layout.addStretch(1)
+        self._refresh_signing()
+        return page
+
+    def _set_signing(self, name: str, value) -> None:
+        self.settings.set(name, value)
+        self._refresh_signing()
+
+    def _server_chosen(self) -> None:
+        text = self.server_edit.text().strip()
+        self.settings.set(certificate_settings.TIMESTAMP_SERVER_SETTING, text)
+        # Something that is not an address goes back to the one used.
+        self.server_edit.setText(certificate_settings.timestamp_server(self.settings))
+
+    def _refresh_signing(self) -> None:
+        self.handwritten_box.setEnabled(certificate_settings.visible_wanted(self.settings))
+        self.server_edit.setEnabled(certificate_settings.timestamp_wanted(self.settings))
 
     # ---- saving ------------------------------------------------------------
 

@@ -6,7 +6,11 @@ Two ways to reach the certificate:
 - a ``.p12`` / ``.pfx`` file with its password (``load_p12_signer``).
 
 The signature is added at the end of the file ("incremental"), so signatures
-already in the document stay valid.
+already in the document stay valid. It can be invisible, or visible: a box on
+a page with the name of who signs, the date and, if wanted, the handwritten
+signature (``Visible``). A timestamp from a timestamping server can be added
+(``TimestampServer``): only a fingerprint of the document is sent, never the
+document itself.
 """
 
 import contextlib
@@ -14,14 +18,19 @@ import hashlib
 import io
 import os
 import tempfile
+import urllib.request
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from asn1crypto import x509
+from asn1crypto import tsp, x509
+from pyhanko import stamp
+from pyhanko.pdf_utils import layout
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import fields, signers
 from pyhanko.sign.signers import Signer
+from pyhanko.sign.timestamps import TimeStamper
 from pyhanko_certvalidator.registry import SimpleCertificateStore
 
 from app.core import windows_store
@@ -29,6 +38,11 @@ from app.core.windows_store import StoreCertificate
 
 FIELD_PREFIX = "Firma"
 MAX_CHAIN_LENGTH = 10
+# A free timestamping service, trusted by Adobe Reader. It can be changed in the
+# settings (for example to a qualified Spanish one).
+DEFAULT_TIMESTAMP_SERVER = "http://timestamp.digicert.com"
+TIMESTAMP_TIMEOUT = 15  # seconds
+BOX_SIZE = (170.0, 56.0)  # a visible signature, as shown: 6 by 2 centimetres
 
 
 class SigningError(Exception):
@@ -45,6 +59,102 @@ class NotForSigning(SigningError):
 
 class PasswordProtected(SigningError):
     """The document asks for a password; signing those comes in a later phase."""
+
+
+class TimestampFailed(SigningError):
+    """The timestamping server could not be reached or gave a bad answer."""
+
+
+@dataclass(frozen=True)
+class Visible:
+    """Where a visible signature goes and what it shows.
+
+    ``rect`` is in the coordinates of the page as shown (turned pages too),
+    like everything the view hands over. ``png`` is the handwritten signature
+    to show at its left, if wanted.
+    """
+
+    page: int
+    rect: tuple[float, float, float, float]
+    png: bytes | None = None
+
+
+class TimestampServer(TimeStamper):
+    """Asks a timestamping server (RFC 3161) over HTTP, with the standard library."""
+
+    def __init__(self, url: str, timeout: float = TIMESTAMP_TIMEOUT) -> None:
+        super().__init__()
+        self.url = url
+        self.timeout = timeout
+
+    async def async_request_tsa_response(self, req: tsp.TimeStampReq) -> tsp.TimeStampResp:
+        request = urllib.request.Request(
+            self.url,
+            data=req.dump(),
+            headers={"Content-Type": "application/timestamp-query"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as answer:
+                if "timestamp-reply" not in answer.headers.get("Content-Type", ""):
+                    raise TimestampFailed("The timestamping server did not answer properly")
+                return tsp.TimeStampResp.load(answer.read())
+        except TimestampFailed:
+            raise
+        except Exception as exc:
+            raise TimestampFailed(f"The timestamping server could not be reached: {exc}") from exc
+
+
+def signer_name(signer: Signer) -> str:
+    """The name on the certificate, as validators show it."""
+    subject = signer.signing_cert.subject.native
+    return str(subject.get("common_name") or subject.get("organization_name") or "")
+
+
+def appearance(width: float, height: float, name: str, when: str, png: bytes | None) -> bytes:
+    """A one-page PDF, the size of the box as shown, with what the visible
+    signature shows: the handwritten signature at the left (if any), and who
+    signs and when."""
+    import pymupdf
+
+    with pymupdf.open() as doc:
+        page = doc.new_page(width=width, height=height)
+        page.draw_rect(page.rect, color=(0.55, 0.6, 0.7), width=0.8)
+        text_left = 4.0
+        if png:
+            picture = pymupdf.Rect(3, 3, width * 0.42, height - 3)
+            page.insert_image(picture, stream=png, keep_proportion=True)
+            text_left = width * 0.44
+        text = f"Firmado digitalmente por\n{name}\nFecha: {when}"
+        box = pymupdf.Rect(text_left, 3, width - 3, height - 2)
+        size = 9.0
+        while size > 4 and page.insert_textbox(box, text, fontsize=size, fontname="helv") < 0:
+            size -= 0.5
+        return doc.tobytes(garbage=3, deflate=True)
+
+
+def _place(data: bytes, visible: Visible, picture: bytes) -> tuple[tuple, bytes]:
+    """The box in the coordinates of the PDF file (bottom up, page not turned)
+    and the appearance turned to look upright on a turned page."""
+    import pymupdf
+
+    with pymupdf.open(stream=data, filetype="pdf") as doc:
+        if not 0 <= visible.page < doc.page_count:
+            raise SigningError("That page is not in the document")
+        page = doc[visible.page]
+        shown = pymupdf.Rect(visible.rect) & page.rect  # kept inside the page
+        if shown.is_empty:
+            raise SigningError("The signature box is outside the page")
+        unturned = shown * page.derotation_matrix
+        in_file = unturned * ~page.transformation_matrix
+        rotation = page.rotation
+    if rotation:
+        with pymupdf.open() as turned, pymupdf.open(stream=picture, filetype="pdf") as upright:
+            sheet = turned.new_page(width=unturned.width, height=unturned.height)
+            sheet.show_pdf_page(sheet.rect, upright, 0, rotate=rotation)
+            picture = turned.tobytes(garbage=3, deflate=True)
+    box = (in_file.x0, in_file.y0, in_file.x1, in_file.y1)
+    return box, picture
 
 
 def build_chain(
@@ -178,14 +288,22 @@ def _rewritten(data: bytes) -> bytes:
         return doc.tobytes(garbage=0, deflate=True)
 
 
-def sign_pdf(source: str | Path, target: str | Path, signer: Signer) -> Path:
-    """Write to ``target`` a copy of ``source`` with an invisible PAdES signature.
+def sign_pdf(
+    source: str | Path,
+    target: str | Path,
+    signer: Signer,
+    visible: Visible | None = None,
+    timestamp_server: str = "",
+) -> Path:
+    """Write to ``target`` a copy of ``source`` with a PAdES signature:
+    invisible, or visible where ``visible`` says; with a timestamp from
+    ``timestamp_server`` if one is given (``TimestampFailed`` if it fails).
 
     The copy is written whole to a temporary file next to ``target`` and only
     then given its name, so a failure never leaves half a file.
     """
     source, target = Path(source), Path(target)
-    temporary = None
+    temporary = picture_file = None
     try:
         data = source.read_bytes()
         try:
@@ -194,23 +312,67 @@ def sign_pdf(source: str | Path, target: str | Path, signer: Signer) -> Path:
             raise
         except Exception:
             writer = _open_for_signing(_rewritten(data))
+        field_name = next_field_name(writer.prev)
         metadata = signers.PdfSignatureMetadata(
-            field_name=next_field_name(writer.prev),
+            field_name=field_name,
             md_algorithm="sha256",
             subfilter=fields.SigSeedSubFilter.PADES,
+            name=signer_name(signer) or None,
         )
+        options = {}
+        if visible is not None:
+            width, height = visible.rect[2] - visible.rect[0], visible.rect[3] - visible.rect[1]
+            when = datetime.now().astimezone().strftime("%d/%m/%Y %H:%M")
+            upright = appearance(width, height, signer_name(signer), when, visible.png)
+            box, picture = _place(writer_bytes(writer), visible, upright)
+            handle, name = tempfile.mkstemp(prefix="lectorpdf-aspecto-", suffix=".pdf")
+            picture_file = Path(name)
+            with os.fdopen(handle, "wb") as out:
+                out.write(picture)
+            options["new_field_spec"] = fields.SigFieldSpec(
+                field_name, on_page=visible.page, box=box
+            )
+            options["stamp_style"] = stamp.StaticStampStyle.from_pdf_file(
+                str(picture_file),
+                border_width=0,
+                background_opacity=1.0,
+                background_layout=layout.SimpleBoxLayoutRule(
+                    x_align=layout.AxisAlignment.ALIGN_MID,
+                    y_align=layout.AxisAlignment.ALIGN_MID,
+                    margins=layout.Margins(0, 0, 0, 0),
+                ),
+            )
+        if timestamp_server:
+            options["timestamper"] = TimestampServer(timestamp_server)
         handle, name = tempfile.mkstemp(dir=target.parent, prefix=".firmando-", suffix=".tmp")
         temporary = Path(name)
         with os.fdopen(handle, "wb+") as out:
-            signers.PdfSigner(metadata, signer).sign_pdf(writer, output=out)
+            signers.PdfSigner(metadata, signer, **options).sign_pdf(writer, output=out)
         os.replace(temporary, target)
     except (windows_store.SigningCancelled, SigningError):
         _remove(temporary)
         raise
     except Exception as exc:
         _remove(temporary)
+        cause = exc
+        while cause is not None and not isinstance(cause, SigningError):
+            cause = cause.__cause__ or cause.__context__
+        if isinstance(cause, TimestampFailed):
+            raise TimestampFailed(str(cause)) from exc
         raise SigningError(f"The document could not be signed: {exc}") from exc
+    finally:
+        _remove(picture_file)
     return target
+
+
+def writer_bytes(writer: IncrementalPdfFileWriter) -> bytes:
+    """The document the writer adds to, as it was read."""
+    stream = writer.prev.stream
+    position = stream.tell()
+    stream.seek(0)
+    data = stream.read()
+    stream.seek(position)
+    return data
 
 
 def _remove(path: Path | None) -> None:
