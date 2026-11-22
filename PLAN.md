@@ -1267,8 +1267,8 @@ Notas de la Fase 2C:
 | 3.3 | Mis datos (nombre, DNI, dirección…) | Pongo mi DNI en un formulario con un clic | ✅ |
 | 3.4 | Sellos y marcas rápidas (✓, ✗, fecha, sellos propios) | Marco casillas de un documento sin campos | ✅ |
 | 3.5 | Crear y guardar firma e iniciales (dibujar, escribir, importar imagen sin fondo) | Tengo mi firma guardada | ✅ |
-| 3.6 | Firmar con un clic: colocar, mover, redimensionar, fecha automática | Firmo un contrato en segundos | 🔶 |
-| 3.7 | Iniciales en todas las páginas | Con un clic pongo iniciales en todas las hojas | ⬜ |
+| 3.6 | Firmar con un clic: colocar, mover, redimensionar, fecha automática | Firmo un contrato en segundos | ✅ |
+| 3.7 | Iniciales en todas las páginas | Con un clic pongo iniciales en todas las hojas | 🔶 |
 | 3.8 | Versión 0.5 | — | ⬜ |
 
 Notas de la Fase 3:
@@ -1368,6 +1368,17 @@ Notas de la Fase 3:
     activó) no pregunta; el original queda en "Versiones anteriores".
   - Limitación: como toda anotación, se oculta con "Ocultar anotaciones" (y
     al imprimir sin anotaciones).
+- **3.7: Iniciales en todas las páginas (22/11/2026).**
+  - **Firmar → "Poner mis iniciales en todas las páginas"** (o Ctrl+K,
+    "Iniciales en todas las páginas"). Si aún no hay iniciales, primero se
+    crean. Un clic en la página donde van y se ponen en el mismo sitio de
+    todas.
+  - "El mismo sitio" es a la misma distancia de los bordes más cercanos: unas
+    iniciales en la esquina de abajo a la derecha quedan en esa esquina
+    también en una página apaisada o de otro tamaño. Nunca se salen de la
+    página.
+  - Es un solo cambio: Ctrl+Z las quita de todas. Cada una se puede mover o
+    borrar después por separado.
 
 ## Fase 4 – Firma con certificado digital
 | # | Tarea | Terminado cuando… | Estado |
