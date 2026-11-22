@@ -207,7 +207,8 @@ def test_what_is_taken_away_is_not_left_hidden_in_the_file(tmp_path):
     doc.new_page().add_freetext_annot((50, 50, 300, 100), "DNI 12345678Z")
     doc.save(path)
     doc.close()
-    with pymupdf.open(path) as doc:
+    # Opened from its bytes: Windows does not replace a file that is open.
+    with pymupdf.open("pdf", path.read_bytes()) as doc:
         doc[0].delete_annot(doc[0].first_annot)
         save_to(doc, path)
     assert b"12345678Z" not in path.read_bytes()
