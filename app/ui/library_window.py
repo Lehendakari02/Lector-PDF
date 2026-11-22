@@ -55,6 +55,8 @@ class LibraryWindow(QDialog):
         self.topics: list[Path] = []
         self.infos: dict[Path, TopicInfo] = {}
         self.hits: list[LibraryHit] = []
+        self._items: dict[Path, QTreeWidgetItem] = {}
+        self._offset = 0  # the topic the work in the background started at
         self._work: LibraryWork | None = None
         self._searching = False
         self._timer = QTimer(self)
@@ -176,8 +178,10 @@ class LibraryWindow(QDialog):
 
     def _fill_topics(self) -> None:
         self.topic_list.clear()
+        self._items = {}
         for path in self.topics:
             item = QTreeWidgetItem([self._name(path), "", "", ""])
+            self._items[path] = item
             item.setData(0, PATH_ROLE, str(path))
             item.setToolTip(0, str(path))
             self.topic_list.addTopLevelItem(item)
@@ -242,10 +246,11 @@ class LibraryWindow(QDialog):
 
     # ---- the work in the background -------------------------------------------
 
-    def _start(self, work: LibraryWork, searching: bool) -> None:
+    def _start(self, work: LibraryWork, searching: bool, offset: int = 0) -> None:
         self._work = work
         self._searching = searching
-        self._done = 0
+        self._offset = offset
+        self._done = offset
         self.stop_button.setVisible(searching)
         self._timer.start()
 
@@ -263,7 +268,7 @@ class LibraryWindow(QDialog):
             elif kind == "hit":
                 self._add_hit(message[1])
             elif kind == "done_one":
-                self._done = message[1] + 1
+                self._done = self._offset + message[1] + 1
                 if self._searching:
                     self.status.setText(
                         self.tr("Buscando… {0} de {1} temas, {2} resultados").format(
@@ -274,17 +279,17 @@ class LibraryWindow(QDialog):
             self._finish()
 
     def _refresh_topic(self, path: Path) -> None:
-        for index in range(self.topic_list.topLevelItemCount()):
-            item = self.topic_list.topLevelItem(index)
-            if Path(item.data(0, PATH_ROLE)) == path:
-                self._show_progress(item, path)
-                return
+        item = self._items.get(path)
+        if item is not None:
+            self._show_progress(item, path)
 
     def _finish(self) -> None:
         self._timer.stop()
-        if self._work is not None:
-            self._work.stop()
-        self._work = None
+        work, self._work = self._work, None
+        if work is not None:
+            work.stop()
+            if not work.completed and self._go_on_after_broken():
+                return
         self.stop_button.hide()
         if self._searching:
             topics = len({hit.path for hit in self.hits})
@@ -296,6 +301,27 @@ class LibraryWindow(QDialog):
                 self.status.setText(self.tr("No se ha encontrado en ningún tema."))
         else:
             self.status.setText(self.tr("{0} temas.").format(len(self.topics)))
+
+    def _go_on_after_broken(self) -> bool:
+        """The work ended before the end: a topic broke the program that reads
+        them (a damaged file). That one is passed over and the rest are read."""
+        broken = self._done
+        if broken >= len(self.topics):
+            return False
+        path = self.topics[broken]
+        if not self._searching:
+            self.infos[path] = TopicInfo(path, 0, 0, "damaged")
+            self._refresh_topic(path)
+        rest = self.topics[broken + 1 :]
+        if not rest:
+            return False
+        if self._searching:
+            options = SearchOptions(whole_word=self.whole_word.isChecked())
+            work = LibraryWork(rest, self._query, options)
+        else:
+            work = LibraryWork(rest)
+        self._start(work, self._searching, broken + 1)
+        return True
 
     @property
     def busy(self) -> bool:

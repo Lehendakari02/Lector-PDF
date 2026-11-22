@@ -143,3 +143,11 @@ def test_on_a_page_kept_turned_the_line_is_where_it_is_seen():
     found = find(doc, "art 5")
     x0, y0, x1, y1 = found.rect
     assert x1 - x0 < y1 - y0, "the line runs down the turned page"
+
+
+def test_a_number_alone_on_its_line_is_a_heading_not_a_table_of_contents():
+    assert rank_of("3.2") == HEADING
+    assert rank_of("Art. 3.1") == HEADING
+    assert rank_of("Artículo 5. Plazo de 2.5") == HEADING
+    assert rank_of("Introducción. 4") == CONTENTS
+    assert rank_of("1.1 Introducción ....... 4") == CONTENTS

@@ -430,3 +430,19 @@ def test_a_text_changed_on_the_page_is_drafted_as_a_change(window, opened, wait_
     view.write_draft()
     assert view.journal.draft() is None, "unchanged: nothing to bring back"
     view.close_note_panel()
+
+
+def test_the_draft_is_written_again_only_when_what_is_written_changes(window, opened):
+    view, _path = opened()
+    view.start_note(NOTE, 0, 300, 200, QPoint(40, 40))
+    view.note_panel.edit.setPlainText("una nota")
+    view.write_draft()
+    first = view.journal.draft_file.stat().st_mtime_ns
+    view.journal.draft_file.write_text("cambiado a mano")  # to see whether it is written
+    view.write_draft()
+    assert view.journal.draft_file.read_text() == "cambiado a mano", "nothing new to write"
+    view.note_panel.edit.setPlainText("una nota más larga")
+    view.write_draft()
+    assert "más larga" in view.journal.draft_file.read_text(encoding="utf-8")
+    assert view.journal.draft_file.stat().st_mtime_ns >= first
+    view.close_note_panel(keep=False)

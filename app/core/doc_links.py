@@ -54,6 +54,27 @@ def resolve(source: str | Path, file: str) -> Path:
     return (Path(source).absolute().parent / written).resolve()
 
 
+def page_top(path: str | Path, number: int, password: str | None = None) -> float | None:
+    """Where the top of a page is, in PDF points from the bottom (what the
+    height of a link counts from). It is not always the height of the page:
+    a margin added below, or boxes that do not start at 0, move the bottom.
+    None if it cannot be known (a page kept turned, or the file not read)."""
+    import pymupdf
+
+    try:
+        with pymupdf.open(path) as doc:
+            if doc.needs_pass and not (password and doc.authenticate(password)):
+                return None
+            if not 0 <= number < doc.page_count:
+                return None
+            page = doc[number]
+            if page.rotation % 360:
+                return None
+            return (pymupdf.Point(0, 0) * ~page.transformation_matrix).y
+    except Exception:
+        return None
+
+
 def _string(doc, xref: int, key: str) -> str:
     kind, value = doc.xref_get_key(xref, key)
     return value if kind == "string" else ""
@@ -237,44 +258,73 @@ class AddDocLink:
         )
 
 
+def _set_file(doc, xref: int, file: str) -> None:
+    """Make the link ``xref`` go to ``file``. Its action may be an object of
+    its own (other programs often write it so): the file is changed there."""
+    kind, value = doc.xref_get_key(xref, "A")
+    if kind == "xref":
+        doc.xref_set_key(int(value.split()[0]), "F", _file_spec(file))
+    else:
+        doc.xref_set_key(xref, "A/F", _file_spec(file))
+
+
 @dataclass(frozen=True)
 class ChangeLinkFile:
     """Every link of the document to ``old_file`` now goes to ``new_file`` (the other
-    document was moved or renamed). Undoing it puts ``old_file`` back."""
+    document was moved or renamed). Undoing it puts ``old_file`` back, only on the
+    links it changed: each one carries a mark with the name of this change."""
 
     old_file: str  # not "new": that name means "an annotation put" to the view
     new_file: str
+    name: str = ""  # "" for one written before the mark existed
 
     def pages(self) -> list[int]:
         return []  # nothing looks different
 
-    def _swap(self, doc, before: str, after: str) -> list[int]:
+    @property
+    def _mark(self) -> str:
+        return "LectorPDFMended" + "".join(ch for ch in self.name if ch.isalnum())
+
+    def apply(self, doc) -> list[int]:
+        if not self.new_file:
+            raise CommandError("no new file")
         changed = []
         for number in range(doc.page_count):
             page = doc[number]
             for xref in _annots(doc, page)[2]:
                 target = _target(doc, xref)
-                if target is None or target[0] != before:
+                if target is None or target[0] != self.old_file:
                     continue
-                doc.xref_set_key(xref, "A/F", _file_spec(after))
+                _set_file(doc, xref, self.new_file)
+                if self.name:
+                    doc.xref_set_key(xref, self._mark, "true")
                 if number not in changed:
                     changed.append(number)
         return changed  # their links are read again
 
-    def apply(self, doc) -> list[int]:
-        if not self.new_file:
-            raise CommandError("no new file")
-        return self._swap(doc, self.old_file, self.new_file)
-
     def undo(self, doc) -> list[int]:
-        return self._swap(doc, self.new_file, self.old_file)
+        changed = []
+        for number in range(doc.page_count):
+            page = doc[number]
+            for xref in _annots(doc, page)[2]:
+                target = _target(doc, xref)
+                if target is None or target[0] != self.new_file:
+                    continue
+                if self.name:
+                    if doc.xref_get_key(xref, self._mark)[1] != "true":
+                        continue  # it went there before this change
+                    doc.xref_set_key(xref, self._mark, "null")
+                _set_file(doc, xref, self.old_file)
+                if number not in changed:
+                    changed.append(number)
+        return changed
 
     def to_dict(self) -> dict:
-        return {"what": "link_file", "old": self.old_file, "new": self.new_file}
+        return {"what": "link_file", "old": self.old_file, "new": self.new_file, "name": self.name}
 
     @classmethod
     def from_dict(cls, data: dict) -> ChangeLinkFile:
-        return cls(str(data["old"]), str(data["new"]))
+        return cls(str(data["old"]), str(data["new"]), str(data.get("name", "")))
 
 
 register_reader("doc_link", AddDocLink.from_dict)

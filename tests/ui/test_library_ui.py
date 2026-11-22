@@ -112,3 +112,34 @@ def test_an_empty_folder_says_so(window, tmp_path, wait_until):
     library = library_of(window, empty, wait_until)
     assert library.status.text() == "No hay ningún PDF en esta carpeta."
     assert not library.search()
+
+
+class _BrokenWork:
+    """Work in the background whose program ended after the first topic."""
+
+    def __init__(self, first):
+        self._messages = [("info", first), ("done_one", 0)]
+        self.finished = True
+        self.completed = False
+
+    def messages(self, most=500):
+        found, self._messages = self._messages, []
+        return found
+
+    def stop(self):
+        pass
+
+
+def test_a_topic_that_breaks_the_reading_is_passed_over(window, sample, tmp_path, wait_until):
+    from app.core.library import topic_info
+
+    root = temario(tmp_path, sample)
+    library = library_of(window, root, wait_until)
+    library.infos = {}
+    first = library.topics[0]
+    library._start(_BrokenWork(topic_info(first)), searching=False)
+    library._poll()
+    assert library.busy, "the rest are read"
+    assert texts(library.topic_list, 1)[1] == "No se puede abrir"
+    wait_until(lambda: not library.busy, seconds=60)
+    assert texts(library.topic_list, 1) == ["0 %", "No se puede abrir", "0 %"]

@@ -113,3 +113,66 @@ def test_nothing_to_link_is_refused(tema):
     with pymupdf.open(tema) as doc, pytest.raises(CommandError):
         AddDocLink(0, (), "x.pdf", 0, None, "n").apply(doc)
     assert Path(tema).exists()
+
+
+def _foreign_link(doc, file: str) -> int:
+    """A link as other programs often write it: its action is an object of its own."""
+    page = doc[0]
+    action = doc.get_new_xref()
+    doc.update_object(action, f"<< /S /GoToR /F ({file}) /D [0 /XYZ null 700 null] >>")
+    annot = doc.get_new_xref()
+    doc.update_object(
+        annot,
+        f"<< /Type /Annot /Subtype /Link /Rect [72 690 300 705] /Border [0 0 0] /A {action} 0 R >>",
+    )
+    doc.xref_set_key(page.xref, "Annots", f"[{annot} 0 R]")
+    return annot
+
+
+def test_a_moved_file_is_changed_in_a_link_whose_action_is_an_object_of_its_own():
+    doc = pymupdf.open()
+    doc.new_page()
+    _foreign_link(doc, "../Leyes/Constitucion.pdf")
+    change = ChangeLinkFile("../Leyes/Constitucion.pdf", "../Temario/Constitucion.pdf", "m1")
+    assert change.apply(doc) == [0]
+    assert [one.file for one in page_doc_links(doc, 0)] == ["../Temario/Constitucion.pdf"]
+    assert change.undo(doc) == [0]
+    assert [one.file for one in page_doc_links(doc, 0)] == ["../Leyes/Constitucion.pdf"]
+
+
+def test_undoing_a_change_of_file_leaves_the_links_that_already_went_there(tema):
+    with pymupdf.open(tema) as doc:
+        link("l1", file="../Leyes/Vieja.pdf").apply(doc)
+        link("l2", file="../Leyes/Nueva.pdf").apply(doc)
+        change = ChangeLinkFile("../Leyes/Vieja.pdf", "../Leyes/Nueva.pdf", "m1")
+        change.apply(doc)
+        assert change.apply(doc) == []  # recovered twice: nothing more
+        assert {one.file for one in page_doc_links(doc, 0)} == {"../Leyes/Nueva.pdf"}
+        change.undo(doc)
+        files = sorted((one.name, one.file) for one in page_doc_links(doc, 0))
+        assert files == [
+            ("l1", "../Leyes/Vieja.pdf"),
+            ("l1", "../Leyes/Vieja.pdf"),
+            ("l2", "../Leyes/Nueva.pdf"),
+            ("l2", "../Leyes/Nueva.pdf"),
+        ]
+        again = command_from_dict(change.to_dict())
+        assert again == change
+
+
+def test_the_top_of_a_page_for_a_link_is_where_its_boxes_say(tmp_path):
+    from app.core.doc_links import page_top
+    from app.core.margins import AddMargin
+
+    doc = pymupdf.open()
+    doc.new_page(width=595, height=842)
+    doc.new_page(width=595, height=842)
+    doc[1].set_rotation(90)
+    AddMargin((0,), 0.0, 0.0, 140.0, "m1").apply(doc)  # a margin below: the bottom moves
+    path = tmp_path / "ley.pdf"
+    doc.save(path)
+    assert doc[0].rect.height == pytest.approx(982)
+    assert page_top(path, 0) == pytest.approx(842)
+    assert page_top(path, 1) is None  # kept turned: only the page
+    assert page_top(path, 5) is None
+    assert page_top(tmp_path / "no-esta.pdf", 0) is None

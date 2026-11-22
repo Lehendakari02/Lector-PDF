@@ -2017,14 +2017,23 @@ class PdfView(QAbstractScrollArea):
         self.clear_selection()
         return self._do(order)
 
-    def place_for_link(self) -> tuple[int, float]:
+    def _link_top(self, page: int) -> float:
+        """Where the top of a page is for the height of a link (PDF points
+        from the bottom); usually its height."""
+        height = self._sizes[page].height
+        if self._document is None:
+            return height
+        known = doc_links.page_top(self._document.path, page, self._document.password)
+        return height if known is None else known
+
+    def place_for_link(self) -> tuple[int, float | None]:
         """Where a link to this document leads if made now: the page at the
         top of the window and the height there (PDF points from the bottom)."""
         page, top = self._top_shown()
         if top > 0 or self._scroll_y() > self._tops[page]:
             top += self._to_pixels(PLACE_MARGIN) / self._render_zoom()  # as it is shown
         height = self._sizes[page].height
-        return page, round(max(0.0, height - min(top, height)), 1)
+        return page, round(self._link_top(page) - min(max(0.0, top), height), 1)
 
     def go_to_link_place(self, page: int, top: float | None) -> None:
         """Show the place a link leads to (``top`` in PDF points from the bottom)."""
@@ -2035,13 +2044,14 @@ class PdfView(QAbstractScrollArea):
         if top is None or self._rotation != 0:
             self.scroll_to_page(page)
             return
-        shown = max(0.0, self._sizes[page].height - top)
+        height = self._sizes[page].height
+        shown = max(0.0, min(height, self._link_top(page) - top))
         y = self._tops[page] + shown * self._render_zoom()
         self.verticalScrollBar().setValue(self._to_units(y - self._to_pixels(PLACE_MARGIN)))
 
     def change_link_file(self, old: str, new: str) -> bool:
         """Every link to ``old`` now goes to ``new`` (the other file moved)."""
-        return old != new and self._do(doc_links.ChangeLinkFile(old, new))
+        return old != new and self._do(doc_links.ChangeLinkFile(old, new, new_name()))
 
     def note_under(self, position: QPoint) -> PageNote | None:
         """The note or text box under a place of the window."""
@@ -2227,6 +2237,10 @@ class PdfView(QAbstractScrollArea):
             return
         order = self.draft_order()
         written = order.to_dict() if order is not None else None
+        if written is not None:
+            # A new note gets a new name each time it is asked for: that alone
+            # is not a change of what is written.
+            written.pop("name", None)
         if written != self._draft_written:
             self.journal.write_draft(order)
             self._draft_written = written

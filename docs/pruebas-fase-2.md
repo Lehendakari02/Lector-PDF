@@ -720,3 +720,17 @@ Prepara dos carpetas, por ejemplo `Temas` con un tema y `Leyes` con una ley.
 7. Copia las dos carpetas a otro ordenador (o a un USB) con la misma
    estructura: el enlace sigue funcionando.
 
+## Fase 2C – Tarea 2.31b – Arreglos de la revisión
+
+1. Con un PDF que tenga enlaces a otro PDF hechos con **Adobe** (o Word),
+   mueve el documento al que lleva a la carpeta de la biblioteca y pulsa el
+   enlace: se abre al lado y el enlace queda corregido. Ctrl+Z lo deja como
+   estaba. Guarda y pruébalo en Adobe: el enlace funciona.
+2. Añade un margen **abajo** a una ley, guárdala, y haz desde un tema un
+   enlace a mitad de una de sus páginas. Ábrelo en Adobe: lleva a esa altura.
+3. En la biblioteca, elige por error una carpeta enorme (por ejemplo
+   `C:\`): el programa no se queda parado más de unos segundos.
+4. Exporta un resumen (se abre en una pestaña), subraya algo más y vuelve a
+   exportarlo con el mismo nombre: la pestaña del resumen se cambia por el
+   nuevo, sin error.
+
