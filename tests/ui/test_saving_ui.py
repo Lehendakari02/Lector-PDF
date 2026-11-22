@@ -76,8 +76,8 @@ def test_a_change_made_while_saving_is_still_pending(window, opened, wait_until)
     view = window.pdf_view
     view.mark_modified()
     window.save_document()
-    view.mark_modified()  # made after the save was asked for
-    wait_until(lambda: not view.saving)
+    assert view.put_note(0, 100, 100, "Después")  # made after the save was asked for
+    wait_until(lambda: not view.saving and not view._changing)
     assert view.modified and window.save_action.isEnabled()
 
 

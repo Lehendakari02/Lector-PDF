@@ -546,7 +546,21 @@ Con un documento abierto, en el modo Estudiar.
 5. Guarda y abre el PDF en **Edge** y en **Adobe**: los colores nuevos se ven
    igual.
 
-## Fase 2C – Tarea 2.20 – Panel de anotaciones
+## Arreglos 2.19d – Fallos de la revisión del código
+
+1. **Página guardada de lado.** Abre un escaneado cuyas páginas se vean de
+   lado en otros visores pero derechas aquí (o gira una página en Adobe y
+   guarda). Selecciona una palabra, resáltala y búscala: la selección, el
+   resaltado y el resultado de la búsqueda caen sobre esa palabra.
+2. **Texto a medio escribir.** Con la herramienta Texto, escribe algo en la
+   página y, sin hacer clic fuera, pulsa Ctrl+S: se guarda con el texto.
+   Escribe otro y, sin salir, cierra la pestaña: pregunta si guardar.
+3. **"Cambios sin guardar".** Haz un trazo y pulsa Ctrl+S enseguida: abajo
+   pone "Guardado" y al cerrar no pregunta.
+4. **Lo borrado se va de verdad.** Escribe un texto con un dato (por ejemplo,
+   un DNI inventado), guarda, bórralo y guarda otra vez. Ábrelo con el Bloc
+   de notas y busca el dato: no aparece.
+
 
 1. Abre un tema en el que hayas resaltado en dos colores, escrito una nota y
    hecho algún dibujo. Pulsa **F4** y la pestaña **Anotaciones**.

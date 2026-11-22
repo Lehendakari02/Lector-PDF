@@ -102,8 +102,12 @@ def test_the_mark_lands_on_the_word_in_a_page_kept_turned(sample, tmp_path, turn
         order.apply(doc)
         x0, y0, x1, y1 = changed_box(before, doc[0].get_pixmap())
         wx0, wy0, wx1, wy1 = hit.rects[0]
-        assert abs(x0 - wx0) < 4 and abs(x1 - wx1) < 4
-        assert abs(y0 - wy0) < 4 and abs(y1 - wy1) < 4
+        # The word's box is now on the page as shown (see the test below, which
+        # checks it against the drawn letters). Here the words run down the
+        # page, so the rounded ends of the highlight stick out to the sides.
+        assert abs((x0 + x1) - (wx0 + wx1)) < 4 and abs((y0 + y1) - (wy0 + wy1)) < 4
+        assert x0 <= wx0 + 1 and wx1 <= x1 + 1 and y0 <= wy0 + 1 and wy1 <= y1 + 1
+        assert (x1 - x0) * (y1 - y0) < 3 * (wx1 - wx0) * (wy1 - wy0)
 
 
 def test_undo_takes_the_mark_away_and_leaves_the_others(doc):
@@ -231,3 +235,42 @@ def test_the_marks_survive_saving_and_are_plain_pdf(doc, tmp_path):
         assert {"Subtype", "QuadPoints", "Rect", "C", "AP"} <= set(keys)
         order.undo(saved)  # found again in the saved file by its name
         assert annotations(saved) == []
+
+
+def _ink_box(pixmap):
+    """The box of the dark pixels of a picture (the letters on a white page)."""
+    xs, ys = [], []
+    samples, n, width = pixmap.samples, pixmap.n, pixmap.width
+    for index in range(0, len(samples), n):
+        if samples[index] < 100:
+            point = index // n
+            xs.append(point % width)
+            ys.append(point // width)
+    return min(xs), min(ys), max(xs) + 1, max(ys) + 1
+
+
+@pytest.mark.parametrize("turn", [0, 90, 180, 270])
+@pytest.mark.parametrize("cropped", [False, True])
+def test_letters_and_marks_sit_on_the_word_drawn_on_a_turned_page(turn, cropped):
+    """Compared with the drawn page itself, not with PyMuPDF's own numbers."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=400, height=600)
+    page.insert_text((150, 300), "Hola", fontsize=20)
+    if cropped:
+        page.set_cropbox(pymupdf.Rect(50, 100, 380, 560))
+    page.set_rotation(turn)
+    ink = _ink_box(page.get_pixmap())
+    text = read_page_text(page)
+    hit = find_in_page(text, "Hola")[0]
+    x0, y0, x1, y1 = hit.rects[0]
+    # The letters' boxes hold the ink (they are a little taller than it).
+    assert x0 - 3 <= ink[0] and ink[2] <= x1 + 3
+    assert y0 - 3 <= ink[1] and ink[3] <= y1 + 3
+    before = page.get_pixmap()
+    start = text.chars.index("Hola")
+    order = markup_for_selection("highlight", (0, start), (0, start + 4), lambda n: text)
+    order.apply(doc)
+    mx0, my0, mx1, my1 = changed_box(before, doc[0].get_pixmap())
+    assert mx0 - 3 <= ink[0] and ink[2] <= mx1 + 3
+    assert my0 - 3 <= ink[1] and ink[3] <= my1 + 3
+    assert mx1 - mx0 < 3 * (ink[2] - ink[0]) + 10 and my1 - my0 < 3 * (ink[3] - ink[1]) + 10

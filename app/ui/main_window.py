@@ -1669,12 +1669,18 @@ class MainWindow(QMainWindow):
         )
 
     def _edit_failed(self, details: str) -> None:
-        self.statusBar().showMessage(
-            self.tr("No se ha podido hacer el cambio: ahí no hay texto que marcar.")
-            if "no text" in details
-            else self.tr("No se ha podido hacer el cambio."),
-            STATUS_MESSAGE_MS,
-        )
+        if "no text" in details:
+            message = self.tr("No se ha podido hacer el cambio: ahí no hay texto que marcar.")
+        elif "not in this document" in details:
+            # Something of another program taken away and then saved: it is no
+            # longer in the file. The copy kept before saving still has it.
+            message = self.tr(
+                "No se puede deshacer: ya se guardó sin eso. "
+                "Está en Archivo → Versiones anteriores."
+            )
+        else:
+            message = self.tr("No se ha podido hacer el cambio.")
+        self.statusBar().showMessage(message, STATUS_MESSAGE_MS)
 
     # ---- saving ---------------------------------------------------------
 
@@ -1775,6 +1781,7 @@ class MainWindow(QMainWindow):
         if page.view.page_count == 0 or page.path is None:
             self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
             return False
+        page.view.finish_writing()  # what is being typed goes in too
         if page.view.saving:
             return False
         if not page.view.modified:
@@ -1873,6 +1880,7 @@ class MainWindow(QMainWindow):
         if page.view.page_count == 0 or page.path is None:
             self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
             return False
+        page.view.finish_writing()
         if page.view.saving:
             return False
         if target is None:
@@ -2166,6 +2174,7 @@ class MainWindow(QMainWindow):
 
     def print_document(self) -> None:
         """Ask what to print of the document in front, and print it."""
+        self.pdf_view.finish_writing()  # printed as it is seen
         if self.pdf_view.page_count == 0:
             self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
             return
@@ -2736,6 +2745,7 @@ class MainWindow(QMainWindow):
         if not 0 <= index < len(self.documents):
             return
         page = self.documents[index]
+        page.view.finish_writing()  # what is being typed is not lost unasked
         if ask and page.view.modified:
             self.document_tabs.setCurrentIndex(index)  # the one being asked about, in front
             answer = self._ask_unsaved([page])
@@ -3297,6 +3307,8 @@ class MainWindow(QMainWindow):
             self.welcome_logo.setPixmap(icons.logo_pixmap(84, self.devicePixelRatioF()))
 
     def closeEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        for page in self.documents:
+            page.view.finish_writing()  # what is being typed is not lost unasked
         pending = [page for page in self.documents if page.view.modified]
         if pending:
             answer = self._ask_unsaved(pending)
