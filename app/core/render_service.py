@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from multiprocessing.connection import Connection
 from pathlib import Path
 
+from app.core.annotation_list import Entry, document_entries
 from app.core.commands import Color, Command, CommandError, markup_for_selection
 from app.core.drawing import PageDrawing, page_drawings
 from app.core.notes import PageNote, page_notes
@@ -436,6 +437,11 @@ def _worker_main(connection: Connection) -> None:
                     except Exception:
                         found, drawn = [], []  # a page that cannot be read has none
                     connection.send(("notes", token, page_index, found, drawn))
+            elif kind == "annotations":
+                _, list_token, list_id = message
+                if list_token == token and doc is not None:
+                    listed = document_entries(doc)
+                    connection.send(("annotations", token, list_id, listed))
             elif kind == "copy":
                 _, copy_token, copy_id, start, stop = message
                 if copy_token == token and doc is not None:
@@ -581,7 +587,10 @@ class RenderService:
         on_scanned: Callable[[list[int], int, list[int]], None] | None = None,
         on_reading: Callable[[int, int, int, int, bytes], None] | None = None,
         on_reading_failed: Callable[[int, str], None] | None = None,
+        on_annotations: Callable[[int, list[Entry]], None] | None = None,
     ) -> None:
+        self._on_annotations = on_annotations or (lambda list_id, entries: None)
+        self._list_id = 0
         self._on_reading = on_reading or (lambda page, width, height, dpi, samples: None)
         self._on_reading_failed = on_reading_failed or (lambda page, details: None)
         self._readings: set[int] = set()  # pictures asked for to read, not yet back
@@ -763,6 +772,21 @@ class RenderService:
                 self._reopen()
             self._send(("copy", self._token, self._copy_id, start, stop))
             return self._copy_id
+
+    def list_annotations(self) -> int:
+        """Ask for every annotation of the document, in reading order
+        (``app.core.annotation_list.Entry``), as it is at that moment.
+
+        They arrive in ``on_annotations`` with the number this method returns.
+        """
+        with self._lock:
+            self._list_id += 1
+            if self._path is None:
+                return self._list_id
+            if self._ensure_started():
+                self._reopen()
+            self._send(("annotations", self._token, self._list_id))
+            return self._list_id
 
     def _reopen(self) -> None:
         """Give a new helper the document again, with the changes not yet saved."""
@@ -988,6 +1012,8 @@ class RenderService:
                 self._tell(self._on_text, message[2], message[3])
             elif kind == "copied":
                 self._tell(self._on_copied, message[2], message[3])
+            elif kind == "annotations":
+                self._tell(self._on_annotations, message[2], message[3])
             elif kind == "notes":
                 self._tell(self._on_drawings, message[2], message[4])
                 self._tell(self._on_notes, message[2], message[3])

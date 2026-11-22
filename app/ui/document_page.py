@@ -15,7 +15,7 @@ from app.ui.pdf_view import PdfView
 from app.ui.search_panel import SearchPanel
 from app.ui.side_panel import SidePanel
 
-SIDE_PANEL_WIDTH = 222  # one column of thumbnails, the scroll bar and room for the heading
+SIDE_PANEL_WIDTH = 320  # one column of thumbnails, the scroll bar and room for the three tabs
 SEARCH_PANEL_WIDTH = 320
 
 

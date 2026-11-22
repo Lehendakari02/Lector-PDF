@@ -137,7 +137,7 @@ MARKERS_SETTING = "rotuladores"  # colour and opacity of each marking tool
 FAVOURITES_SETTING = "favoritas"  # the favourite tools, in the order of their bar
 TOOLBAR_NAMES, TOOLBAR_ICONS = "nombres", "iconos"
 TOP_SEARCH_WIDTH = 280
-SIDE_PANEL_SETTING = "panel_lateral"  # "", "miniaturas" or "indice"
+SIDE_PANEL_SETTING = "panel_lateral"  # "", "miniaturas", "indice" or "anotaciones"
 SHEET_SETTING = "hoja_nueva"  # the kind of sheet Insertar hoja puts: the last one chosen
 
 
@@ -301,6 +301,7 @@ class MainWindow(QMainWindow):
             "copy": self.copy,
             "thumbnails": lambda: self.toggle_side_panel(Tab.THUMBNAILS),
             "outline": lambda: self.toggle_side_panel(Tab.OUTLINE),
+            "annotations": lambda: self.toggle_side_panel(Tab.ANNOTATIONS),
             "reading_mode": self.toggle_reading_mode,
             "print": self.print_document,
             "highlight": lambda: self.use_marker(HIGHLIGHT),
@@ -1153,7 +1154,9 @@ class MainWindow(QMainWindow):
         self.rotate_view_action.triggered.connect(
             lambda _checked=False: self.pdf_view.rotate_view()
         )
-        self.side_panel_action = QAction(self.tr("Panel &lateral (miniaturas e índice)"), self)
+        self.side_panel_action = QAction(
+            self.tr("Panel &lateral (miniaturas, índice y anotaciones)"), self
+        )
         self.side_panel_action.setCheckable(True)
         self.side_panel_action.setShortcut(QKeySequence("F4"))
         self.side_panel_action.triggered.connect(lambda _checked=False: self.toggle_side_panel())

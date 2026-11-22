@@ -286,6 +286,8 @@ class PdfView(QAbstractScrollArea):
     picked_changed = Signal()  # an annotation is picked, or not any more
     item_copied = Signal()  # the picked annotation was copied, to paste it
     pen_seen_changed = Signal()  # a pen touched a page for the first time
+    annotations_listed = Signal(object)  # every annotation of the document (list of Entry)
+    _annotations_ready = Signal(int, object)
     annotations_shown_changed = Signal(bool)  # what was put on the pages is seen, or hidden
     # The annotation copied last, for every document: the order that puts it.
     copied = None
@@ -367,7 +369,11 @@ class PdfView(QAbstractScrollArea):
             on_scanned=self._scanned_ready.emit,
             on_reading=self.reading_ready.emit,
             on_reading_failed=self.reading_failed.emit,
+            on_annotations=self._annotations_ready.emit,
         )
+        self._list_id = 0
+        self._pick_when_read: tuple[int, str] | None = None
+        self._annotations_ready.connect(self._annotations_came)
         self.scanned_pages: list[int] = []  # known once the helper has looked
         self.recognised_pages: list[int] = []  # scans that already have their text
         self.scanned_known = False  # whether it has looked at every page
@@ -894,24 +900,55 @@ class PdfView(QAbstractScrollArea):
         """Make ``hit`` the current result and bring it into view."""
         self._current_mark = hit
         if 0 <= hit.page < self.page_count and hit.rects:
-            zoom = self._render_zoom()
             first = self._shown_rect(hit.page, hit.rects[0])
             last = self._shown_rect(hit.page, hit.rects[-1])
-            top = self._tops[hit.page] + min(first[1], last[1]) * zoom
-            bottom = self._tops[hit.page] + max(first[3], last[3]) * zoom
-            view_top = self._scroll_y()
-            view_height = self._to_pixels(self.viewport().height())
-            if top < view_top or bottom > view_top + view_height:
-                self.verticalScrollBar().setValue(self._to_units(top - view_height / 3))
-            # With a lot of zoom the result can be off to one side.
-            page_left = self._page_left(hit.page) + self._scroll_x()
-            left = page_left + min(first[0], last[0]) * zoom
-            right = page_left + max(first[2], last[2]) * zoom
-            view_left = self._scroll_x()
-            view_width = self._to_pixels(self.viewport().width())
-            if left < view_left or right > view_left + view_width:
-                self.horizontalScrollBar().setValue(self._to_units(left - view_width / 3))
+            self._bring_into_view(hit.page, first, last)
         self.viewport().update()
+
+    def want_annotations(self) -> None:
+        """Ask for every annotation of the document. They arrive in
+        ``annotations_listed``, as the document is when the helper reads them."""
+        if self._document is not None:
+            self._list_id = self.service.list_annotations()
+
+    def _annotations_came(self, list_id: int, entries: object) -> None:
+        if list_id == self._list_id and self._document is not None:
+            self.annotations_listed.emit(list(entries))
+
+    def show_annotation(self, page: int, rect, name: str = "") -> None:
+        """Bring an annotation into view (``rect`` as the page is shown) and
+        pick it, so it can be moved or removed at once."""
+        if not 0 <= page < self.page_count:
+            return
+        shown = self._shown_rect(page, tuple(rect))  # the view may be turned
+        self._bring_into_view(page, shown, shown)
+        if name and self._annotations_shown:
+            item = self._item(page, name)
+            if item is not None:
+                self.pick(item)
+            else:
+                self._pick_when_read = (page, name)
+                self._want_notes(page)
+        self.viewport().update()
+
+    def _bring_into_view(self, page: int, first, last) -> None:
+        """Scroll, if needed, so that the part of a page from ``first`` to
+        ``last`` (rectangles as the page is drawn) is seen."""
+        zoom = self._render_zoom()
+        top = self._tops[page] + min(first[1], last[1]) * zoom
+        bottom = self._tops[page] + max(first[3], last[3]) * zoom
+        view_top = self._scroll_y()
+        view_height = self._to_pixels(self.viewport().height())
+        if top < view_top or bottom > view_top + view_height:
+            self.verticalScrollBar().setValue(self._to_units(top - view_height / 3))
+        # With a lot of zoom the result can be off to one side.
+        page_left = self._page_left(page) + self._scroll_x()
+        left = page_left + min(first[0], last[0]) * zoom
+        right = page_left + max(first[2], last[2]) * zoom
+        view_left = self._scroll_x()
+        view_width = self._to_pixels(self.viewport().width())
+        if left < view_left or right > view_left + view_width:
+            self.horizontalScrollBar().setValue(self._to_units(left - view_width / 3))
 
     def search_marks(self) -> dict[int, list[SearchHit]]:
         return self._marks
@@ -1578,6 +1615,12 @@ class PdfView(QAbstractScrollArea):
         if self._document is None:
             return
         self._asked_notes.discard(page)
+        if self._pick_when_read is not None and self._pick_when_read[0] == page:
+            name, self._pick_when_read = self._pick_when_read[1], None
+            self._notes[page] = list(found)
+            item = self._item(page, name)
+            if item is not None:
+                self.pick(item)
         QTimer.singleShot(0, self._place_picked_bar)  # what is picked may have changed
         self._notes[page] = list(found)
         self.notes_changed.emit(page)

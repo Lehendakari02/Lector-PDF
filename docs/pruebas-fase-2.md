@@ -545,3 +545,16 @@ Con un documento abierto, en el modo Estudiar.
    que Supr).
 5. Guarda y abre el PDF en **Edge** y en **Adobe**: los colores nuevos se ven
    igual.
+
+## Fase 2C – Tarea 2.20 – Panel de anotaciones
+
+1. Abre un tema en el que hayas resaltado en dos colores, escrito una nota y
+   hecho algún dibujo. Pulsa **F4** y la pestaña **Anotaciones**.
+2. Sale todo en orden de página, cada cosa con su color y las palabras que
+   marca (o lo que dice la nota).
+3. Pulsa el botón de un color: solo quedan los de ese color. **Todos** los
+   vuelve a enseñar. En el desplegable, elige "Notas y textos": solo esos.
+4. Haz clic en uno: el documento salta allí y lo deja elegido (con su barra
+   de colores encima).
+5. Resalta algo nuevo o borra algo: la lista cambia sola en un momento.
+6. En un documento sin nada, el panel explica que lo que subrayes saldrá ahí.
