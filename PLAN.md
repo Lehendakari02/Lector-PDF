@@ -1262,8 +1262,8 @@ Notas de la Fase 2C:
 ## Fase 3 – Rellenar y firma manuscrita
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
-| 3.1 | Rellenar formularios PDF | Relleno un formulario oficial y se ve bien en otros lectores | 🔶 |
-| 3.2 | Escribir en PDFs sin campos | Escribo mis datos encima de un documento escaneado | ⬜ |
+| 3.1 | Rellenar formularios PDF | Relleno un formulario oficial y se ve bien en otros lectores | ✅ |
+| 3.2 | Escribir en PDFs sin campos | Escribo mis datos encima de un documento escaneado | 🔶 |
 | 3.3 | Mis datos (nombre, DNI, dirección…) | Pongo mi DNI en un formulario con un clic | ⬜ |
 | 3.4 | Sellos y marcas rápidas (✓, ✗, fecha, sellos propios) | Marco casillas de un documento sin campos | ⬜ |
 | 3.5 | Crear y guardar firma e iniciales (dibujar, escribir, importar imagen sin fondo) | Tengo mi firma guardada | ⬜ |
@@ -1293,6 +1293,14 @@ Notas de la Fase 3:
     el aspecto del campo se dibuja de nuevo, así que Adobe y Edge lo ven.
   - Fuera por ahora: campos de firma (Fase 4), botones, cálculos y
     JavaScript de los formularios.
+- **3.2: escribir en PDFs sin campos (22/11/2026).**
+  - El botón **Escribir** del modo Rellenar y firmar coge la misma herramienta
+    de texto del modo Estudiar (se escribe sobre la página, en el sitio del
+    clic, con su letra, tamaño y color, y se mueve después). Sirve igual en
+    escaneados y en cualquier PDF sin campos. Se guarda como texto PDF estándar.
+  - No hacía falta otra herramienta: tener dos "escribir" distintos
+    confundiría. Si al probarlo con documentos reales falta algo (por ejemplo,
+    que el texto se ajuste solo a la línea), se añade.
 
 ## Fase 4 – Firma con certificado digital
 | # | Tarea | Terminado cuando… | Estado |

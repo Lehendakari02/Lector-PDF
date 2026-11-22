@@ -22,3 +22,13 @@ un modelo de la Agencia Tributaria), no documentos con datos de nadie.
    verse igual, y en Adobe se pueden seguir cambiando.
 9. Escribe en un campo largo sin terminar y cierra el programa a la fuerza
    (Administrador de tareas). Al abrirlo, ofrece recuperar lo escrito.
+
+## Tarea 3.2 – Escribir en PDFs sin campos
+
+1. Abre un documento escaneado (o un PDF sin campos, como una carta).
+2. Modo **Rellenar y firmar → Escribir**. Haz clic en la línea donde va tu
+   nombre y escríbelo; Ctrl+Intro o un clic fuera lo deja puesto, y el clic
+   siguiente empieza otro texto.
+3. Arrastra un texto para colocarlo mejor; cambia su tamaño con A+ y A−.
+4. Guarda y abre el PDF en Adobe y en Edge: el texto se ve en su sitio.
+
