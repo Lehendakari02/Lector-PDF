@@ -30,7 +30,7 @@ from app.core.annotation_list import (
     same_color,
 )
 from app.core.commands import HIGHLIGHT, STRIKEOUT, UNDERLINE
-from app.core.drawing import INK, SHAPES
+from app.core.drawing import INK, PICTURE, SHAPES
 from app.core.notes import NOTE, TEXT_BOX
 from app.ui import color_naming
 from app.ui.color_menu import ColorMenu, Swatch
@@ -213,6 +213,7 @@ class AnnotationPanel(QWidget):
             NOTE: self.tr("Nota"),
             TEXT_BOX: self.tr("Texto"),
             INK: self.tr("Dibujo"),
+            PICTURE: self.tr("Firma"),
         }
         if kind in names:
             return names[kind]

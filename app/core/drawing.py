@@ -37,6 +37,7 @@ from app.core.commands import (
     register_reader,
 )
 from app.core.foreign import OTHER, OTHER_TYPES, Foreign, families_of, foreign_of, key_of
+from app.core.pictures import AddPicture, picture_of
 from app.core.search import Rect
 
 INK = "ink"
@@ -56,6 +57,7 @@ FRAMED_SHAPES = (BOX, OVAL, TRIANGLE, RHOMBUS, BRACE)
 # The ones that close and can be filled.
 FILLABLE = (BOX, OVAL, TRIANGLE, RHOMBUS)
 DRAWING_KINDS = (INK, *SHAPES)
+PICTURE = "picture"  # a picture put here: one's signature or initials
 # The tools that are held in hand: the pen, the shapes and the eraser.
 DRAW = "draw"
 SHAPE_TOOL = "shapes"
@@ -620,6 +622,8 @@ class PageDrawing:
     fill: bool = False  # a shape filled with a light tone of its colour
     dashed: bool = False
     foreign: Foreign | None = None  # made by another program: only taken away
+    picture: bytes = b""  # a picture: what it shows (PNG)
+    description: str = ""  # a picture: how other readers call it ("Firma")
 
     @property
     def ours(self) -> bool:
@@ -635,6 +639,8 @@ class PageDrawing:
         """The order that would put it as it is."""
         if self.foreign is not None:
             return self.foreign
+        if self.kind == PICTURE:
+            return AddPicture(self.page, self.rect, self.picture, self.name, self.description)
         if self.kind in MARKUP_KINDS:
             mark = Mark(self.page, self.rects, self.name)
             return AddMarkup(self.kind, (mark,), self.color, self.opacity)
@@ -668,7 +674,7 @@ class PageDrawing:
         if self.kind in MARKUP_KINDS:
             return any(x0 <= x <= x1 and y0 <= y <= y1 for x0, y0, x1, y1 in self.rects)
         x0, y0, x1, y1 = self.rect
-        if self.kind == OTHER:  # only its place is known: anywhere on it
+        if self.kind in (OTHER, PICTURE):  # anywhere on it
             return x0 - reach <= x <= x1 + reach and y0 - reach <= y <= y1 + reach
         if not (x0 - near <= x <= x1 + near and y0 - near <= y <= y1 + near):
             return False
@@ -860,6 +866,16 @@ def page_drawings(doc, page_number: int) -> list[PageDrawing]:
                     dashed,
                 )
             )
+        elif kind == "Stamp" and name.startswith(NAME_PREFIX):
+            picture = picture_of(doc, page, annotation)
+            if picture:
+                found.append(
+                    replace(
+                        PageDrawing(PICTURE, page_number, name, rect, (), color, 0.0, opacity),
+                        picture=picture,
+                        description=str(annotation.info.get("content") or ""),
+                    )
+                )
         elif kind in _MARKUP_TYPES and len(vertices) >= 4:
             rects = []
             for index in range(0, len(vertices) - 3, 4):

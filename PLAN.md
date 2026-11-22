@@ -1266,8 +1266,8 @@ Notas de la Fase 2C:
 | 3.2 | Escribir en PDFs sin campos | Escribo mis datos encima de un documento escaneado | ✅ |
 | 3.3 | Mis datos (nombre, DNI, dirección…) | Pongo mi DNI en un formulario con un clic | ✅ |
 | 3.4 | Sellos y marcas rápidas (✓, ✗, fecha, sellos propios) | Marco casillas de un documento sin campos | ✅ |
-| 3.5 | Crear y guardar firma e iniciales (dibujar, escribir, importar imagen sin fondo) | Tengo mi firma guardada | 🔶 |
-| 3.6 | Firmar con un clic: colocar, mover, redimensionar, fecha automática | Firmo un contrato en segundos | ⬜ |
+| 3.5 | Crear y guardar firma e iniciales (dibujar, escribir, importar imagen sin fondo) | Tengo mi firma guardada | ✅ |
+| 3.6 | Firmar con un clic: colocar, mover, redimensionar, fecha automática | Firmo un contrato en segundos | 🔶 |
 | 3.7 | Iniciales en todas las páginas | Con un clic pongo iniciales en todas las hojas | ⬜ |
 | 3.8 | Versión 0.5 | — | ⬜ |
 
@@ -1346,6 +1346,28 @@ Notas de la Fase 3:
   - Se guarda como imagen PNG con fondo transparente en la carpeta de datos
     del programa (`firma/firma.png`, `firma/iniciales.png`), solo en este
     ordenador. Quitarla pregunta antes; lo ya firmado no cambia.
+- **3.6: Firmar con un clic (22/11/2026).**
+  - **Firmar** → "Poner mi firma" (o "Poner mis iniciales") y un clic donde
+    va. La primera vez, después de crear la firma, ya queda en la mano. Sale a
+    140 puntos de ancho (las iniciales, 48), centrada en el clic y siempre
+    dentro de la página. Esc o el botón otra vez la dejan sin ponerla.
+  - Se mueve y se cambia de tamaño como cualquier dibujo (sin deformarse: el
+    tamaño crece por igual a lo ancho y a lo alto), se copia, se borra y se
+    deshace. En el panel de anotaciones sale como "Firma".
+  - **Fecha automática**: debajo de la firma se escribe la fecha de hoy
+    (dd/mm/aaaa), en el mismo cambio (Ctrl+Z quita las dos). Se puede quitar
+    en el menú de Firmar ("Poner la fecha de hoy debajo de la firma"); se
+    recuerda (`firma/fecha`). Las iniciales van sin fecha. La fecha es un
+    texto normal: se mueve aparte.
+  - Se guarda como anotación de imagen estándar (sello con imagen y fondo
+    transparente; `core/pictures.py`), que ven todos los lectores. En páginas
+    giradas la imagen se gira por dentro para que se vea derecha.
+  - **Al guardar lo recién firmado** (Ctrl+S) pregunta una vez: "Guardar como
+    «contrato-firmado.pdf»" (lo propuesto) o "Guardar en el mismo". Si el
+    nombre ya acaba en "-firmado" no pregunta. El guardado automático (si se
+    activó) no pregunta; el original queda en "Versiones anteriores".
+  - Limitación: como toda anotación, se oculta con "Ocultar anotaciones" (y
+    al imprimir sin anotaciones).
 
 ## Fase 4 – Firma con certificado digital
 | # | Tarea | Terminado cuando… | Estado |
