@@ -97,14 +97,71 @@ def test_window_signs_the_open_document_into_a_copy(window, sample, tmp_path):
         assert len(PdfFileReader(handle).embedded_signatures) == 1
 
 
-def test_window_refuses_to_overwrite_the_open_document(window, sample, tmp_path):
+def test_the_open_document_is_signed_in_its_place_and_shown_again(
+    window, sample, tmp_path, wait_until
+):
     window.show_problem_dialogs = False
-    copy = tmp_path / "doc.pdf"
+    copy = tmp_path / "doc-firmado.pdf"
+    copy.write_bytes(sample("boe.pdf").read_bytes())
+    assert window.open_document(copy)
+    view = window.pdf_view
+    wait_until(lambda: view.page_count > 2)
+    view.scroll_to_page(2)
+    wait_until(lambda: view.current_page == 2)
+    window.signer_answer = load_p12_signer(sample("certificado-prueba.p12"), "prueba")
+    asked = []
+    window.sign_target_answer = lambda suggested: asked.append(suggested) or str(suggested)
+    assert window.sign_with_certificate()
+    assert asked == [copy], "already a «-firmado» document: signed in its place"
+    with copy.open("rb") as handle:
+        assert len(PdfFileReader(handle).embedded_signatures) == 1
+    assert len(window.documents) == 1 and window.current_document.path == copy
+    wait_until(lambda: window.pdf_view.page_count > 2 and window.pdf_view.current_page == 2)
+    assert window.versions.of(copy), "how it was is kept among the earlier versions"
+    assert not list(tmp_path.glob(".firmado-*"))
+    assert "PRUEBA" in window.statusBar().currentMessage()
+
+
+def test_changes_not_saved_are_saved_first_then_signed_into_a_copy(
+    window, sample, tmp_path, wait_until
+):
+    window.show_problem_dialogs = False
+    copy = tmp_path / "contrato.pdf"
     copy.write_bytes(sample("formulario.pdf").read_bytes())
-    window.open_document(copy)
-    signer = load_p12_signer(sample("certificado-prueba.p12"), "prueba")
-    assert not window.sign_document(copy, copy, signer)
-    assert copy.read_bytes() == sample("formulario.pdf").read_bytes()
+    assert window.open_document(copy)
+    view = window.pdf_view
+    wait_until(lambda: 0 in view._notes)
+    assert view.put_text_box(0, 100, 100, "Acepto")
+    wait_until(lambda: view.modified)
+    window.signer_answer = load_p12_signer(sample("certificado-prueba.p12"), "prueba")
+    window.sign_target_answer = str
+
+    window.sign_save_answer = False
+    assert not window.sign_with_certificate()
+    assert view.modified, "nothing saved nor signed"
+
+    window.sign_save_answer = True
+    assert window.sign_with_certificate()
+    target = tmp_path / "contrato-firmado.pdf"
+    wait_until(lambda: target.exists())
+    with target.open("rb") as handle:
+        assert len(PdfFileReader(handle).embedded_signatures) == 1
+    import pymupdf
+
+    with pymupdf.open(target) as doc:
+        assert "Acepto" in [a.info["content"] for a in doc[0].annots()], "the change is signed"
+    wait_until(lambda: window.current_document.path == target)
+    assert len(window.documents) == 2, "the signed copy opens beside the original"
+
+
+def test_the_certificate_used_last_comes_first(qt_app, store):
+    dialog = CertificateDialog(certificates=[store[1], store[1]], preferred="nada")
+    assert dialog.list.currentRow() == 0
+    other = describe(
+        certificates.der(certificates.make_certificate("PRUEBA OTRA", certificates.new_key()))
+    )
+    dialog = CertificateDialog(certificates=[store[1], other], preferred=other.thumbprint)
+    assert dialog.selected() is other
 
 
 def test_window_reports_a_document_that_cannot_be_signed(window, sample, tmp_path, settings):

@@ -1422,13 +1422,30 @@ Notas de la Fase 3:
 ## Fase 4 – Firma con certificado digital
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
-| 4.1 | Firmar con certificado instalado en Windows (FNMT), partiendo de la prueba 0.8 | El PDF firmado sale válido en VALIDe y en Adobe | ⬜ |
+| 4.1 | Firmar con certificado instalado en Windows (FNMT), partiendo de la prueba 0.8 | El PDF firmado sale válido en VALIDe y en Adobe | 🔶 hecho; falta tu prueba con el certificado FNMT real en VALIDe y Adobe |
 | 4.2 | Firmar con archivo .p12/.pfx | Ídem | ⬜ |
 | 4.3 | Firma visible o invisible; sello de tiempo opcional; recordar preferencias | Firmar es elegir dónde y poner el PIN | ⬜ |
 | 4.4 | Firmar varios documentos de una vez | Firmo 10 documentos poniendo el PIN una vez | ⬜ |
 | 4.5 | Firmar con DNIe y lector de tarjetas | Firmo con el DNIe (cuando tenga lector) | ⬜ |
 | 4.6 | Ver y verificar firmas existentes | Abro un PDF firmado y me dice quién lo firmó y si es válido | ⬜ |
 | 4.7 | Versión 0.6 | — | ⬜ |
+
+Notas de la Fase 4:
+- **4.1: Firmar con el certificado instalado en Windows (22/11/2026).**
+  - Parte de la prueba 0.8 (el puente con Windows: la clave nunca sale de
+    Windows y el PIN o la contraseña los pide Windows en su ventana).
+  - **Se firma lo que se ve:** si el documento tiene cambios sin guardar,
+    pregunta "Guardar y firmar" y firma después de guardar.
+  - **Dónde va:** propone una copia «nombre-firmado.pdf», que se abre en una
+    pestaña nueva. Si el documento ya es un «-firmado» (por ejemplo, después
+    de firmarlo a mano), se firma en su sitio: la pestaña suelta el archivo un
+    momento, se guarda cómo estaba en "Versiones anteriores" y vuelve a abrirse
+    en la misma página. Si otro programa lo tiene abierto, no se toca y se avisa.
+  - El certificado usado la última vez sale elegido la próxima
+    (`firma/certificado`, solo la huella del certificado; nunca el PIN).
+  - El aviso final dice quién firma ("firmado por …").
+  - Comprobado aquí con certificados de prueba. **Falta la prueba de Julen con
+    el certificado FNMT real** y la validación en VALIDe y Adobe.
 
 ## Fase 5 – Organizar y convertir
 | # | Tarea | Terminado cuando… | Estado |
