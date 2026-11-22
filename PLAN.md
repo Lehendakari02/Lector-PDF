@@ -1040,8 +1040,8 @@ Ordenadas por uso diario.
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
 | 2.20 | Panel de anotaciones filtrable por color | Veo todos mis subrayados de un color y salto a cada uno | ✅ |
-| 2.21 | Saltar a artículo, apartado o sección por su número | Escribo "art. 14" o "3.2" en cualquier documento y me lleva allí | 🔶 |
-| 2.22 | Marcadores propios | Marco artículos clave y vuelvo a ellos con un clic | ⬜ |
+| 2.21 | Saltar a artículo, apartado o sección por su número | Escribo "art. 14" o "3.2" en cualquier documento y me lleva allí | ✅ |
+| 2.22 | Marcadores propios | Marco artículos clave y vuelvo a ellos con un clic | 🔶 |
 | 2.23 | Modo repaso | Lo subrayado se tapa y lo descubro al hacer clic | ⬜ |
 | 2.24 | Márgenes ampliables | Añado margen a una página y escribo en él; se ve igual en Edge y Adobe | ⬜ |
 | 2.25 | Insertar hojas en blanco, de rayas o cuadriculadas | Meto una hoja cuadriculada para un esquema | ✅ (hecha en la 2.13d) |
@@ -1085,6 +1085,19 @@ Notas de la Fase 2C:
   - Lo busca el ayudante, página a página, sin parar el dibujo
     (`core/places.py`). Necesita el texto del documento: en un escaneado,
     primero "Reconocer texto".
+- **2.22: marcadores propios (22/11/2026).**
+  - **Ctrl+M**, o el botón **Marcador** del modo Estudiar, guarda el sitio
+    que se está leyendo (la parte de arriba de la pantalla). Se llama como el
+    primer título que se ve ("Artículo 14.", "3.2 Los derechos…") o, si no
+    hay ninguno, "Página N".
+  - Salen los primeros en el **Índice** (F4), dentro de "Mis marcadores"; un
+    clic vuelve al sitio exacto. Clic derecho (o F2 y Supr): cambiar nombre o
+    quitar. Deshacer funciona como con todo.
+  - Se guardan en el PDF como marcadores estándar, colgando de un apartado
+    "Mis marcadores" al principio del índice del documento, que no se toca.
+    Adobe y Edge los enseñan en su lista de marcadores. Una clave propia en
+    cada uno (que los demás lectores no usan) permite cambiarlos después.
+  - Se ordenan por su sitio en el documento, no por cuándo se pusieron.
 
 ## Fase 3 – Rellenar y firma manuscrita
 | # | Tarea | Terminado cuando… | Estado |

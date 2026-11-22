@@ -53,8 +53,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.core import arrange, drawing, notes, pen, places, sheets
-from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
+from app.core import arrange, bookmarks, drawing, notes, pen, places, sheets
+from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE, new_name
 from app.core.document import PageSize, PdfDocument
 from app.core.drawing import ARROW, BOX, DRAW, ERASER, INK, OVAL, SHAPE_TOOL, PageDrawing
 from app.core.foreign import OTHER
@@ -845,6 +845,63 @@ class PdfView(QAbstractScrollArea):
     def outline(self) -> list[OutlineEntry]:
         """Sections of the document. Arrives a moment after opening it."""
         return self._outline
+
+    # ---- the user's bookmarks (app.core.bookmarks) ----------------------
+
+    def _top_shown(self) -> tuple[int, float]:
+        """The page at the top of the window and how far down it is seen (points)."""
+        page = max(0, self._current_page)
+        if self._rotation != 0 or not 0 <= page < self.page_count:
+            return page, 0.0
+        down = (self._scroll_y() - self._tops[page]) / self._render_zoom()
+        return page, max(0.0, min(down, self._sizes[page].height))
+
+    def add_bookmark(self, title: str = "") -> str:
+        """Put a bookmark where the window is (the top of what is seen).
+
+        Without ``title`` it is named after the first heading in sight
+        ("Artículo 14. Igualdad…") or the page. Returns the title, or "".
+        """
+        if self._document is None or not self.page_count:
+            return ""
+        page, top = self._top_shown()
+        if not title:
+            text = self._texts.get(page)
+            seen = self._to_pixels(self.viewport().height()) / self._render_zoom()
+            title = places.heading_near(text, top, top + seen) if text is not None else ""
+        title = title or self.tr("Página {0}").format(page + 1)
+        order = bookmarks.AddBookmark(page, round(top, 1), title, new_name(), self._group_title())
+        return title if self._do(order) else ""
+
+    def _group_title(self) -> str:
+        return self.tr("Mis marcadores")  # the item of the outline that holds them
+
+    def _bookmark_order(self, entry: OutlineEntry) -> bookmarks.AddBookmark:
+        return bookmarks.AddBookmark(
+            entry.page, entry.top or 0.0, entry.title, entry.bookmark, self._group_title()
+        )
+
+    def remove_bookmark(self, entry: OutlineEntry) -> bool:
+        if not entry.bookmark or self._document is None:
+            return False
+        return self._do(notes.Remove(self._bookmark_order(entry)))
+
+    def rename_bookmark(self, entry: OutlineEntry, title: str) -> bool:
+        title = " ".join(title.split())
+        if not entry.bookmark or not title or title == entry.title or self._document is None:
+            return False
+        old = self._bookmark_order(entry)
+        return self._do(notes.Replace(old, replace(old, title=title)))
+
+    def go_to_outline(self, entry: OutlineEntry) -> None:
+        """Go where an entry of the outline leads: its page, or the very place."""
+        if not 0 <= entry.page < self.page_count:
+            return
+        if entry.top is None or self._rotation != 0:
+            self.scroll_to_page(entry.page)
+            return
+        top = self._tops[entry.page] + entry.top * self._render_zoom()
+        self.verticalScrollBar().setValue(self._to_units(top - self._to_pixels(PLACE_MARGIN)))
 
     def _store_outline(self, entries: list[OutlineEntry]) -> None:
         if self._document is None:

@@ -26,6 +26,7 @@ from multiprocessing.connection import Connection
 from pathlib import Path
 
 from app.core.annotation_list import Entry, document_entries
+from app.core.bookmarks import changes_outline
 from app.core.commands import Color, Command, CommandError, markup_for_selection
 from app.core.drawing import PageDrawing, page_drawings
 from app.core.notes import PageNote, page_notes
@@ -510,6 +511,8 @@ def _worker_main(connection: Connection) -> None:
                         connection.send(("change_failed", token, change_id, str(exc)))
                     else:
                         connection.send(("changed", token, change_id, order, pages, undo))
+                        if changes_outline(order):
+                            connection.send(("outline", token, read_outline(doc)))
                         if getattr(order, "text_change", False):
                             for page_index in pages:  # their letters are different now
                                 page_texts.pop(page_index, None)

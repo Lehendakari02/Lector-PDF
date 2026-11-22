@@ -140,7 +140,13 @@ FEATURES: list[Feature] = [
         "Ver el documento limpio, sin subrayados, notas ni dibujos; no se borra nada",
         "mostrar esconder limpio ver quitar original",
     ),
-    _f("bookmark", STUDY, "Marcador", "Marcar esta página para volver a ella", "favorito señal"),
+    _f(
+        "bookmark",
+        STUDY,
+        "Marcador",
+        "Guardar el sitio que lees para volver con un clic; sale en el Índice (Ctrl+M)",
+        "favorito señal marcar página volver artículo clave",
+    ),
     _f(
         "go_to_article",
         STUDY,

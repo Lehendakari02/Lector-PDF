@@ -8,10 +8,12 @@ from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QButtonGroup,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QListView,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QStackedWidget,
     QToolButton,
     QTreeWidget,
@@ -200,8 +202,15 @@ def _plain_icon(pixmap: QPixmap) -> QIcon:
     return icon
 
 
+ENTRY_ROLE = Qt.ItemDataRole.UserRole + 1  # the OutlineEntry of a row
+
+
 class OutlineTree(QTreeWidget):
-    """The sections of the document. Click one to go there."""
+    """The sections of the document. Click one to go there.
+
+    The user's own bookmarks come first, under "Mis marcadores": a right click
+    (or Supr / F2) removes or renames one.
+    """
 
     def __init__(self, view: PdfView, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -217,6 +226,10 @@ class OutlineTree(QTreeWidget):
         self._items: list[tuple[int, QTreeWidgetItem]] = []  # (page, item), in order
         self.itemClicked.connect(self._go)
         self.itemActivated.connect(self._go)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._menu)
+        # For the tests: what "Cambiar nombre…" answers, without showing the dialog.
+        self.ask_title = self._ask_with_dialog
         view.page_changed.connect(lambda page, _count: self.follow(page - 1))
 
     def rebuild(self, entries: list[OutlineEntry]) -> None:
@@ -227,9 +240,15 @@ class OutlineTree(QTreeWidget):
             del parents[entry.level - 1 :]
             item = QTreeWidgetItem([entry.title])
             item.setData(0, Qt.ItemDataRole.UserRole, entry.page)
+            item.setData(0, ENTRY_ROLE, entry)
+            if entry.bookmark or entry.group:
+                item.setIcon(0, icons.icon("bookmark", icons.MUTED))
             if entry.page >= 0:
                 item.setToolTip(0, self.tr("{0} (página {1})").format(entry.title, entry.page + 1))
-                self._items.append((entry.page, item))
+                if not entry.bookmark:  # the sections, in order, to follow the reading
+                    self._items.append((entry.page, item))
+            elif entry.group:
+                item.setToolTip(0, self.tr("Tus marcadores. Clic derecho para cambiarlos."))
             else:
                 item.setToolTip(0, entry.title)
             if parents:
@@ -237,9 +256,15 @@ class OutlineTree(QTreeWidget):
             else:
                 self.addTopLevelItem(item)
             parents.append(item)
-        # Show the main sections. A single root (the title of the law) is opened too.
-        if self.topLevelItemCount() == 1:
-            self.topLevelItem(0).setExpanded(True)
+        # Show the main sections. A single root (the title of the law) is opened
+        # too, and so are the user's bookmarks.
+        roots = [self.topLevelItem(index) for index in range(self.topLevelItemCount())]
+        plain = [item for item in roots if not self._entry(item).group]
+        if len(plain) == 1:
+            plain[0].setExpanded(True)
+        for item in roots:
+            if self._entry(item).group:
+                item.setExpanded(True)
         self.follow(self.view.current_page)
 
     def follow(self, page: int) -> None:
@@ -262,10 +287,46 @@ class OutlineTree(QTreeWidget):
             self.setCurrentItem(current)
             self.blockSignals(False)
 
+    @staticmethod
+    def _entry(item: QTreeWidgetItem | None) -> OutlineEntry | None:
+        return None if item is None else item.data(0, ENTRY_ROLE)
+
     def _go(self, item: QTreeWidgetItem, _column: int = 0) -> None:
-        page = item.data(0, Qt.ItemDataRole.UserRole)
-        if page is not None and page >= 0:
-            self.view.scroll_to_page(page)
+        entry = self._entry(item)
+        if entry is not None:
+            self.view.go_to_outline(entry)
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        entry = self._entry(self.currentItem())
+        if entry is not None and entry.bookmark:
+            if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+                self.view.remove_bookmark(entry)
+                return
+            if event.key() == Qt.Key.Key_F2:
+                self.rename(entry)
+                return
+        super().keyPressEvent(event)
+
+    def _menu(self, position) -> None:
+        entry = self._entry(self.itemAt(position))
+        if entry is None or not entry.bookmark:
+            return
+        menu = QMenu(self)
+        menu.addAction(self.tr("Ir allí"), lambda: self.view.go_to_outline(entry))
+        menu.addAction(self.tr("Cambiar nombre…"), lambda: self.rename(entry))
+        menu.addAction(self.tr("Quitar marcador"), lambda: self.view.remove_bookmark(entry))
+        menu.exec(self.viewport().mapToGlobal(position))
+
+    def rename(self, entry: OutlineEntry) -> None:
+        title = self.ask_title(entry.title)
+        if title:
+            self.view.rename_bookmark(entry, title)
+
+    def _ask_with_dialog(self, current: str) -> str:
+        title, accepted = QInputDialog.getText(
+            self, self.tr("Cambiar nombre del marcador"), self.tr("Nombre:"), text=current
+        )
+        return title if accepted else ""
 
 
 class SidePanel(QWidget):
@@ -286,7 +347,8 @@ class SidePanel(QWidget):
         self.no_outline = QLabel(
             self.tr(
                 "Este documento no trae índice.\n\n"
-                "Puedes moverte con las miniaturas o escribiendo el número de página."
+                "Puedes moverte con las miniaturas o escribiendo el número de página. "
+                "Con Marcador (Ctrl+M) guardas aquí los sitios a los que quieras volver."
             )
         )
         self.no_outline.setObjectName("panelEmpty")
