@@ -686,3 +686,15 @@ Con un documento abierto, en el modo Estudiar.
 4. Clic derecho en una pestaña → **Ver al lado** con un tercer documento.
 5. La X de "Al lado: …" vuelve a un solo documento, sin cerrar ninguno.
 
+## Fase 2C – Tarea 2.29 – Biblioteca del temario
+
+1. En el modo Estudiar pulsa **Biblioteca** y elige la carpeta de tus temas.
+   Salen todos, en orden ("Tema 2" antes que "Tema 10").
+2. Comprueba las columnas: cuánto has leído de cada uno, cuántos subrayados
+   tiene y cuándo lo repasaste. Abre un tema, avanza unas páginas, usa el
+   modo repaso y vuelve a la biblioteca: se actualiza.
+3. Escribe una palabra en "Buscar en todos los temas" y pulsa Intro. Salen
+   los resultados de todos los temas mientras busca; "Parar" lo detiene.
+4. Doble clic en un resultado: se abre ese tema en esa página.
+5. Cierra y abre el programa: la biblioteca recuerda la carpeta.
+

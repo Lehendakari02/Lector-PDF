@@ -34,6 +34,8 @@ class Place:
 
     page: int = 0  # counting from 0
     mode: str = ""  # name of the work mode, empty if unknown
+    farthest: int = 0  # the farthest page ever reached (how much is read)
+    reviewed: int = 0  # when review mode was last used on it (seconds), 0: never
 
 
 class History:
@@ -98,7 +100,15 @@ class History:
 
     def remember_place(self, path: str | Path, page: int, mode: str = "") -> None:
         places = self._places()
-        places[file_key(path)] = {"pagina": page, "modo": mode, "visto": int(time.time())}
+        before = places.get(file_key(path))
+        before = before if isinstance(before, dict) else {}
+        places[file_key(path)] = {
+            **before,
+            "pagina": page,
+            "modo": mode,
+            "visto": int(time.time()),
+            "maxima": max(page, _whole(before.get("maxima"))),
+        }
         if len(places) > MAX_PLACES:
             oldest = sorted(places, key=lambda key: places[key].get("visto", 0))
             for key in oldest[: len(places) - MAX_PLACES]:
@@ -110,10 +120,22 @@ class History:
         if not isinstance(stored, dict):
             return Place()
         page, mode = stored.get("pagina", 0), stored.get("modo", "")
+        page = page if isinstance(page, int) and page >= 0 else 0
         return Place(
-            page if isinstance(page, int) and page >= 0 else 0,
+            page,
             mode if isinstance(mode, str) else "",
+            max(page, _whole(stored.get("maxima"))),
+            _whole(stored.get("repasado")),
         )
+
+    def mark_reviewed(self, path: str | Path, when: float | None = None) -> None:
+        """Review mode was used on this document now (the library shows it)."""
+        places = self._places()
+        before = places.get(file_key(path))
+        before = before if isinstance(before, dict) else {"pagina": 0, "modo": ""}
+        stamp = int(time.time() if when is None else when)
+        places[file_key(path)] = {**before, "repasado": stamp, "visto": stamp}
+        self.settings.set(PLACES_SETTING, places)
 
     def _places(self) -> dict:
         stored = self.settings.get(PLACES_SETTING)
@@ -137,3 +159,7 @@ class History:
     def _recent(self) -> list[str]:
         stored = self.settings.get(RECENT_SETTING)
         return [p for p in stored if isinstance(p, str)] if isinstance(stored, list) else []
+
+
+def _whole(value: object) -> int:
+    return value if isinstance(value, int) and value >= 0 else 0

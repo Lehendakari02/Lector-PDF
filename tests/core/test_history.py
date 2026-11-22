@@ -42,10 +42,10 @@ def test_place_of_every_document_is_kept(store, tmp_path):
     store.remember_place(first, 41, "study")
     store.remember_place(second, 3)
     store.remember_place(first, 42, "study")
-    assert store.place_of(first) == Place(42, "study")
-    assert store.place_of(second) == Place(3, "")
+    assert store.place_of(first) == Place(42, "study", 42)
+    assert store.place_of(second) == Place(3, "", 3)
     # The same file written another way is the same document.
-    assert store.place_of(str(first.parent / "." / first.name)) == Place(42, "study")
+    assert store.place_of(str(first.parent / "." / first.name)) == Place(42, "study", 42)
 
 
 def test_only_so_many_places_are_kept(store, tmp_path, monkeypatch):
@@ -146,3 +146,18 @@ def test_damaged_absent_tabs_are_ignored(store):
     assert store.absent_tabs() == []
     store.settings.set(SESSION_SETTING, {"abiertos": [], "ausentes": "no"})
     assert store.absent_tabs() == []
+
+
+def test_how_far_it_was_read_and_when_it_was_reviewed(store, tmp_path):
+    path = tmp_path / "tema 3.pdf"
+    store.remember_place(path, 30)
+    store.remember_place(path, 5)
+    place = store.place_of(path)
+    assert (place.page, place.farthest, place.reviewed) == (5, 30, 0)
+    store.mark_reviewed(path, when=1_700_000_000)
+    place = store.place_of(path)
+    assert (place.page, place.farthest, place.reviewed) == (5, 30, 1_700_000_000)
+    store.remember_place(path, 7)
+    assert store.place_of(path).reviewed == 1_700_000_000
+    store.mark_reviewed(tmp_path / "nuevo.pdf", when=5)
+    assert store.place_of(tmp_path / "nuevo.pdf").reviewed == 5

@@ -104,6 +104,7 @@ from app.ui.features import (
     features_of,
     translate,
 )
+from app.ui.library_window import LibraryWindow
 from app.ui.margin_dialog import MarginChoice, MarginDialog
 from app.ui.margin_dialog import remember as remember_margin
 from app.ui.margin_dialog import remembered as remembered_margin
@@ -310,6 +311,8 @@ class MainWindow(QMainWindow):
         self.recognize_again_answer: list[int] | None = None
         self.margin_answer: MarginChoice | None = None  # the tests answer without asking
         self.summary_target: Path | None = None  # the tests choose the file without asking
+        self.library: LibraryWindow | None = None
+        self.library_asks_folder = True  # the first time, it asks for the folder at once
         self.open_exported = True  # a summary made is opened (not in the tests)
         self._saving_to_close: list[DocumentPage] = []  # being saved before closing
         self._after_saving = None  # what to do once they are all saved
@@ -353,6 +356,7 @@ class MainWindow(QMainWindow):
             "review": self.toggle_review,
             "summary": self.export_summary,
             "beside": self.toggle_beside,
+            "library": self.show_library,
             "margins": self.add_margin,
             "undo": self.undo,
             "redo": self.redo,
@@ -1811,6 +1815,30 @@ class MainWindow(QMainWindow):
             else:
                 QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
 
+    def show_library(self) -> LibraryWindow:
+        """The syllabus library: every topic of a folder, searched all at once."""
+        if self.library is None:
+            self.library = LibraryWindow(self)
+        self.library.show()
+        self.library.raise_()
+        self.library.activateWindow()
+        if not self.library.folder and self.library_asks_folder:
+            self.library.choose_folder()
+        return self.library
+
+    def open_from_library(self, path: str | Path, page: int, query: str = "") -> bool:
+        """Open a topic found in the library at the page of the result."""
+        if not self.open_document(path):
+            return False
+        view = self.pdf_view
+        if query:
+            self.search_box.setText(query)
+            self.search_dock.show()
+            self.search_panel.box.setText(query)  # its results are marked on the pages
+        view.scroll_to_page(page)
+        view.setFocus()
+        return True
+
     def toggle_review(self) -> None:
         """Cover what is highlighted and underlined, to try to remember it, or stop."""
         view = self.pdf_view
@@ -1819,6 +1847,8 @@ class MainWindow(QMainWindow):
             self._refresh_edit_actions()
             return
         view.set_review(not view.review)
+        if view.review and view.document_path is not None:
+            self.history.mark_reviewed(view.document_path)  # the library shows it
         self.statusBar().showMessage(
             self.tr(
                 "Modo repaso: lo resaltado y subrayado está tapado. Haz clic en un trozo "
