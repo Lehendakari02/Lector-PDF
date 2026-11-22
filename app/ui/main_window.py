@@ -74,6 +74,8 @@ from app.core.marker_styles import (
 )
 from app.core.notes import MONO, NOTE, SANS, SERIF, TEXT_BOX
 from app.core.ocr import OcrError
+from app.core.ocr_cache import FOLDER_NAME as OCR_CACHE_FOLDER
+from app.core.ocr_cache import OcrCache
 from app.core.paths import data_dir, is_portable
 from app.core.settings import Settings
 from app.core.signing import PasswordProtected, SigningError, sign_pdf
@@ -168,6 +170,8 @@ class MainWindow(QMainWindow):
         # Every change is written down here at once, apart from the PDF, next to
         # the settings (so the portable version keeps it in its own folder).
         self.journal = Journal(self.settings.path.parent / JOURNAL_FOLDER)
+        # Pages recognised in a run that has not ended yet (a power cut).
+        self.ocr_cache = OcrCache(self.settings.path.parent / OCR_CACHE_FOLDER)
         # The safety net under "Guardar": how each PDF was before it was saved.
         self.versions = Versions(self.settings.path.parent / VERSIONS_FOLDER)
         # Saving by itself, only for whoever turns it on: after a while without
@@ -3077,7 +3081,8 @@ class MainWindow(QMainWindow):
         return page
 
     def _start_recognition(self, page: DocumentPage, pages: list[int], replace=False) -> bool:
-        run = TextRecognition(page.view, pages, page, replace)
+        self.ocr_cache.forget_old()
+        run = TextRecognition(page.view, pages, page, replace, self.ocr_cache)
         page.text_recognition = run
         run.progressed.connect(page.ocr_banner.show_progress)
         run.finished.connect(
