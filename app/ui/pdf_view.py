@@ -59,6 +59,7 @@ from app.core.doc_links import DocLink
 from app.core.document import PageSize, PdfDocument
 from app.core.drawing import ARROW, BOX, DRAW, ERASER, INK, OVAL, SHAPE_TOOL, PageDrawing
 from app.core.foreign import OTHER
+from app.core.forms import CHECK, COMBO, RADIO, TEXT, FillField, FormField
 from app.core.notes import NOTE, TEXT_BOX, PageNote
 from app.core.outline import OutlineEntry
 from app.core.render_service import (
@@ -71,6 +72,7 @@ from app.core.search import PageText, SearchHit
 from app.core.selection import caret_at, is_on_text, selected_text, selection_rects, word_at
 from app.core.text_layer import AddTextLayer, PageLayer
 from app.ui import theme
+from app.ui.field_editor import FieldEditor
 from app.ui.note_panel import NotePanel
 from app.ui.picked_bar import PickedBar
 from app.ui.text_editor import TextEditor
@@ -85,6 +87,8 @@ COVER_MARGIN = 1.5  # points around a cover that a click still takes
 PLACE_MARGIN = 24  # space left above a heading gone to, in Qt units
 WRITING_WAIT_S = 3.0  # longest wait for the text being written to become a change
 DOC_LINK_COLOR = QColor(30, 90, 220)  # the line under a link to another document
+FIELD_COLOR = QColor(40, 110, 230, 38)  # over the boxes of a form, to see where to fill
+FIELD_FOCUS_COLOR = QColor(40, 110, 230)  # around the field the keyboard is on
 DRAFT_EVERY_MS = 3000  # the text being written goes to the journal this often
 WHEEL_NOTCH = 120  # what one notch of a mouse wheel sends
 # A document opens fitted to the width, but never bigger than this (1.0 = 100 %):
@@ -302,6 +306,9 @@ class PdfView(QAbstractScrollArea):
     _notes_ready = Signal(int, object)
     _drawings_ready = Signal(int, object)
     _links_ready = Signal(int, object)
+    _fields_ready = Signal(int, object)
+    form_found = Signal()  # the document has fields to fill (said once)
+    field_refused = Signal(str)  # a field that cannot be changed: why
     doc_link_clicked = Signal(object)  # a link to another document (doc_links.DocLink)
     link_wanted = Signal(object, str)  # "Enlazar a…": (page, rects) and their words
     picked_changed = Signal()  # an annotation is picked, or not any more
@@ -395,6 +402,7 @@ class PdfView(QAbstractScrollArea):
             on_notes=self._notes_ready.emit,
             on_drawings=self._drawings_ready.emit,
             on_links=self._links_ready.emit,
+            on_fields=self._fields_ready.emit,
             on_scanned=self._scanned_ready.emit,
             on_reading=self.reading_ready.emit,
             on_reading_failed=self.reading_failed.emit,
@@ -416,6 +424,7 @@ class PdfView(QAbstractScrollArea):
         self._notes_ready.connect(self._store_notes)
         self._drawings_ready.connect(self._store_drawings)
         self._links_ready.connect(self._store_links)
+        self._fields_ready.connect(self._store_fields)
         # What is drawn or marked on each page, for the eraser.
         self._drawings: dict[int, list[PageDrawing]] = {}
         self._erased: dict[int, set[str]] = {}  # taken away, until the page is read again
@@ -486,6 +495,12 @@ class PdfView(QAbstractScrollArea):
         self._notes: dict[int, list[PageNote]] = {}  # notes and text boxes by page
         self._doc_links: dict[int, list[DocLink]] = {}  # links to other documents
         self._link_pressed: DocLink | None = None
+        self._fields: dict[int, list[FormField]] = {}  # fields of a form, by page
+        self._form_told = False
+        self.highlight_fields = True  # the boxes of a form are tinted
+        self.field_editor: FieldEditor | None = None
+        self._field_focus: FormField | None = None  # the field the keyboard is on
+        self.choice_menu: QMenu | None = None  # the choices of a list (the tests pick)
         self._asked_notes: set[int] = set()
         # Where one is being written: a panel, or the page itself for a text.
         self.note_panel: NotePanel | TextEditor | None = None
@@ -665,7 +680,8 @@ class PdfView(QAbstractScrollArea):
         if self.journal is not None and how not in (RECOVER, RECOVER_UNDO):
             # Written down at once: a power cut from here on does not lose it.
             self.journal.record(order, undone)
-            if self.note_panel is None and self._draft_written is not None:
+            idle = self.note_panel is None and self.field_editor is None
+            if idle and self._draft_written is not None:
                 self._drop_draft()  # the text written is a change of its own now
         if hasattr(order, "page_change"):
             self._reshape(*order.page_change(undone), getattr(order, "size", None))
@@ -737,6 +753,9 @@ class PdfView(QAbstractScrollArea):
         self._asked_texts.clear()
         self._notes.clear()
         self._doc_links.clear()
+        self._fields.clear()
+        self._form_told = False
+        self._end_field_editing()
         self._asked_notes.clear()
         self._drawings.clear()
         self._erased.clear()
@@ -895,6 +914,9 @@ class PdfView(QAbstractScrollArea):
         self._asked_texts.clear()
         self._notes.clear()
         self._doc_links.clear()
+        self._fields.clear()
+        self._form_told = False
+        self._end_field_editing()
         self._asked_notes.clear()
         self._drawings.clear()
         self.scanned_pages = []
@@ -1399,6 +1421,7 @@ class PdfView(QAbstractScrollArea):
             self.page_changed.emit(current + 1, self.page_count)
         self._request_pages()
         self._place_editor()
+        self._place_field_editor()
         self._place_picked_bar()
         self.viewport().update()
 
@@ -1556,6 +1579,8 @@ class PdfView(QAbstractScrollArea):
                 painter.fillRect(mark.translated(target.left(), target.top()), SELECTION_COLOR)
             if self._annotations_shown and self._doc_links.get(page):
                 self._paint_doc_links(painter, page, target, zoom)
+            if self._fields.get(page):
+                self._paint_fields(painter, page, target, zoom)
             if self._review:
                 self._paint_covers(painter, page, target, zoom)
             self._paint_sketches(painter, page, target, zoom)
@@ -2053,6 +2078,251 @@ class PdfView(QAbstractScrollArea):
         """Every link to ``old`` now goes to ``new`` (the other file moved)."""
         return old != new and self._do(doc_links.ChangeLinkFile(old, new, new_name()))
 
+    # ---- filling a form ---------------------------------------------------------
+
+    def _store_fields(self, page: int, found: object) -> None:
+        if self._document is None:
+            return
+        fields = list(found)
+        if fields or page in self._fields:
+            self._fields[page] = fields
+            self.viewport().update()
+        if fields and not self._form_told:
+            self._form_told = True
+            self.form_found.emit()
+
+    def fields_of(self, page: int) -> list[FormField]:
+        """The fields of a form known on a page (asked for if not yet)."""
+        self._want_notes(page)
+        return list(self._fields.get(page, ()))
+
+    @property
+    def has_form(self) -> bool:
+        return any(self._fields.values())
+
+    def field_under(self, position: QPoint) -> FormField | None:
+        point = self._point_on_page(position)
+        if point is None:
+            return None
+        page, x, y = point
+        for field in self._fields.get(page, ()):
+            x0, y0, x1, y1 = field.rect
+            if x0 <= x <= x1 and y0 <= y <= y1:
+                return field
+        return None
+
+    def _field_value(self, field: FormField) -> str:
+        """The value of the field now: for options, the one chosen of the group."""
+        if field.kind != RADIO:
+            return field.value
+        for fields in self._fields.values():
+            for other in fields:
+                if other.name == field.name and other.checked:
+                    return other.on
+        return ""
+
+    def fill(self, field: FormField, value: str) -> bool:
+        """Give a field a value (a check box or an option: its "on" name, or "")."""
+        if self._document is None or field.read_only:
+            return False
+        before = self._field_value(field)
+        if value == before:
+            return False
+        order = FillField(field.page, field.name, field.kind, before, value)
+        if self._drafting is not None:
+            self._drafting.append(order)
+            return True
+        # Seen at once, before the engine answers (a second click must know it).
+        for page, fields in self._fields.items():
+            self._fields[page] = [
+                replace(
+                    other,
+                    value=(other.on if value and value == other.on else "")
+                    if other.kind in (CHECK, RADIO)
+                    else value,
+                )
+                if other.name == field.name
+                else other
+                for other in fields
+            ]
+        self.viewport().update()
+        return self._do(order)
+
+    def use_field(self, field: FormField, near: QPoint | None = None) -> bool:
+        """What a click on a field does: write in it, tick it, or choose."""
+        self._field_focus = field
+        self.viewport().update()
+        if field.read_only:
+            self.field_refused.emit(self.tr("Este campo no se puede cambiar."))
+            return False
+        if field.kind == CHECK:
+            return self.fill(field, "" if field.checked else field.on)
+        if field.kind == RADIO:
+            return self.fill(field, field.on)
+        if field.kind == TEXT or (field.kind == COMBO and field.editable):
+            self._open_field_editor(field)
+            return True
+        self._choose_in(field, near)
+        return True
+
+    def _choose_in(self, field: FormField, near: QPoint | None) -> None:
+        """The choices of a list, under the field."""
+        menu = QMenu(self)
+        menu.setAccessibleName(field.title)
+        for choice in field.choices:
+            action = menu.addAction(choice)
+            action.setCheckable(True)
+            action.setChecked(choice == field.value)
+            action.triggered.connect(lambda _checked=False, c=choice: self.fill(field, c))
+        if field.value and field.kind == COMBO:
+            menu.addSeparator()
+            menu.addAction(self.tr("Dejar en blanco")).triggered.connect(
+                lambda _checked=False: self.fill(field, "")
+            )
+        self.choice_menu = menu
+        where = self._field_window_rect(field)
+        menu.popup(self.viewport().mapToGlobal(where.bottomLeft() if near is None else near))
+
+    def _field_window_rect(self, field: FormField) -> QRect:
+        x0, y0, x1, y1 = self._shown_rect(field.page, field.rect)
+        zoom = self._render_zoom()
+        left = self._page_left(field.page) + x0 * zoom
+        top = self._tops[field.page] - self._scroll_y() + y0 * zoom
+        return QRect(
+            self._to_units(left),
+            self._to_units(top),
+            max(8, self._to_units((x1 - x0) * zoom)),
+            max(8, self._to_units((y1 - y0) * zoom)),
+        )
+
+    def _open_field_editor(self, field: FormField) -> FieldEditor:
+        self._end_field_editing()
+        editor = FieldEditor(replace(field, value=self._field_value(field)), self.viewport())
+        self.field_editor = editor
+        self._field_focus = field
+        editor.finished.connect(lambda text, step: self._field_written(editor, text, step))
+        editor.cancelled.connect(lambda: self._field_written(editor, None, 0))
+        self._draft_timer.start()
+        self._place_field_editor()
+        editor.start()
+        return editor
+
+    def _place_field_editor(self) -> None:
+        editor = self.field_editor
+        if editor is None:
+            return
+        field = editor.field
+        if not 0 <= field.page < self.page_count:
+            return
+        where = self._field_window_rect(field)
+        height = where.width() if self._rotation in (90, 270) else where.height()
+        size = field.font_size or (
+            min(14.0, (field.rect[3] - field.rect[1]) * 0.7) if not field.multiline else 10.0
+        )
+        letters = self._to_units(size * self._render_zoom())
+        editor.put(where, min(letters, max(9, height * 0.8)) if not field.multiline else letters)
+
+    def _field_written(self, editor: FieldEditor, text: str | None, step: int) -> None:
+        if editor is not self.field_editor:
+            return
+        self.field_editor = None
+        self._draft_timer.stop()
+        editor.hide()
+        editor.deleteLater()
+        kept = text is not None and self.fill(editor.field, text)
+        if not kept:
+            self._drop_draft()
+        self.setFocus()
+        if step:
+            self.focus_field(step)
+
+    def _end_field_editing(self) -> None:
+        """Close the box being written in, keeping what was written."""
+        editor = getattr(self, "field_editor", None)
+        if editor is not None:
+            editor.finish(0)
+        self._field_focus = None
+
+    def _fields_in_order(self) -> list[FormField]:
+        return [field for page in sorted(self._fields) for field in self._fields[page]]
+
+    def focus_field(self, step: int = 1) -> FormField | None:
+        """Tab through a form: the keyboard goes to the next field (or the one
+        before), which is shown; a box to write in opens at once."""
+        fields = [field for field in self._fields_in_order() if not field.read_only]
+        if not fields:
+            return None
+        here = self._field_focus
+        keys = [(field.page, field.xref) for field in fields]
+        if here is not None and (here.page, here.xref) in keys:
+            index = (keys.index((here.page, here.xref)) + step) % len(fields)
+        else:
+            index = 0 if step >= 0 else len(fields) - 1
+        field = fields[index]
+        self._field_focus = field
+        shown = self._shown_rect(field.page, field.rect)
+        self._bring_into_view(field.page, shown, shown)
+        if field.kind == TEXT or (field.kind == COMBO and field.editable):
+            self._open_field_editor(field)
+        else:
+            self.setFocus()
+        self.viewport().update()
+        return field
+
+    def _field_key(self, event) -> bool:
+        """Keys while a field (not a box to write in) has the keyboard."""
+        field = self._field_focus
+        if field is None:
+            return False
+        key = event.key()
+        if key == Qt.Key.Key_Tab:
+            self.focus_field(+1)
+        elif key == Qt.Key.Key_Backtab:
+            self.focus_field(-1)
+        elif key == Qt.Key.Key_Escape:
+            self._field_focus = None
+            self.viewport().update()
+        elif key in (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            current = next(
+                (known for known in self._fields.get(field.page, ()) if known.xref == field.xref),
+                field,
+            )
+            self.use_field(current)
+        else:
+            return False
+        return True
+
+    def event(self, event) -> bool:  # noqa: N802 (Qt naming)
+        # Tab belongs to the form while one of its fields has the keyboard.
+        if (
+            event.type() == QEvent.Type.KeyPress
+            and event.key() in (Qt.Key.Key_Tab, Qt.Key.Key_Backtab)
+            and self._field_focus is not None
+            and self._field_key(event)
+        ):
+            return True
+        return super().event(event)
+
+    def _paint_fields(self, painter: QPainter, page: int, target: QRect, zoom: float) -> None:
+        """A light tint over the boxes of a form, and a line around the one in use."""
+        focus = self._field_focus
+        painter.save()
+        for field in self._fields.get(page, ()):
+            x0, y0, x1, y1 = self._shown_rect(page, field.rect)
+            box = QRectF(
+                target.left() + x0 * zoom,
+                target.top() + y0 * zoom,
+                (x1 - x0) * zoom,
+                (y1 - y0) * zoom,
+            )
+            if self.highlight_fields and not field.read_only:
+                painter.fillRect(box, FIELD_COLOR)
+            if focus is not None and (focus.page, focus.xref) == (page, field.xref):
+                painter.setPen(QPen(FIELD_FOCUS_COLOR, max(1.0, 1.5 * self._scale())))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawRect(box.adjusted(-1, -1, 1, 1))
+        painter.restore()
+
     def note_under(self, position: QPoint) -> PageNote | None:
         """The note or text box under a place of the window."""
         point = self._point_on_page(position, reach=NOTE_REACH)
@@ -2221,6 +2491,13 @@ class PdfView(QAbstractScrollArea):
     def draft_order(self):
         """The change that what is being written would be if kept now, or None."""
         panel = self.note_panel
+        if self.field_editor is not None and self._document is not None:
+            self._drafting = []
+            try:
+                self.fill(self.field_editor.field, self.field_editor.text)
+            finally:
+                caught, self._drafting = self._drafting, None
+            return caught[-1] if caught else None
         if panel is None or self._document is None:
             return None
         self._drafting = []
@@ -2836,6 +3113,8 @@ class PdfView(QAbstractScrollArea):
 
     def _press(self, position: QPoint, modifiers=Qt.KeyboardModifier.NoModifier) -> None:
         """The mouse button, the pen or a finger goes down on a place of the window."""
+        if self.field_editor is not None:
+            self.field_editor.finish(0)  # a click elsewhere keeps what was written
         self.setFocus()
         self._fling.stop()
         self._review_click = False
@@ -2884,6 +3163,14 @@ class PdfView(QAbstractScrollArea):
                 self._start_grab(item, handle, position)
                 return
             self.pick(None)
+            field = self.field_under(position)
+            if field is not None:
+                self.clear_selection()
+                self.use_field(field)  # write in it, tick it or choose
+                return
+            if self._field_focus is not None:
+                self._field_focus = None
+                self.viewport().update()
         note = self.note_under(position)
         writing = self._markup_tool in (NOTE, TEXT_BOX)
         if writing and note is not None and note.ours and note.kind == TEXT_BOX:
@@ -3223,6 +3510,11 @@ class PdfView(QAbstractScrollArea):
         if self._markup_tool in (DRAW, SHAPE_TOOL, ERASER):
             self._press(position, modifiers)  # a quick second stroke, not a double click
             return
+        if not self._markup_tool and self.field_under(position) is not None:
+            field = self.field_under(position)
+            if field.kind == CHECK:
+                self._press(position, modifiers)  # a quick second click ticks it again
+            return
         note = self.note_under(position)
         if note is not None and note.ours:
             self._grab = None
@@ -3275,7 +3567,15 @@ class PdfView(QAbstractScrollArea):
         note = self.note_under(position)
         writing = self._markup_tool in (NOTE, TEXT_BOX)
         link = self.doc_link_under(position) if not self._markup_tool else None
-        if link is not None and note is None:
+        field = self.field_under(position) if not self._markup_tool and note is None else None
+        if field is not None:
+            writes = field.kind == TEXT or (field.kind == COMBO and field.editable)
+            shape = Qt.CursorShape.IBeamCursor if writes else Qt.CursorShape.PointingHandCursor
+            if field.read_only:
+                shape = Qt.CursorShape.ForbiddenCursor
+            tip = field.title + (self.tr(" (no se puede cambiar)") if field.read_only else "")
+            QToolTip.showText(self.viewport().mapToGlobal(position), tip, self.viewport())
+        elif link is not None and note is None:
             shape = Qt.CursorShape.PointingHandCursor
             tip = self.tr("Abre {0}, página {1}").format(Path(link.file).name, link.page + 1)
             QToolTip.showText(self.viewport().mapToGlobal(position), tip, self.viewport())
@@ -3401,6 +3701,8 @@ class PdfView(QAbstractScrollArea):
     def keyPressEvent(self, event) -> None:  # noqa: N802
         bar = self.verticalScrollBar()
         key = event.key()
+        if self._field_focus is not None and self._field_key(event):
+            return
         if self.picked_item() is not None and self._picked_key(event):
             return
         if key in (Qt.Key.Key_PageDown, Qt.Key.Key_Space):

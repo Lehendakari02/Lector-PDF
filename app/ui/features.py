@@ -226,7 +226,13 @@ FEATURES: list[Feature] = [
         "página rayas cuadrícula",
     ),
     # Rellenar y firmar
-    _f("fill_form", FILL, "Rellenar campos", "Rellenar los campos de un formulario", "formulario"),
+    _f(
+        "fill_form",
+        FILL,
+        "Rellenar campos",
+        "Escribir en los campos de un formulario, marcar casillas y elegir (Tab: el siguiente)",
+        "formulario rellenar campos casilla solicitud impreso instancia",
+    ),
     _f("type_text", FILL, "Escribir", "Escribir en cualquier parte del documento", "texto"),
     _f("my_data", FILL, "Mis datos", "Poner tu nombre, DNI o dirección con un clic", "personales"),
     _f("stamps", FILL, "Sellos", "Marcas rápidas: ✓, ✗, fecha, sellos propios", "marca casilla"),

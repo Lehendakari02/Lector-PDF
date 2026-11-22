@@ -30,6 +30,7 @@ from app.core.bookmarks import changes_outline
 from app.core.commands import Color, Command, CommandError, markup_for_selection
 from app.core.doc_links import page_doc_links
 from app.core.drawing import PageDrawing, page_drawings
+from app.core.forms import page_fields
 from app.core.notes import PageNote, page_notes
 from app.core.ocr import looks_recognised, looks_scanned, page_picture
 from app.core.outline import OutlineEntry, read_outline
@@ -475,7 +476,11 @@ def _worker_main(connection: Connection) -> None:
                         linked = page_doc_links(doc, page_index)
                     except Exception:
                         linked = []
-                    connection.send(("notes", token, page_index, found, drawn, linked))
+                    try:
+                        fields = page_fields(doc, page_index)
+                    except Exception:
+                        fields = []
+                    connection.send(("notes", token, page_index, found, drawn, linked, fields))
             elif kind == "annotations":
                 list_token, list_id = message[1], message[2]
                 whole = len(message) > 3 and message[3]  # for the summary: nothing cut
@@ -643,6 +648,7 @@ class RenderService:
         on_notes: Callable[[int, list[PageNote]], None] | None = None,
         on_drawings: Callable[[int, list[PageDrawing]], None] | None = None,
         on_links: Callable[[int, list], None] | None = None,
+        on_fields: Callable[[int, list], None] | None = None,
         on_scanned: Callable[[list[int], int, list[int]], None] | None = None,
         on_reading: Callable[[int, int, int, int, bytes], None] | None = None,
         on_reading_failed: Callable[[int, str], None] | None = None,
@@ -660,6 +666,7 @@ class RenderService:
         self._on_notes = on_notes or (lambda page, notes: None)
         self._on_drawings = on_drawings or (lambda page, drawings: None)
         self._on_links = on_links or (lambda page, links: None)
+        self._on_fields = on_fields or (lambda page, fields: None)
         self._on_changed = on_changed or (lambda number, order, pages, undo: None)
         self._on_change_failed = on_change_failed or (lambda number, details: None)
         self._change_id = 0
@@ -1111,6 +1118,8 @@ class RenderService:
             elif kind == "notes":
                 if len(message) > 5:
                     self._tell(self._on_links, message[2], message[5])
+                if len(message) > 6:
+                    self._tell(self._on_fields, message[2], message[6])
                 self._tell(self._on_drawings, message[2], message[4])
                 self._tell(self._on_notes, message[2], message[3])
             elif kind == "page_failed":
