@@ -174,6 +174,10 @@ ICONS: dict[str, str] = {
         'l-3-2.5"/><path d="M5 20h14"/>'
     ),
     "sign_drawn": _SIGNATURE,
+    "my_signature": (
+        '<path d="M3 14.5c2-4 3.5-8 5-8 2 0-.4 7.5 1.6 7.5 1.4 0 1.8-3 3.2-3"/>'
+        '<path d="M3 20.5h9M14 19.5l5.5-5.5 1.5 1.5-5.5 5.5H14z"/>'
+    ),
     "sign_certificate": (
         '<circle cx="12" cy="9" r="5.5"/><path d="M8.5 13.5L7 21l5-2.5 5 2.5-1.5-7.5"/>'
         '<path d="M9.8 9l1.6 1.6 2.9-3"/>'

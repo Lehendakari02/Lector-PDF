@@ -258,6 +258,14 @@ FEATURES: list[Feature] = [
     _f("stamps", FILL, "Sellos", "Marcas rápidas: ✓, ✗, fecha, sellos propios", "marca casilla"),
     _f("sign_drawn", FILL, "Firmar", "Poner tu firma manuscrita guardada", "firma rúbrica"),
     _f(
+        "my_signature",
+        FILL,
+        "Mi firma e iniciales",
+        "Crear o cambiar tu firma guardada: dibujándola, escribiendo tu nombre o con una foto",
+        "firma rúbrica iniciales crear dibujar foto imagen guardar",
+        toolbar=False,
+    ),
+    _f(
         "sign_certificate",
         FILL,
         "Firmar con certificado",
