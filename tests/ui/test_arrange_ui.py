@@ -99,14 +99,52 @@ def test_escape_lets_go_of_what_is_picked(window, with_box):
     assert view.picked_item() is None
 
 
-def test_with_a_tool_in_hand_nothing_is_picked(window, with_box, wait_until):
+def test_with_the_pen_in_hand_a_tap_picks_and_a_stroke_draws(window, with_box, wait_until):
     view, _ = with_box
     click(view, 0, 100, 130)
     window.use_writing_tool(DRAW)
     assert view.picked_item() is None, "taking a tool lets go"
-    click(view, 0, 100, 130)
+    click(view, 0, 100, 130)  # a tap on the box (16/11 test): it is picked
+    settle(view, wait_until)
+    assert view.picked_item().kind == BOX and len(view.drawings_of(0)) == 1
+    QTest.keyClick(view, Qt.Key.Key_Delete)  # and Supr takes it away
+    settle(view, wait_until)
+    assert view.drawings_of(0) == []
+    drag(view, 0, (300, 300), (340, 320), (380, 300))  # a stroke still draws
+    settle(view, wait_until)
+    assert [item.kind for item in view.drawings_of(0)] == [INK]
+    click(view, 0, 500, 700)  # a tap on nothing draws as before
     settle(view, wait_until)
     assert view.picked_item() is None
+
+
+def test_a_tapped_shape_is_dragged_with_the_pen_still_in_hand(window, with_box, wait_until):
+    view, _ = with_box
+    window.use_writing_tool(DRAW)
+    click(view, 0, 100, 130)
+    drag(view, 0, (100, 130), (130, 150), (150, 170))
+    settle(view, wait_until)
+    (box,) = view.drawings_of(0)
+    assert near(box.rect[:2], (150, 140), 2), "moved, not drawn over"
+
+
+def test_with_a_marker_in_hand_a_click_on_a_mark_picks_it(window, opened, wait_until):
+    view, _ = opened()
+    wait_until(lambda: 0 in view._texts)
+    view.select((0, 0), (0, 12))
+    view.mark_selection(HIGHLIGHT)
+    settle(view, wait_until)
+    (mark,) = view.drawings_of(0)
+    x0, y0, x1, y1 = mark.rects[0]
+    window.use_marker(HIGHLIGHT)
+    click(view, 0, (x0 + x1) / 2, (y0 + y1) / 2)
+    assert view.picked_item().kind == HIGHLIGHT
+    QTest.keyClick(view, Qt.Key.Key_Delete)
+    settle(view, wait_until)
+    assert view.drawings_of(0) == []
+    drag(view, 0, (x0 + 1, (y0 + y1) / 2), (x1 - 1, (y0 + y1) / 2))
+    settle(view, wait_until)
+    assert [item.kind for item in view.drawings_of(0)] == [HIGHLIGHT], "dragging still marks"
 
 
 def test_a_click_on_a_mark_picks_it_but_dragging_still_selects_text(

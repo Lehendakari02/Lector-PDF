@@ -522,3 +522,14 @@ Con un documento abierto, en el modo Estudiar.
    (sin abrirlo): se mueve. Queda elegido: pulsa **Supr** y se borra.
 4. En la barra del texto, **A+** (más grande) está a la izquierda y **A−**
    (más pequeña) a la derecha.
+
+## Arreglos 2.19b – Elegir con un clic y borrar con Supr
+
+1. Coge el **rotulador** (resaltar) y resalta una frase. Sin soltar la
+   herramienta, haz un clic sobre el resaltado: queda elegido (con un marco).
+   Pulsa **Supr**: se borra. Arrastrar sobre el texto sigue resaltando.
+2. Con el **bolígrafo** en la mano, toca un dibujo o una forma que ya esté
+   puesto: queda elegido. Arrástralo: se mueve. **Supr** lo borra.
+3. Con el bolígrafo, un toque en un sitio vacío y un trazo siguen dibujando
+   como siempre.
+4. Haz lo mismo con la herramienta **Formas** en la mano.

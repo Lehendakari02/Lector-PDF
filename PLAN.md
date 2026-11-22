@@ -926,8 +926,8 @@ Notas de la Fase 2A:
 | 2.17 | Rehacer el OCR de PDFs que ya traen uno malo (todo o páginas) | Un PDF con OCR malo pasa a buscarse bien | ✅ |
 | 2.18 | Buscador y subrayado probados con texto de OCR real; búsqueda aproximada opcional | Subrayo y busco en un escaneado igual que en un PDF del BOE | ✅ |
 | 2.19 | Versión 0.3 | Estudio un tema escaneado con el programa | 🔶 número 0.3.0 puesto (16/11/2026); falta que Julen cree la Release v0.3.0 y lo use con un tema escaneado |
-| 2.19a | Textos tras la prueba del 16/11: moverlos después de ponerlos, A+ a la izquierda y A− a la derecha, sin fondo blanco al cambiarlos | Encajo un texto entre líneas del temario, lo muevo a su sitio y no tapa nada | 🔶 |
-| 2.19b | Elegir cualquier cosa con un clic (también con una herramienta en la mano) y borrarla con Supr | Hago clic en un subrayado, un dibujo o un texto y Supr lo borra | ⬜ |
+| 2.19a | Textos tras la prueba del 16/11: moverlos después de ponerlos, A+ a la izquierda y A− a la derecha, sin fondo blanco al cambiarlos | Encajo un texto entre líneas del temario, lo muevo a su sitio y no tapa nada | ✅ |
+| 2.19b | Elegir cualquier cosa con un clic (también con una herramienta en la mano) y borrarla con Supr | Hago clic en un subrayado, un dibujo o un texto y Supr lo borra | 🔶 |
 | 2.19c | Cambiar el color de lo ya puesto (subrayados, dibujos, formas, textos, notas) | Cambio un resaltado amarillo a verde sin borrarlo y hacerlo otra vez | ⬜ |
 
 Notas de la Fase 2B:
@@ -1008,6 +1008,12 @@ Notas de la Fase 2B:
     derecha. Al cambiar un texto ya puesto, la página se dibuja sin él (el
     PDF no cambia) y el marco queda transparente: no tapa el temario. En el
     PDF guardado un texto nunca ha tenido fondo.
+  - 2.19b: con el bolígrafo o las formas en la mano, un toque (sin arrastrar)
+    sobre algo ya dibujado o escrito lo elige en vez de dibujar un punto; se
+    puede arrastrar y Supr lo borra. Un trazo sigue dibujando, y un toque en
+    un sitio vacío hace lo de siempre. Con un rotulador (resaltar, subrayar,
+    tachar) en la mano, un clic sobre una marca la elige; arrastrar sigue
+    marcando texto. Antes solo se podía elegir con las manos vacías.
 
 ## Fase 2C – Herramientas de estudio
 Ordenadas por uso diario.
