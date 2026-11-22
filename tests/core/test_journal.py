@@ -340,3 +340,66 @@ def test_killed_while_writing_loses_nothing_that_was_written_down(tmp_path, afte
     assert again.count == len(names)
     assert again.record(order())
     assert Journal(folder).pending()[0].count == len(names) + 1
+
+
+# ---- what is being written (the draft) -------------------------------------
+
+
+def test_a_draft_alone_is_offered_after_a_power_cut(journal, pdf):
+    live = journal.of(pdf)
+    draft = order()
+    assert live.write_draft(draft)
+    assert not live.file.exists() and live.draft_file.exists()
+    found = journal.pending()
+    assert len(found) == 1 and found[0].path == pdf.absolute()
+    assert [entry[0] for entry in found[0].entries] == [draft]
+
+
+def test_a_draft_goes_after_the_other_changes_and_is_replaced_whole(journal, pdf):
+    live = journal.of(pdf)
+    first = order()
+    live.record(first)
+    live.write_draft(order(UNDERLINE))
+    latest = order(UNDERLINE, page=1)
+    live.write_draft(latest)
+    assert [entry[0] for entry in journal.pending()[0].entries] == [first, latest]
+    assert live.count == 1, "a draft is not a change yet"
+    live.write_draft(None)
+    assert not live.draft_file.exists()
+    assert [entry[0] for entry in journal.pending()[0].entries] == [first]
+
+
+def test_a_draft_never_touches_the_pdf(journal, pdf):
+    before = pdf.read_bytes()
+    journal.of(pdf).write_draft(order())
+    assert pdf.read_bytes() == before
+    assert all(p.parent == journal.folder for p in journal.folder.iterdir())
+
+
+def test_recovering_or_forgetting_takes_the_draft_file_away(journal, pdf):
+    live = journal.of(pdf)
+    live.write_draft(order())
+    found = journal.pending()[0]
+    live.restart(list(found.entries))
+    assert not live.draft_file.exists() and live.count == 1
+    assert len(journal.pending()) == 1
+    live.write_draft(order(UNDERLINE))
+    journal.forget(journal.pending()[0])
+    assert journal.pending() == [] and not live.draft_file.exists()
+
+
+def test_no_guardar_keeps_the_draft_with_the_changes_set_aside(journal, pdf):
+    live = journal.of(pdf)
+    draft = order()
+    live.write_draft(draft)
+    live.discard()
+    assert journal.pending() == [] and not live.draft_file.exists()
+    assert [entry[0] for entry in journal.discarded()[0].entries] == [draft]
+
+
+def test_a_draft_cut_short_is_not_read(journal, pdf):
+    live = journal.of(pdf)
+    live.write_draft(order())
+    live.draft_file.write_text(live.draft_file.read_text()[:-30], encoding="utf-8")
+    assert journal.pending() == []
+    assert live.draft() is None

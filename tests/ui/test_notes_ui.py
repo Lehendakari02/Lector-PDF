@@ -361,3 +361,72 @@ def test_the_helper_dying_loses_no_note(window, opened, wait_until):
     assert [note.text for note in view.notes_of(0)] == ["sobrevive"]
     save(window, wait_until)
     assert in_file(path) == [("Text", "sobrevive")]
+
+
+# ---- what is being written, after a power cut ---------------------------------
+
+
+def test_a_note_being_written_comes_back_after_a_power_cut(
+    window, opened, wait_until, settings, qt_app
+):
+    view, path = opened()
+    before = path.read_bytes()
+    view.start_note(NOTE, 0, 300, 200, QPoint(40, 40))
+    view.note_panel.edit.setPlainText("a medio escribir")
+    assert view._draft_timer.isActive()
+    view.write_draft()  # what the timer does every few seconds
+    assert view.journal.draft_file.exists()
+    assert path.read_bytes() == before, "the PDF is never written"
+    assert not view.modified and view.notes_of(0) == [], "not a change yet"
+    window.shutdown_documents()
+    view.journal = None
+    again = MainWindow(settings)
+    try:
+        again.show_problem_dialogs = False
+        again.restore_session()
+        again.recovery_answer = True
+        assert again.offer_recovery() == 1
+        other = again.pdf_view
+        wait_until(lambda: other._changes == 1 and not other._changing and not other._asked_notes)
+        assert [note.text for note in other.notes_of(0)] == ["a medio escribir"]
+        assert not other.journal.draft_file.exists()
+        assert len(other.journal.entries()) == 1
+    finally:
+        again.unsaved_answer = "discard"
+        again.close()
+        again.deleteLater()
+
+
+def test_the_draft_goes_when_the_note_is_kept_or_cancelled(window, opened, wait_until):
+    view, path = opened()
+    view.start_note(NOTE, 0, 300, 200, QPoint(40, 40))
+    view.note_panel.edit.setPlainText("se queda")
+    view.write_draft()
+    assert view.journal.draft_file.exists()
+    view.note_panel.save()
+    settle(view, wait_until)
+    assert not view.journal.draft_file.exists()
+    assert not view._draft_timer.isActive()
+    assert len(view.journal.entries()) == 1
+    view.start_note(NOTE, 0, 300, 400, QPoint(40, 40))
+    view.note_panel.edit.setPlainText("no se queda")
+    view.write_draft()
+    view.note_panel.cancel()
+    assert not view.journal.draft_file.exists()
+    assert len(view.journal.entries()) == 1 and len(view.notes_of(0)) == 1
+
+
+def test_a_text_changed_on_the_page_is_drafted_as_a_change(window, opened, wait_until):
+    view, path = opened()
+    assert view.put_text_box(0, 60, 300, "antes")
+    settle(view, wait_until)
+    view.open_note(view.notes_of(0)[0])
+    view.note_panel.edit.setPlainText("después")
+    view.write_draft()
+    drafted = view.journal.draft()
+    assert type(drafted).__name__ == "Replace" and drafted.new.text == "después"
+    assert [note.text for note in view.notes_of(0)] == ["antes"], "nothing done yet"
+    view.note_panel.edit.setPlainText("antes")
+    view.write_draft()
+    assert view.journal.draft() is None, "unchanged: nothing to bring back"
+    view.close_note_panel()

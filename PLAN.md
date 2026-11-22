@@ -1045,7 +1045,8 @@ Ordenadas por uso diario.
 | 2.23 | Modo repaso | Lo subrayado se tapa y lo descubro al hacer clic | ✅ |
 | 2.24 | Márgenes ampliables | Añado margen a una página y escribo en él; se ve igual en Edge y Adobe | ✅ |
 | 2.25 | Insertar hojas en blanco, de rayas o cuadriculadas | Meto una hoja cuadriculada para un esquema | ✅ (hecha en la 2.13d) |
-| 2.26 | Código de colores propio (opcional, nada predefinido) | Si quiero, pongo nombre a mis colores; si no, no aparece nada | 🔶 |
+| 2.26 | Código de colores propio (opcional, nada predefinido) | Si quiero, pongo nombre a mis colores; si no, no aparece nada | ✅ |
+| 2.26b | Lo que se está escribiendo, a salvo de un apagón (decidido por Julen el 22/11) | Corto la luz a mitad de una nota y al volver la recupero | 🔶 |
 | 2.27 | Exportar resumen (formato por decidir) | Saco un documento con todo lo subrayado, ordenado por página | ⬜ |
 | 2.28 | Vista de dos documentos lado a lado | Veo el tema y la ley a la vez | ⬜ |
 | 2.29 | Biblioteca del temario | Elijo mi carpeta de temas, busco en todos y veo mi progreso | ⬜ |
@@ -1130,6 +1131,14 @@ Notas de la Fase 2C:
     ("Pág. 3 · Resaltado · Definiciones").
   - Los nombres son de este ordenador (en los ajustes), valen para todos los
     documentos y no se guardan en el PDF: el PDF sigue siendo estándar.
+- **2.26b: lo que se está escribiendo, a salvo de un apagón (22/11/2026).**
+  - Mientras hay una nota o un texto abierto, cada 3 segundos se apunta en el
+    diario cómo quedaría si se guardara ahora (solo si ha cambiado). Va en un
+    archivo aparte del diario que se sustituye entero: nunca toca el PDF.
+  - Tras un apagón, al abrir el programa se ofrece junto con el resto de
+    cambios; recuperado, la nota o el texto aparecen puestos.
+  - Al guardar la nota o cancelarla, ese apunte desaparece. Con "No guardar"
+    se aparta con los demás cambios descartados.
 
 ## Fase 3 – Rellenar y firma manuscrita
 | # | Tarea | Terminado cuando… | Estado |

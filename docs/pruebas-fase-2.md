@@ -634,3 +634,15 @@ Con un documento abierto, en el modo Estudiar.
    "Pág. N · Resaltado · Definiciones".
 4. Cierra y vuelve a abrir el programa, y abre otro PDF: el nombre sigue.
 5. Clic derecho → **Quitarle el nombre**: vuelve a ser solo "Amarillo".
+
+## Fase 2C – Tarea 2.26b – Lo que escribes, a salvo de un apagón
+
+1. Abre un PDF y empieza una nota: escribe una frase y **no** la cierres.
+2. Espera unos 5 segundos y cierra el programa a la fuerza (Administrador de
+   tareas → Finalizar tarea) o desenchufa el portátil sin batería.
+3. Abre el programa: ofrece recuperar los cambios. Acepta: la nota aparece
+   con lo que habías escrito.
+4. Repite con un texto escrito sobre la página y con un texto que ya existía
+   y estabas cambiando.
+5. Comprueba que el PDF no ha cambiado hasta que pulsas Guardar.
+

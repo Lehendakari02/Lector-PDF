@@ -83,6 +83,7 @@ REVIEW_KINDS = (HIGHLIGHT, UNDERLINE)  # what the review mode covers
 COVER_MARGIN = 1.5  # points around a cover that a click still takes
 PLACE_MARGIN = 24  # space left above a heading gone to, in Qt units
 WRITING_WAIT_S = 3.0  # longest wait for the text being written to become a change
+DRAFT_EVERY_MS = 3000  # the text being written goes to the journal this often
 WHEEL_NOTCH = 120  # what one notch of a mouse wheel sends
 # A document opens fitted to the width, but never bigger than this (1.0 = 100 %):
 # on a wide screen the full width makes the letters far too big to read at ease.
@@ -476,6 +477,13 @@ class PdfView(QAbstractScrollArea):
         # Where one is being written: a panel, or the page itself for a text.
         self.note_panel: NotePanel | TextEditor | None = None
         self._editor_place: tuple[int, float, float] | None = None  # of that text
+        # What is being written is put in the journal every few seconds, so
+        # that a power cut does not take it (it is not a change until kept).
+        self._draft_timer = QTimer(self)
+        self._draft_timer.setInterval(DRAFT_EVERY_MS)
+        self._draft_timer.timeout.connect(self.write_draft)
+        self._draft_written: dict | None = None
+        self._drafting: list | None = None  # orders caught instead of done
         # How new notes and text are made (the window gives what the user chose).
         self.note_color = notes.NOTE_COLOR
         self.text_font = notes.SANS
@@ -641,6 +649,8 @@ class PdfView(QAbstractScrollArea):
         if self.journal is not None and how not in (RECOVER, RECOVER_UNDO):
             # Written down at once: a power cut from here on does not lose it.
             self.journal.record(order, undone)
+            if self.note_panel is None and self._draft_written is not None:
+                self._drop_draft()  # the text written is a change of its own now
         if hasattr(order, "page_change"):
             self._reshape(*order.page_change(undone), getattr(order, "size", None))
             if how in ("do", "redo"):
@@ -768,6 +778,8 @@ class PdfView(QAbstractScrollArea):
         if self._sent_sketches.pop(number, None) is not None:
             self.viewport().update()
         self._latest.clear()
+        if self.note_panel is None and self._draft_written is not None:
+            self._drop_draft()  # what was written could not be kept: not again
         if self._changing.pop(number, None) is not None:
             self.history_changed.emit()
             self.edit_failed.emit(details)
@@ -1911,6 +1923,9 @@ class PdfView(QAbstractScrollArea):
     def _do(self, order) -> bool:
         if self._document is None:
             return False
+        if self._drafting is not None:  # only asked what it would be
+            self._drafting.append(order)
+            return True
         self.set_annotations_shown(True)  # what is put now must be seen
         number = self.service.apply(order)
         self._changing[number] = "do"
@@ -2039,9 +2054,41 @@ class PdfView(QAbstractScrollArea):
             QCoreApplication.processEvents(QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents, 20)
             time.sleep(0.002)
 
+    def draft_order(self):
+        """The change that what is being written would be if kept now, or None."""
+        panel = self.note_panel
+        if panel is None or self._document is None:
+            return None
+        self._drafting = []
+        try:
+            if panel.text:
+                panel.saved.emit(panel.text)  # the order is caught, not done
+        finally:
+            caught, self._drafting = self._drafting, None
+        return caught[-1] if caught else None
+
+    def write_draft(self) -> None:
+        """Put what is being written in the journal, if it changed."""
+        if self.journal is None:
+            return
+        order = self.draft_order()
+        written = order.to_dict() if order is not None else None
+        if written != self._draft_written:
+            self.journal.write_draft(order)
+            self._draft_written = written
+
+    def _drop_draft(self) -> None:
+        self._draft_written = None
+        if self.journal is not None:
+            self.journal.clear_draft()
+
     def _panel_closed(self) -> None:
         self.note_panel = None
         self._editor_place = None
+        self._draft_timer.stop()
+        if not self._changing:
+            self._drop_draft()  # cancelled, or nothing to keep
+        # (if it was kept, its draft goes once the change is in the journal)
         QTimer.singleShot(0, self._place_picked_bar)
         if self._hiding is not None:
             page, self._hiding = self._hiding[0], None
@@ -2162,6 +2209,7 @@ class PdfView(QAbstractScrollArea):
 
     def _show_panel(self, panel: NotePanel, near: QPoint) -> NotePanel:
         self.note_panel = panel
+        self._draft_timer.start()
         panel.closed.connect(self._panel_closed)
         panel.place_near(self.viewport().mapTo(self, near))
         panel.start()
@@ -2169,6 +2217,7 @@ class PdfView(QAbstractScrollArea):
 
     def _show_editor(self, editor: TextEditor, page: int, x: float, y: float) -> TextEditor:
         self.note_panel = editor
+        self._draft_timer.start()
         self._editor_place = (page, x, y)
         editor.closed.connect(self._panel_closed)
         editor.style_chosen.connect(self.text_style_chosen)
