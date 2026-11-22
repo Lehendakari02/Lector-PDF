@@ -6,11 +6,12 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QSize, Qt, QTimer, qVersion
+from PySide6.QtCore import QEvent, QSize, Qt, QTimer, QUrl, qVersion
 from PySide6.QtGui import (
     QAction,
     QActionGroup,
     QCursor,
+    QDesktopServices,
     QGuiApplication,
     QKeyEvent,
     QKeySequence,
@@ -77,6 +78,7 @@ from app.core.ocr import OcrError
 from app.core.paths import data_dir, is_portable
 from app.core.settings import Settings
 from app.core.signing import PasswordProtected, SigningError, sign_pdf
+from app.core.summary import summary_of, write_docx, write_pdf
 from app.core.tool_keys import FAVOURITE_KEYS, TOOL_KEYS, tool_keys_wanted
 from app.core.updates import Release
 from app.core.versions import FOLDER_NAME as VERSIONS_FOLDER
@@ -141,6 +143,7 @@ FAVOURITES_SETTING = "favoritas"  # the favourite tools, in the order of their b
 TOOLBAR_NAMES, TOOLBAR_ICONS = "nombres", "iconos"
 TOP_SEARCH_WIDTH = 280
 SIDE_PANEL_SETTING = "panel_lateral"  # "", "miniaturas", "indice" or "anotaciones"
+SUMMARY_FORMAT_SETTING = "resumen/formato"  # "pdf" or "docx": the last one chosen
 SHEET_SETTING = "hoja_nueva"  # the kind of sheet Insertar hoja puts: the last one chosen
 
 
@@ -284,6 +287,8 @@ class MainWindow(QMainWindow):
         # For the tests: the pages to recognise again, without asking.
         self.recognize_again_answer: list[int] | None = None
         self.margin_answer: MarginChoice | None = None  # the tests answer without asking
+        self.summary_target: Path | None = None  # the tests choose the file without asking
+        self.open_exported = True  # a summary made is opened (not in the tests)
         self._saving_to_close: list[DocumentPage] = []  # being saved before closing
         self._after_saving = None  # what to do once they are all saved
         self.statusBar().addPermanentWidget(self.speed_label)
@@ -324,6 +329,7 @@ class MainWindow(QMainWindow):
             "eraser": lambda: self.use_writing_tool(ERASER),
             "hide_annotations": self.toggle_annotations,
             "review": self.toggle_review,
+            "summary": self.export_summary,
             "margins": self.add_margin,
             "undo": self.undo,
             "redo": self.redo,
@@ -1691,6 +1697,96 @@ class MainWindow(QMainWindow):
             )
             return False
         return True
+
+    def export_summary(self) -> bool:
+        """Ask where to save the summary of the document (PDF or Word) and make it."""
+        view = self.pdf_view
+        source = view.document_path
+        if view.page_count == 0 or source is None:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return False
+        view.finish_writing()  # what is being written goes in too
+        target = self.summary_target
+        if target is None:
+            word = self.settings.get(SUMMARY_FORMAT_SETTING) == "docx"
+            pdf_filter = self.tr("Documento PDF (*.pdf)")
+            word_filter = self.tr("Documento de Word (*.docx)")
+            suggested = source.with_name(
+                self.tr("{0} - resumen").format(source.stem) + (".docx" if word else ".pdf")
+            )
+            chosen, picked = QFileDialog.getSaveFileName(
+                self,
+                self.tr("Guardar el resumen como"),
+                str(suggested),
+                f"{pdf_filter};;{word_filter}",
+                word_filter if word else pdf_filter,
+            )
+            if not chosen:
+                return False
+            target = Path(chosen)
+            if target.suffix.lower() not in (".pdf", ".docx"):
+                target = target.with_name(
+                    target.name + (".docx" if picked == word_filter else ".pdf")
+                )
+        target = Path(target)
+        if target.suffix.lower() not in (".pdf", ".docx"):
+            target = target.with_name(target.name + ".pdf")
+        if target.resolve() == source.resolve():
+            self._show_problem(
+                self.tr("Elige otro nombre"),
+                self.tr("El resumen no puede ocupar el lugar del documento."),
+            )
+            return False
+        self.settings.set(
+            SUMMARY_FORMAT_SETTING, "docx" if target.suffix.lower() == ".docx" else "pdf"
+        )
+        view.summary_listed.connect(
+            lambda entries, v=view, t=target: self._summary_came(v, t, entries),
+            Qt.ConnectionType.SingleShotConnection,
+        )
+        self.statusBar().showMessage(self.tr("Preparando el resumen…"), STATUS_MESSAGE_MS)
+        view.want_summary()
+        return True
+
+    def _summary_came(self, view: PdfView, target: Path, entries: object) -> None:
+        """The annotations came back: write the summary where it was asked."""
+        if view.document_path is None:
+            return
+        made = summary_of(
+            view.document_path.stem,
+            entries,
+            color_naming.name_of,
+            {
+                "title": self.tr("Resumen de {0}"),
+                "made": self.tr("Lo subrayado y anotado, página a página."),
+                "page": self.tr("Página {0}"),
+                HIGHLIGHT: self.tr("Resaltado"),
+                UNDERLINE: self.tr("Subrayado"),
+                STRIKEOUT: self.tr("Tachado"),
+                NOTE: self.tr("Nota"),
+                TEXT_BOX: self.tr("Texto"),
+                "empty": self.tr("Este documento no tiene nada subrayado ni anotado."),
+            },
+        )
+        try:
+            if target.suffix.lower() == ".docx":
+                write_docx(made, target)
+            else:
+                write_pdf(made, target)
+        except Exception as error:  # a locked file, no room, no permission…
+            self._show_problem(
+                self.tr("No se ha podido guardar el resumen"),
+                self.tr("Prueba con otro nombre o en otra carpeta. ({0})").format(error),
+            )
+            return
+        self.statusBar().showMessage(
+            self.tr("Resumen guardado: {0}").format(target.name), STATUS_MESSAGE_MS
+        )
+        if self.open_exported:
+            if target.suffix.lower() == ".pdf":
+                self.open_document(target)  # in a tab of its own
+            else:
+                QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
 
     def toggle_review(self) -> None:
         """Cover what is highlighted and underlined, to try to remember it, or stop."""

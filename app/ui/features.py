@@ -184,6 +184,13 @@ FEATURES: list[Feature] = [
         "repasar estudiar memorizar tapar ocultar recordar examen",
     ),
     _f(
+        "summary",
+        STUDY,
+        "Exportar resumen",
+        "Sacar en PDF o en Word todo lo subrayado y anotado, página a página",
+        "resumen exportar subrayados notas apuntes word docx pdf imprimir",
+    ),
+    _f(
         "margins",
         STUDY,
         "Añadir margen",

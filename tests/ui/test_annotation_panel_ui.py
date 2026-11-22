@@ -128,3 +128,57 @@ def test_a_colour_of_ones_own_names_its_marks(window, marked, wait_until, monkey
     assert color_naming.name_of(GREEN) == "Definiciones"
     color_naming.set_name(GREEN, "")
     assert all("Definiciones" not in row for row in texts(panel))
+
+
+def test_exporting_the_summary_as_pdf_and_word(window, marked, wait_until, tmp_path):
+    import zipfile
+
+    import pymupdf
+
+    from app.ui import color_naming
+
+    view = window.pdf_view
+    changes, before = view._changes, view.document_path.read_bytes()
+    color_naming.set_name(GREEN, "Plazos")
+    window.open_exported = False
+    window.summary_target = tmp_path / "resumen.pdf"
+    assert window.export_summary()
+    wait_until(lambda: (tmp_path / "resumen.pdf").exists())
+    with pymupdf.open(tmp_path / "resumen.pdf") as doc:
+        text = " ".join(" ".join(page.get_text() for page in doc).split())
+    assert "Resumen de boe" in text and "Página 1" in text and "Página 3" in text
+    assert "Repasar el artículo 14" in text and "Resaltado · Plazos" in text
+    assert view._changes == changes and view.document_path.read_bytes() == before, (
+        "making a summary changes nothing"
+    )
+    window.summary_target = tmp_path / "resumen"  # no ending: the last format, PDF
+    assert window.export_summary()
+    wait_until(lambda: (tmp_path / "resumen.pdf").stat().st_mtime > 0)
+    window.summary_target = tmp_path / "resumen.docx"
+    assert window.export_summary()
+    wait_until(lambda: (tmp_path / "resumen.docx").exists())
+    with zipfile.ZipFile(tmp_path / "resumen.docx") as docx:
+        assert "Repasar el artículo 14" in docx.read("word/document.xml").decode("utf-8")
+    assert window.settings.get("resumen/formato") == "docx"
+    color_naming.set_name(GREEN, "")
+
+
+def test_the_summary_takes_the_note_being_written_and_opens(window, marked, wait_until, tmp_path):
+    from PySide6.QtCore import QPoint
+
+    from app.core.notes import NOTE
+
+    view = window.pdf_view
+    view.start_note(NOTE, 1, 200, 200, QPoint(40, 40))
+    view.note_panel.edit.setPlainText("escrita a medias")
+    window.summary_target = tmp_path / "resumen.pdf"
+    window.open_exported = True
+    assert window.export_summary()
+    wait_until(lambda: window.pdf_view.document_path == tmp_path / "resumen.pdf")
+    wait_until(lambda: 0 in window.pdf_view._texts)
+    assert "escrita a medias" in window.pdf_view._texts[0].chars
+
+
+def test_no_summary_without_a_document_or_over_it(window, marked, tmp_path):
+    window.summary_target = window.pdf_view.document_path
+    assert not window.export_summary()

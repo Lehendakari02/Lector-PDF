@@ -471,9 +471,10 @@ def _worker_main(connection: Connection) -> None:
                         found, drawn = [], []  # a page that cannot be read has none
                     connection.send(("notes", token, page_index, found, drawn))
             elif kind == "annotations":
-                _, list_token, list_id = message
+                list_token, list_id = message[1], message[2]
+                whole = len(message) > 3 and message[3]  # for the summary: nothing cut
                 if list_token == token and doc is not None:
-                    listed = document_entries(doc)
+                    listed = document_entries(doc, None) if whole else document_entries(doc)
                     connection.send(("annotations", token, list_id, listed))
             elif kind == "copy":
                 _, copy_token, copy_id, start, stop = message
@@ -815,9 +816,10 @@ class RenderService:
             self._send(("copy", self._token, self._copy_id, start, stop))
             return self._copy_id
 
-    def list_annotations(self) -> int:
+    def list_annotations(self, whole: bool = False) -> int:
         """Ask for every annotation of the document, in reading order
-        (``app.core.annotation_list.Entry``), as it is at that moment.
+        (``app.core.annotation_list.Entry``), as it is at that moment. With
+        ``whole`` what each one says comes whole (for the summary).
 
         They arrive in ``on_annotations`` with the number this method returns.
         """
@@ -827,7 +829,7 @@ class RenderService:
                 return self._list_id
             if self._ensure_started():
                 self._reopen()
-            self._send(("annotations", self._token, self._list_id))
+            self._send(("annotations", self._token, self._list_id, whole))
             return self._list_id
 
     def find_place(self, wanted: Wanted, after: tuple[int, int] | None = None) -> int:

@@ -303,6 +303,7 @@ class PdfView(QAbstractScrollArea):
     item_copied = Signal()  # the picked annotation was copied, to paste it
     pen_seen_changed = Signal()  # a pen touched a page for the first time
     annotations_listed = Signal(object)  # every annotation of the document (list of Entry)
+    summary_listed = Signal(object)  # the same, with what each says whole (for the summary)
     _annotations_ready = Signal(int, object)
     # An article or section looked for (``go_to_place``): whether it was found.
     place_answered = Signal(bool)
@@ -393,6 +394,7 @@ class PdfView(QAbstractScrollArea):
             on_place=self._place_ready.emit,
         )
         self._list_id = 0
+        self._summary_id = -1
         self._pick_when_read: tuple[int, str] | None = None
         self._annotations_ready.connect(self._annotations_came)
         self._place_ready.connect(self._place_came)
@@ -1050,8 +1052,18 @@ class PdfView(QAbstractScrollArea):
         if self._document is not None:
             self._list_id = self.service.list_annotations()
 
+    def want_summary(self) -> None:
+        """Ask for every annotation with what it says whole: ``summary_listed``."""
+        if self._document is not None:
+            self._summary_id = self.service.list_annotations(whole=True)
+
     def _annotations_came(self, list_id: int, entries: object) -> None:
-        if list_id == self._list_id and self._document is not None:
+        if self._document is None:
+            return
+        if list_id == self._summary_id:
+            self._summary_id = -1
+            self.summary_listed.emit(list(entries))
+        elif list_id == self._list_id:
             self.annotations_listed.emit(list(entries))
 
     def go_to_place(self, typed: str) -> bool:
