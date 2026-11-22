@@ -655,6 +655,7 @@ class RenderService:
         self._on_save_failed = on_save_failed or (lambda save_id, kind, details: None)
         self._save_id = 0
         self._saving: set[int] = set()  # saves asked for, not yet answered
+        self._in_flight: set[int] = set()  # changes asked for, not yet answered
         self._on_print = on_print or (lambda page: None)
         self._on_print_failed = on_print_failed or (lambda page: None)
         self._on_print_lost = on_print_lost or (lambda page: None)
@@ -697,6 +698,7 @@ class RenderService:
             self._drawing = None
             self._bad_pages = set()
             self._unsaved = []
+            self._in_flight.clear()
             self._readings.clear()
             self._ensure_started()
             self._send(("open", self._token, str(self._path), password))
@@ -890,6 +892,7 @@ class RenderService:
             if ready:
                 if self._ensure_started():
                     self._reopen()
+                self._in_flight.add(number)
                 self._send(message(number))
         if not ready:
             self._tell(self._on_change_failed, number, "no document is open")
@@ -933,6 +936,7 @@ class RenderService:
             self._searching = False
             self._token += 1
             self._unsaved = []
+            self._in_flight.clear()
             self._readings.clear()
             if self.is_running():
                 self._send(("close",))
@@ -1093,8 +1097,11 @@ class RenderService:
                 if number:  # 0: given again to a new helper, already counted
                     with self._lock:
                         self._unsaved.append((order, undo))
+                        self._in_flight.discard(number)
                     self._tell(self._on_changed, number, order, pages, undo)
             elif kind == "change_failed":
+                with self._lock:
+                    self._in_flight.discard(message[2])
                 if message[2]:
                     self._tell(self._on_change_failed, message[2], message[3])
             elif kind == "saved":
@@ -1116,6 +1123,7 @@ class RenderService:
         lost_search = bad_page = None
         lost_prints: set[int] = set()
         lost_saves: set[int] = set()
+        lost_changes: set[int] = set()
         lost_readings: set[int] = set()
         with self._lock:
             crashed = not self._closing and connection is self._connection
@@ -1136,6 +1144,9 @@ class RenderService:
                 self._searching = False
                 lost_prints, self._printing = self._printing, set()
                 lost_saves, self._saving = self._saving, set()
+                # A change on its way died with the helper: the window is told,
+                # so that nothing is shown as done that is not in the document.
+                lost_changes, self._in_flight = self._in_flight, set()
                 lost_readings, self._readings = self._readings, set()
         # The printer is told about every page it was waiting for: it asks again
         # for the good ones and leaves out the one that killed the helper.
@@ -1143,6 +1154,8 @@ class RenderService:
             self._tell(self._on_print_failed if page == bad_page else self._on_print_lost, page)
         for page in sorted(lost_readings):
             self._tell(self._on_reading_failed, page, "the helper ended before drawing it")
+        for number in sorted(lost_changes):
+            self._tell(self._on_change_failed, number, "the helper ended before doing it")
         for number in sorted(lost_saves):
             self._tell(self._on_save_failed, number, SAVE_FAILED, "the helper ended while saving")
         if crashed and bad_page is not None:

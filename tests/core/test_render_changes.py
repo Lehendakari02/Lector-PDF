@@ -1,6 +1,7 @@
 """Tests for changing the document that the helper process has open."""
 
 import os
+import signal
 import threading
 from pathlib import Path
 
@@ -203,3 +204,18 @@ def test_opening_another_document_forgets_the_marks_of_the_first(editor, path, s
     os.kill(editor.service.process_id, 9)
     editor.wait(lambda: editor.crashes)
     assert editor.draw() == clean
+
+
+@pytest.mark.skipif(not hasattr(signal, "SIGSTOP"), reason="needs SIGSTOP (not on Windows)")
+def test_a_change_on_its_way_when_the_helper_dies_is_told_as_failed(editor, path):
+    """Nothing may look done that is not in the document."""
+    editor.service.open(path)
+    editor.mark("highlight", *word_carets(path, "Constitución"))
+    os.kill(editor.service.process_id, signal.SIGSTOP)  # it does not read any more
+    number = editor.service.mark_text("underline", *word_carets(path, "Generales"))
+    os.kill(editor.service.process_id, signal.SIGKILL)
+    editor.wait(lambda: editor.crashes)
+    assert [failure[0] for failure in editor.failed] == [number]
+    assert len(editor.changed) == 1
+    editor.save()
+    assert marks_in_file(path) == ["Highlight"]
