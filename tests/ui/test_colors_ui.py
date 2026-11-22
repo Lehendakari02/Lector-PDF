@@ -244,3 +244,19 @@ def test_choosing_a_colour_without_a_document_only_remembers_it(window):
     window.set_marker_color(HIGHLIGHT, GREEN)
     assert window.pdf_view.markup_tool == ""
     assert same_color(window.color_menus[HIGHLIGHT].color, GREEN)
+
+
+def test_a_swatch_shows_the_name_given_to_its_colour(qt_app):
+    from app.ui import color_naming
+    from app.ui.color_menu import ColorMenu, Swatch
+
+    color_naming.install(None)
+    yellow = (1.0, 0.92, 0.23)
+    swatch = Swatch(yellow, "Amarillo")
+    assert swatch.accessibleName() == "Amarillo"
+    assert "Clic derecho" in swatch.toolTip()
+    color_naming.set_name(yellow, "Plazos")
+    assert swatch.accessibleName() == "Plazos (amarillo)"
+    assert ColorMenu.swatch_name(swatch, (0.1, 0.2, 0.3)).startswith("Color #")
+    color_naming.set_name(yellow, "")
+    assert swatch.accessibleName() == "Amarillo"
