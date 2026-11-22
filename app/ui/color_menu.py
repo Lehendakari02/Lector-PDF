@@ -1,11 +1,12 @@
 """The little menu that hangs from a marking tool: its colour and its opacity."""
 
-from PySide6.QtCore import QRectF, QSize, Qt, Signal
+from PySide6.QtCore import QCoreApplication, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QColorDialog,
     QGridLayout,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QMenu,
     QPushButton,
@@ -18,7 +19,7 @@ from PySide6.QtWidgets import (
 
 from app.core.commands import Color
 from app.core.marker_styles import MIN_OPACITY, QUICK_COLORS, same_color, to_hex
-from app.ui import theme
+from app.ui import color_naming, theme
 
 SWATCH_SIZE = 32  # big enough for a finger
 COLUMNS = 5
@@ -26,6 +27,24 @@ COLUMNS = 5
 
 def qcolor(color: Color) -> QColor:
     return QColor.fromRgbF(*color)
+
+
+def _ask_with_dialog(parent, current: str) -> str | None:
+    name, accepted = QInputDialog.getText(
+        parent,
+        QCoreApplication.translate("Swatch", "Nombre del color"),
+        QCoreApplication.translate(
+            "Swatch",
+            "Por ejemplo «Definiciones» o «Plazos». Sale en la lista de anotaciones "
+            "y al pasar el ratón. Déjalo vacío para quitarlo.",
+        ),
+        text=current,
+    )
+    return name if accepted else None
+
+
+# For the tests: what the question about a colour's name answers.
+ask_color_name = _ask_with_dialog
 
 
 class Swatch(QToolButton):
@@ -36,9 +55,31 @@ class Swatch(QToolButton):
         self.color = color
         self.setCheckable(True)
         self.setFixedSize(QSize(SWATCH_SIZE, SWATCH_SIZE))
-        self.setToolTip(name)
-        self.setAccessibleName(name)
+        self._show_name(name)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        color_naming.changed().connect(self._renamed)
+
+    def _show_name(self, name: str) -> None:
+        self.setToolTip(self.tr("{0}\nClic derecho: ponerle nombre").format(name))
+        self.setAccessibleName(name)
+
+    def _renamed(self) -> None:
+        self._show_name(ColorMenu.swatch_name(self, self.color))
+
+    def contextMenuEvent(self, event) -> None:  # noqa: N802
+        """Right click: give this colour a name of one's own, or take it away."""
+        menu = QMenu(self)
+        menu.addAction(self.tr("Ponerle nombre a este color…"), self.ask_name)
+        if color_naming.name_of(self.color):
+            menu.addAction(
+                self.tr("Quitarle el nombre"), lambda: color_naming.set_name(self.color, "")
+            )
+        menu.exec(event.globalPos())
+
+    def ask_name(self) -> None:
+        name = ask_color_name(self.window(), color_naming.name_of(self.color))
+        if name is not None:
+            color_naming.set_name(self.color, name)
 
     def paintEvent(self, _event) -> None:  # noqa: N802 (Qt naming)
         c = theme.colours()
@@ -210,7 +251,10 @@ class ColorMenu(QMenu):
             self.tr("Verde oscuro"),
             self.tr("Negro"),
         )
+        plain = self.tr("Color {0}").format(to_hex(color).upper())
         for name, quick in zip(names, QUICK_COLORS, strict=True):
             if same_color(color, quick):
-                return name
-        return self.tr("Color {0}").format(to_hex(color).upper())
+                plain = name
+                break
+        own = color_naming.name_of(color)  # the user's own name, if they gave one
+        return self.tr("{0} ({1})").format(own, plain.lower()) if own else plain

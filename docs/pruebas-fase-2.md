@@ -625,3 +625,12 @@ Con un documento abierto, en el modo Estudiar.
 6. Guarda y abre el PDF en **Edge** y en **Adobe**: las páginas tienen el
    margen, con lo escrito en él, y el subrayado sigue en su sitio.
 
+## Fase 2C – Tarea 2.26 – Nombres para tus colores
+
+1. Abre el menú de colores del resaltador: los colores no tienen nombre propio.
+2. Clic derecho sobre el amarillo → **Ponerle nombre a este color…**, escribe
+   "Definiciones" y acepta. Al pasar el ratón sale "Definiciones (amarillo)".
+3. Resalta algo en amarillo y abre el panel de anotaciones: la fila dice
+   "Pág. N · Resaltado · Definiciones".
+4. Cierra y vuelve a abrir el programa, y abre otro PDF: el nombre sigue.
+5. Clic derecho → **Quitarle el nombre**: vuelve a ser solo "Amarillo".

@@ -32,6 +32,7 @@ from app.core.annotation_list import (
 from app.core.commands import HIGHLIGHT, STRIKEOUT, UNDERLINE
 from app.core.drawing import INK, SHAPES
 from app.core.notes import NOTE, TEXT_BOX
+from app.ui import color_naming
 from app.ui.color_menu import ColorMenu, Swatch
 
 REFRESH_MS = 400  # after a change, the list is read again once things are quiet
@@ -117,6 +118,12 @@ class AnnotationPanel(QWidget):
         view.annotations_listed.connect(self._listed)
         view.pages_changed.connect(lambda _pages: self.changed())
         view.pages_reshaped.connect(self.changed)
+        color_naming.changed().connect(self._renamed)
+        self._show_colors()
+        self._fill()
+
+    def _renamed(self) -> None:
+        """A colour got a name of its own (or lost it): show it in the list."""
         self._show_colors()
         self._fill()
 
@@ -216,6 +223,9 @@ class AnnotationPanel(QWidget):
         shown = self.shown()
         for entry in shown:
             title = self.tr("Pág. {0} · {1}").format(entry.page + 1, self.kind_name(entry.kind))
+            own = color_naming.name_of(entry.color)
+            if own:
+                title = self.tr("{0} · {1}").format(title, own)
             text = entry.text
             if len(text) > SHOWN_TEXT:
                 text = text[: SHOWN_TEXT - 1].rstrip() + "…"

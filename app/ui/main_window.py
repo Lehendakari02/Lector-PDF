@@ -82,7 +82,7 @@ from app.core.updates import Release
 from app.core.versions import FOLDER_NAME as VERSIONS_FOLDER
 from app.core.versions import Version, VersionError, Versions
 from app.core.windows_store import SigningCancelled
-from app.ui import icons
+from app.ui import color_naming, icons
 from app.ui import theme as theme_module
 from app.ui.about_dialog import AboutDialog
 from app.ui.color_menu import ColorMenu
@@ -155,6 +155,7 @@ class MainWindow(QMainWindow):
     ) -> None:
         super().__init__()
         self.settings = settings if settings is not None else Settings()
+        color_naming.install(self.settings)  # the user's own names for colours
         self.reporter = reporter if reporter is not None else ErrorReporter(parent=self)
         # Tests turn this off so that message boxes do not block them.
         self.show_problem_dialogs = True

@@ -1043,9 +1043,9 @@ Ordenadas por uso diario.
 | 2.21 | Saltar a artículo, apartado o sección por su número | Escribo "art. 14" o "3.2" en cualquier documento y me lleva allí | ✅ |
 | 2.22 | Marcadores propios | Marco artículos clave y vuelvo a ellos con un clic | ✅ |
 | 2.23 | Modo repaso | Lo subrayado se tapa y lo descubro al hacer clic | ✅ |
-| 2.24 | Márgenes ampliables | Añado margen a una página y escribo en él; se ve igual en Edge y Adobe | 🔶 |
+| 2.24 | Márgenes ampliables | Añado margen a una página y escribo en él; se ve igual en Edge y Adobe | ✅ |
 | 2.25 | Insertar hojas en blanco, de rayas o cuadriculadas | Meto una hoja cuadriculada para un esquema | ✅ (hecha en la 2.13d) |
-| 2.26 | Código de colores propio (opcional, nada predefinido) | Si quiero, pongo nombre a mis colores; si no, no aparece nada | ⬜ |
+| 2.26 | Código de colores propio (opcional, nada predefinido) | Si quiero, pongo nombre a mis colores; si no, no aparece nada | 🔶 |
 | 2.27 | Exportar resumen (formato por decidir) | Saco un documento con todo lo subrayado, ordenado por página | ⬜ |
 | 2.28 | Vista de dos documentos lado a lado | Veo el tema y la ley a la vez | ⬜ |
 | 2.29 | Biblioteca del temario | Elijo mi carpeta de temas, busco en todos y veo mi progreso | ⬜ |
@@ -1120,6 +1120,16 @@ Notas de la Fase 2C:
   - Deshacer lo quita. Una página no puede pasar de 14 400 puntos (5 m), el
     máximo que aceptan los lectores.
   - Pendiente de comprobar en Edge y Adobe (prueba manual).
+- **2.26: nombres propios para los colores (22/11/2026).**
+  - No viene nada con nombre. Clic derecho sobre cualquier color (en el menú
+    de colores de una herramienta, en la barra de lo elegido o en el panel de
+    anotaciones) → **Ponerle nombre a este color…** ("Definiciones",
+    "Plazos"…) o **Quitarle el nombre**.
+  - El nombre sale al pasar el ratón ("Definiciones (amarillo)"), lo lee el
+    lector de pantalla y aparece en cada fila del panel de anotaciones
+    ("Pág. 3 · Resaltado · Definiciones").
+  - Los nombres son de este ordenador (en los ajustes), valen para todos los
+    documentos y no se guardan en el PDF: el PDF sigue siendo estándar.
 
 ## Fase 3 – Rellenar y firma manuscrita
 | # | Tarea | Terminado cuando… | Estado |
