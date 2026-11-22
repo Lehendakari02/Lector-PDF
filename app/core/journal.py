@@ -48,16 +48,20 @@ def net(entries: list[Entry]) -> list[Entry]:
     Doing an order and undoing it leaves nothing. An undoing with no doing
     before it stays: it takes away something that is already in the file.
     """
-    left: list[tuple[dict, Command, bool]] = []
-    for order, undone in entries:
-        written = order.to_dict()
-        for index in range(len(left) - 1, -1, -1):
-            if left[index][0] == written and left[index][2] != undone:
-                del left[index]
-                break
+    # Each order is written out once, as text; the places where each one is
+    # still left are kept by that text, so long journals (a whole document
+    # recognised is one big order) are netted without comparing every pair.
+    left: dict[int, tuple[Command, bool]] = {}
+    places: dict[tuple[str, bool], list[int]] = {}
+    for index, (order, undone) in enumerate(entries):
+        written = json.dumps(order.to_dict(), sort_keys=True, ensure_ascii=False)
+        opposite = places.get((written, not undone))
+        if opposite:
+            del left[opposite.pop()]
         else:
-            left.append((written, order, undone))
-    return [(order, undone) for _written, order, undone in left]
+            left[index] = (order, undone)
+            places.setdefault((written, undone), []).append(index)
+    return list(left.values())
 
 
 @dataclass(frozen=True)

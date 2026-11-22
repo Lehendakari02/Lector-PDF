@@ -1,7 +1,8 @@
 """Make the small font of symbols the program carries (run by hand, rarely).
 
 It takes DejaVu Sans (free: Bitstream Vera licence, changes in the public
-domain) and keeps only the symbols of ``app.core.symbols``. The result is
+domain) and keeps only the symbols of ``app.core.symbols`` and the letters of other
+languages in its ``EXTRA_RANGES`` (those the built-in letters lack). The result is
 ``app/recursos/letras/simbolos.ttf``, with another name, as its licence asks.
 
     pip install fonttools
@@ -16,7 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from app.core.symbols import FONT_FAMILY, SYMBOLS, font_file  # noqa: E402
+from app.core.symbols import EXTRA_RANGES, FONT_FAMILY, SYMBOLS, font_file  # noqa: E402
 
 
 def main(source: str) -> None:
@@ -29,8 +30,12 @@ def main(source: str) -> None:
     options.notdef_outline = True
     options.drop_tables += ["FFTM"]
     font = TTFont(source)
+    has = set(font.getBestCmap())
+    letters = [
+        code for first, last in EXTRA_RANGES for code in range(first, last + 1) if code in has
+    ]
     chooser = subset.Subsetter(options)
-    chooser.populate(unicodes=[ord(symbol) for symbol in SYMBOLS])
+    chooser.populate(unicodes=[ord(symbol) for symbol in SYMBOLS] + letters)
     chooser.subset(font)
     compact = FONT_FAMILY.replace(" ", "")
     for record in font["name"].names:
@@ -46,7 +51,10 @@ def main(source: str) -> None:
     target = font_file()
     target.parent.mkdir(parents=True, exist_ok=True)
     font.save(target)
-    print(f"{target}: {target.stat().st_size} bytes, {len(SYMBOLS)} symbols")
+    print(
+        f"{target}: {target.stat().st_size} bytes, {len(SYMBOLS)} symbols, "
+        f"{len(letters)} letters of other languages"
+    )
 
 
 if __name__ == "__main__":

@@ -159,3 +159,41 @@ def test_a_power_cut_does_not_lose_the_text(window, opened, settings, qt_app, wa
         again.save_document()
         wait_until(lambda: not view.saving and not view.modified)
         assert layers_in_file(path) == [0, 1, 2]
+
+
+def test_a_power_cut_in_the_middle_keeps_the_pages_read(
+    window, opened, settings, qt_app, wait_until, monkeypatch
+):
+    """Half way through a long document the power goes: running it again
+    does not read again the pages already read."""
+    _view, path = opened()
+    window.recognize_text()
+    run = window.current_document.text_recognition
+    wait_until(lambda: len(run.done) >= 1, seconds=READING_SECONDS)
+    read_before = set(run.done)
+    run.stop()  # the power goes: nothing reaches the document
+    window.shutdown_documents()
+    for page in window.documents:
+        page.view.journal = None
+    assert any(window.ocr_cache.folder.glob("*.json"))
+
+    from app.core.ocr import Recognizer
+
+    given: list[int] = []
+    read = Recognizer.read
+    monkeypatch.setattr(
+        Recognizer, "read", lambda self, page, *rest: (given.append(page), read(self, page, *rest))
+    )
+    with started_again(settings, qt_app) as again:
+        again.restore_session()
+        wait_until(lambda: again.pdf_view.scanned_known, seconds=30)
+        assert again.recognize_text()
+        rerun = again.current_document.text_recognition
+        wait_until(lambda: read_before <= set(rerun.done), seconds=READING_SECONDS)
+        finished(again, wait_until)
+        assert not read_before & set(given), "the pages read before are not read again"
+        view = again.pdf_view
+        again.save_document()
+        wait_until(lambda: not view.saving and not view.modified)
+        assert layers_in_file(path) == [0, 1, 2]
+        assert not any(again.ocr_cache.folder.glob("*.json")), "kept only until it is written"

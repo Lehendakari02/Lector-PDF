@@ -331,6 +331,12 @@ class Remove:
     def pages(self) -> list[int]:
         return self.order.pages()
 
+    def prepared(self, doc) -> "Remove":
+        """Ready to be carried out on ``doc``: what is taken away keeps a copy
+        of itself when it needs one (``Foreign.prepared``)."""
+        ready = getattr(self.order, "prepared", None)
+        return Remove(ready(doc)) if ready is not None else self
+
     def apply(self, doc) -> list[int]:
         return self.order.undo(doc)
 

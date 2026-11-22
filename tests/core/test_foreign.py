@@ -166,3 +166,42 @@ def test_ours_are_not_foreign(doc):
     new_shape("box", 0, (50, 50), (90, 90)).apply(doc)
     ours = [item for item in page_drawings(doc, 0) if item.ours]
     assert len(ours) == 1 and ours[0].foreign is None
+
+
+def test_taken_away_saved_and_put_back_from_its_copy(tmp_path):
+    """Saving leaves out what nothing uses: the order keeps a copy to undo it."""
+    from app.core.saving import save_to
+
+    path = tmp_path / "ajeno.pdf"
+    with pymupdf.open() as doc:
+        page = doc.new_page()
+        page.add_text_annot((300, 300), "nota de otro programa")
+        page.add_stamp_annot(pymupdf.Rect(350, 500, 500, 550), stamp=0)
+        doc.save(path)
+    with pymupdf.open(path) as doc:
+        before = doc[0].get_pixmap().samples
+        stamp = next(item for item in page_drawings(doc, 0) if item.foreign is not None)
+        order = Remove(stamp.foreign).prepared(doc)
+        assert order.order.restorable
+        order = command_from_dict(order.to_dict())  # as the journal keeps it
+        order.apply(doc)
+        save_to(doc, tmp_path / "sin.pdf")
+    with pymupdf.open(tmp_path / "sin.pdf") as doc:
+        assert [a.type[1] for a in doc[0].annots()] == ["Text"]
+        order.undo(doc)
+        assert sorted(a.type[1] for a in doc[0].annots()) == ["Stamp", "Text"]
+        assert doc[0].get_pixmap().samples == before
+        order.apply(doc)  # taken away again
+        assert [a.type[1] for a in doc[0].annots()] == ["Text"]
+
+
+def test_a_copy_too_big_is_not_kept(monkeypatch):
+    import app.core.foreign as foreign_module
+
+    monkeypatch.setattr(foreign_module, "MAX_KEPT_BYTES", 10)
+    with pymupdf.open() as doc:
+        doc.new_page().add_stamp_annot(pymupdf.Rect(350, 500, 500, 550), stamp=0)
+        stamp = next(item for item in page_drawings(doc, 0) if item.foreign is not None)
+        ready = stamp.foreign.prepared(doc)
+        assert ready.too_big and not ready.restorable
+        assert ready.prepared(doc) is ready

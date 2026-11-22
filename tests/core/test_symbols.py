@@ -168,3 +168,19 @@ def test_the_built_program_can_check_its_symbols(monkeypatch, tmp_path):
         assert main(["lector-pdf", CHECK_SYMBOLS_FLAG]) == EXIT_SYMBOLS_FAILED
     finally:
         symbols._font.cache_clear()
+
+
+def test_letters_of_other_languages_are_written_with_the_font_of_the_symbols():
+    """«Łódź», «Ştefan» or Greek: the built-in letters lack them."""
+    import pymupdf
+
+    from app.core import notes
+    from app.core.commands import new_name
+
+    assert symbols.is_symbol("Ł") and symbols.is_symbol("ά") and symbols.is_symbol("ș")
+    assert not symbols.is_symbol("ñ") and not symbols.is_symbol("€") and not symbols.is_symbol("a")
+    doc = pymupdf.open()
+    doc.new_page()
+    text = "Łódź, Ştefan, Ελλάδα → fin"
+    notes.AddTextBox(0, (50, 50), text, notes.SANS, 12, (0, 0, 0), new_name()).apply(doc)
+    assert doc[0].get_text().strip() == text

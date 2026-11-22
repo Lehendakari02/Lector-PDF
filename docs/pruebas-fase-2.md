@@ -561,6 +561,25 @@ Con un documento abierto, en el modo Estudiar.
    un DNI inventado), guarda, bórralo y guarda otra vez. Ábrelo con el Bloc
    de notas y busca el dato: no aparece.
 
+## Arreglos 2.19e – Resto de la revisión del código
+
+1. **Deshacer lo de otros programas después de guardar.** Abre un PDF con una
+   nota o un subrayado hecho en Adobe o Edge. Bórralo, guarda (Ctrl+S) y
+   pulsa Deshacer: vuelve igual que estaba. Guarda y ábrelo en Adobe: está.
+2. **Lo mismo guardando solo.** Activa en Ajustes "Guardar solo mientras
+   trabajo". Borra una anotación de otro programa, espera a que ponga
+   "Guardado" y pulsa Deshacer: vuelve.
+3. **Reconocer texto y un apagón.** En un escaneado largo pulsa "Reconocer
+   texto" y, a mitad, cierra el programa a la fuerza (Administrador de
+   tareas → Finalizar tarea). Ábrelo y pulsa otra vez "Reconocer texto": la
+   barra avanza enseguida por las páginas que ya había leído.
+4. **Guardar un PDF grande** (cientos de páginas o más de 100 MB) por primera
+   vez: la ventana no se queda parada mientras guarda.
+5. **Restaurar una versión** de un documento que está en la segunda de tres
+   pestañas: sigue en la segunda pestaña.
+6. **Letras de otros idiomas.** Escribe en la página «Łódź → Ελλάδα»: se ve
+   bien aquí, en Edge y en Adobe.
+
 
 1. Abre un tema en el que hayas resaltado en dos colores, escrito una nota y
    hecho algún dibujo. Pulsa **F4** y la pestaña **Anotaciones**.

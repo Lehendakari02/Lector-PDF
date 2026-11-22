@@ -8,6 +8,9 @@ the pages on screen always goes first.
 Everything read is written into the document at the end, as one change:
 Deshacer takes it all away at once, and it reaches the PDF when the user
 saves. Cancelling keeps the pages already read.
+
+Meanwhile each page read is also kept apart (``app.core.ocr_cache``): if the
+power goes in the middle, running it again finds those pages already read.
 """
 
 import contextlib
@@ -16,6 +19,7 @@ from dataclasses import replace
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from app.core.ocr import OcrError, OcrFailure, OcrPage, Recognizer
+from app.core.ocr_cache import OcrCache, picture_key
 
 POLL_MS = 100
 WAITING = 2  # pictures given to the reader at once: one read, the next ready
@@ -32,10 +36,17 @@ class TextRecognition(QObject):
     failed = Signal(str)  # the reader stopped working: details for the log
 
     def __init__(
-        self, view, pages: list[int], parent: QObject | None = None, replace: bool = False
+        self,
+        view,
+        pages: list[int],
+        parent: QObject | None = None,
+        replace: bool = False,
+        cache: OcrCache | None = None,
     ) -> None:
         super().__init__(parent)
         self.view = view
+        self.cache = cache
+        self._pictures: dict[int, str] = {}  # page key -> fingerprint of its picture
         self.replace = replace  # recognising again: the text the pages had goes
         self._document = view._document
         # Every page has a number of its own here, which does not change when
@@ -109,8 +120,18 @@ class TextRecognition(QObject):
         if not self.running or not self._asked_page(page) or not self._same_document():
             return
         key, self._asked = self._asked, None
+        picture = bytes(samples)
+        if self.cache is not None:
+            fingerprint = picture_key(width, height, dpi, picture)
+            self._pictures[key] = fingerprint
+            kept = self.cache.get(fingerprint, key)
+            if kept is not None:  # read already, in a run that never ended
+                self.done[key] = kept
+                self.progressed.emit(self.count_done, self.total)
+                self._ask_next()
+                return
         try:
-            self._recognizer.read(key, width, height, dpi, bytes(samples))
+            self._recognizer.read(key, width, height, dpi, picture)
         except OcrError as error:
             self._fail(str(error))
             return
@@ -166,6 +187,9 @@ class TextRecognition(QObject):
                 self.failures += 1
             else:
                 self.done[result.page] = result
+                fingerprint = self._pictures.get(result.page)
+                if self.cache is not None and fingerprint is not None:
+                    self.cache.put(fingerprint, result)  # safe from a power cut
         if results:
             self.progressed.emit(self.count_done, self.total)
             self._ask_next()
@@ -187,6 +211,9 @@ class TextRecognition(QObject):
                 pages.append(replace(result, page=page))
         if pages and self._same_document():
             self.view.add_text_layer(pages, self.replace)
+            if self.cache is not None:
+                # In the document (and its journal) now: no longer needed apart.
+                self.cache.forget(self._pictures.get(key) for key in self.done)
         else:
             pages = []
         failures = self.total - len(pages) if not cancelled else self.failures
