@@ -563,3 +563,48 @@ def test_while_a_text_is_changed_the_page_under_it_is_seen(window, with_text, wa
     editor.cancel()
     assert view._look(0) is True
     wait_until(lambda: 0 not in view._stale)
+
+
+# ---- what is being typed is never lost unasked -----------------------------------
+
+
+def texts_in(path) -> list[str]:
+    with pymupdf.open(path) as doc:
+        return [a.info.get("content", "") for page in doc for a in page.annots() or ()]
+
+
+def test_ctrl_s_keeps_the_text_still_being_typed(window, opened, wait_until):
+    view, path = opened()
+    editor = start(window, view)
+    QTest.keyClicks(editor.edit, "Apunte importante")
+    assert window.save_document()
+    wait_until(lambda: not view.saving and not view._changing)
+    assert view.note_panel is None and not view.modified
+    assert any("Apunte importante" in text for text in texts_in(path))
+
+
+def test_closing_the_tab_asks_about_the_text_still_being_typed(window, opened, wait_until):
+    view, _path = opened()
+    editor = start(window, view)
+    QTest.keyClicks(editor.edit, "No me pierdas")
+    asked = []
+    # Cancel now; the end of the test answers "No guardar" to close for good.
+    window._ask_unsaved = lambda pages: asked.append(pages) or window.unsaved_answer or "cancel"
+    window.close_document()
+    assert asked, "it asked before closing"
+    assert view.modified and window.documents
+    settle(view, wait_until)
+    wait_until(lambda: not view._stale)
+
+
+def test_closing_the_window_asks_about_the_text_still_being_typed(window, opened, wait_until):
+    view, _path = opened()
+    editor = start(window, view)
+    QTest.keyClicks(editor.edit, "No me pierdas")
+    asked = []
+    # Cancel now; the end of the test answers "No guardar" to close for good.
+    window._ask_unsaved = lambda pages: asked.append(pages) or window.unsaved_answer or "cancel"
+    window.close()
+    assert asked and window.isVisible()
+    settle(view, wait_until)
+    wait_until(lambda: not view._stale)

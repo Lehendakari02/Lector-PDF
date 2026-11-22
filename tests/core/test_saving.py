@@ -198,3 +198,19 @@ def test_killing_the_program_while_it_saves_never_corrupts_the_file(copy_of, tmp
         assert doc.page_count == pages
         assert not doc.is_repaired
         assert len(doc[pages - 1].get_text("words")) > 0
+
+
+def test_what_is_taken_away_is_not_left_hidden_in_the_file(tmp_path):
+    """A text with personal data, saved and then taken away: gone from the bytes."""
+    path = tmp_path / "datos.pdf"
+    doc = pymupdf.open()
+    doc.new_page().add_freetext_annot((50, 50, 300, 100), "DNI 12345678Z")
+    doc.save(path)
+    doc.close()
+    # Opened from its bytes: Windows does not replace a file that is open.
+    with pymupdf.open("pdf", path.read_bytes()) as doc:
+        doc[0].delete_annot(doc[0].first_annot)
+        save_to(doc, path)
+    assert b"12345678Z" not in path.read_bytes()
+    with pymupdf.open(path) as doc:
+        assert not any("FreeText" in doc.xref_object(x) for x in range(1, doc.xref_length()))

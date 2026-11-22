@@ -73,7 +73,10 @@ def write_copy(doc, target: str | Path, password: str | None = None) -> Path:
         with contextlib.suppress(FileNotFoundError):
             temp.unlink()  # left by a save that was cut short
         # A complete rewrite; the protection (password) of the document is kept.
-        doc.save(str(temp), garbage=0, deflate=True, encryption=pymupdf.PDF_ENCRYPT_KEEP)
+        # garbage=1 leaves out what nothing uses any more (a text or a note
+        # taken away), so that it is really gone from the file. The objects are
+        # not renumbered, and the open document keeps them for Deshacer.
+        doc.save(str(temp), garbage=1, deflate=True, encryption=pymupdf.PDF_ENCRYPT_KEEP)
         with open(temp, "rb+") as written:
             os.fsync(written.fileno())
     except OSError as error:

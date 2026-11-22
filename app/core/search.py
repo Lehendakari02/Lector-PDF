@@ -166,8 +166,14 @@ def approximate_text(text: str) -> str:
 
 
 def read_page_text(page) -> PageText:
-    """Collect the letters of a PyMuPDF page with their position."""
+    """Collect the letters of a PyMuPDF page with their position.
+
+    Positions are on the page as it is shown: PyMuPDF gives them on the page
+    before its saved turn (``/Rotate``), so on a turned page they are turned too.
+    """
     import pymupdf
+
+    turn = page.rotation_matrix if page.rotation % 360 else None
 
     chars: list[str] = []
     boxes = array("f")
@@ -184,6 +190,8 @@ def read_page_text(page) -> PageText:
                     letter, box = char["c"], char["bbox"]
                     if len(letter) != 1:
                         continue
+                    if turn is not None:
+                        box = tuple((pymupdf.Rect(box) * turn).normalize())
                     if unicodedata.combining(letter):
                         # An accent written as a separate piece ("n" + "~"): make it
                         # one letter with the one before, as if it had been typed "ñ".

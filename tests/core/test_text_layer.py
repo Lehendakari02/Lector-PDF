@@ -42,8 +42,7 @@ def hit(doc, word: str, number: int = 0):
     page = doc[number]
     found = find_in_page(read_page_text(page), word)
     assert found, f"{word!r} not found"
-    rect = pymupdf.Rect(found[0].rects[0]) * page.rotation_matrix
-    return rect
+    return pymupdf.Rect(found[0].rects[0])  # already on the page as shown
 
 
 @pytest.mark.parametrize("rotation", [0, 90, 180, 270])

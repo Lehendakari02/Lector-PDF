@@ -16,7 +16,18 @@ from dataclasses import replace
 from enum import Enum
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import (
+    QCoreApplication,
+    QEvent,
+    QEventLoop,
+    QPoint,
+    QPointF,
+    QRect,
+    QRectF,
+    Qt,
+    QTimer,
+    Signal,
+)
 from PySide6.QtGui import (
     QColor,
     QContextMenuEvent,
@@ -68,6 +79,7 @@ SIDE_MARGIN = 16
 MIN_ZOOM = 0.2  # screen pixels per point, before the screen scale
 MAX_ZOOM = 8.0
 ZOOM_STEP = 1.2
+WRITING_WAIT_S = 3.0  # longest wait for the text being written to become a change
 WHEEL_NOTCH = 120  # what one notch of a mouse wheel sends
 # A document opens fitted to the width, but never bigger than this (1.0 = 100 %):
 # on a wide screen the full width makes the letters far too big to read at ease.
@@ -466,7 +478,6 @@ class PdfView(QAbstractScrollArea):
         # Where every change is written down the moment it is made (the window
         # gives it when a document is opened). None: nothing is written down.
         self.journal = None
-        self._journal_at_save: dict[int, int] = {}  # save number -> changes noted by then
         self._saved.connect(self._document_saved)
         self.save_failed.connect(self._save_did_not_work)
         self._changes = 0  # changes made to the document since it was opened
@@ -744,27 +755,25 @@ class PdfView(QAbstractScrollArea):
         """
         number = self.service.save(target)
         self._saves[number] = self._changes
-        if self.journal is not None:
-            self._journal_at_save[number] = self.journal.count
         return number
 
     def _document_saved(self, number: int, path: object) -> None:
         was = self.modified
-        carried = self._saves.pop(number, None)
-        if carried is not None:
-            self._saved_changes = max(self._saved_changes, carried)
+        if self._saves.pop(number, None) is not None:
+            # The helper answers in the order it was asked: every change it has
+            # answered so far was asked before this save, so it is in the file,
+            # even one still on its way when Guardar was pressed.
+            self._saved_changes = self._changes
+            if self.journal is not None:
+                self.journal.saved(self.journal.count, path)  # it leaves the journal
         if self._document is not None:
             self._document.path = Path(path)
-        noted = self._journal_at_save.pop(number, None)
-        if self.journal is not None and noted is not None:
-            self.journal.saved(noted, path)  # what is in the file leaves the journal
         if was and not self.modified:
             self.modified_changed.emit(False)
         self.saved.emit(number, path)
 
     def _save_did_not_work(self, number: int, _kind: str, _details: str) -> None:
         self._saves.pop(number, None)
-        self._journal_at_save.pop(number, None)
 
     def close_document(self) -> None:
         if self._document is not None:
@@ -777,7 +786,6 @@ class PdfView(QAbstractScrollArea):
         self._changes = self._saved_changes = 0
         self._saves.clear()
         self.journal = None
-        self._journal_at_save.clear()
         self._stale.clear()
         self._changing.clear()
         if self._undo or self._redo:
@@ -1781,6 +1789,21 @@ class PdfView(QAbstractScrollArea):
                 panel.save()
             else:
                 panel.cancel()
+
+    def finish_writing(self, seconds: float = WRITING_WAIT_S) -> None:
+        """Keep the text or note being written, before saving, closing or printing.
+
+        Until the cursor leaves it, it is not a change yet: this makes it one
+        and waits (a moment) for it to come back from the helper, so that
+        ``modified`` already counts it.
+        """
+        if self.note_panel is None:
+            return
+        self.close_note_panel(keep=True)
+        deadline = time.monotonic() + seconds
+        while self._changing and time.monotonic() < deadline:
+            QCoreApplication.processEvents(QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents, 20)
+            time.sleep(0.002)
 
     def _panel_closed(self) -> None:
         self.note_panel = None

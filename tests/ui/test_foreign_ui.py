@@ -112,7 +112,22 @@ def test_saved_without_it_and_the_rest_is_untouched(window, foreign, wait_until)
     assert window.save_document()
     settle(view, wait_until)
     assert types_in(path) == ["Highlight", "Link", "Stamp", "Widget"]
-    assert view.undo(), "Deshacer still works after saving"
+    with pymupdf.open(path) as doc:  # really gone from the file, not only hidden
+        assert not any("/Ink" in doc.xref_object(xref) for xref in range(1, doc.xref_length()))
+    # Saved, it is gone for good: Deshacer says so (an earlier version has it).
+    failed = []
+    view.edit_failed.connect(failed.append)
+    view.undo()
+    settle(view, wait_until)
+    assert failed and "ink" not in {item.kind for item in view.drawings_of(0)}
+
+
+def test_deshacer_puts_it_back_before_saving(window, foreign, wait_until):
+    view, path = foreign
+    click(view, 150, 400)  # the stroke
+    assert view.remove_picked()
+    settle(view, wait_until)
+    assert view.undo()
     settle(view, wait_until)
     assert "ink" in {item.kind for item in view.drawings_of(0)}
     window.save_document()

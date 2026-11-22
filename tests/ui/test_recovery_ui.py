@@ -519,3 +519,18 @@ def test_going_back_with_nothing_changed_says_so(window, opened):
 def test_go_back_is_in_the_file_menu(window):
     file_menu = window.menuBar().actions()[0].menu()
     assert window.revert_action in file_menu.actions()
+
+
+def test_saving_while_a_change_is_on_its_way_leaves_nothing_pending(window, opened, wait_until):
+    """Guardar pressed before the last change came back: it is in the file too."""
+    path = opened()
+    view = window.pdf_view
+    mark(window, wait_until)
+    view.select((0, 20), (0, 30))
+    assert view.mark_selection("underline")
+    assert view._changing, "the second change has not come back yet"
+    view.save()
+    settle(view, wait_until)
+    assert marks_in(path) == 2
+    assert not view.modified
+    assert view.journal.entries() == []

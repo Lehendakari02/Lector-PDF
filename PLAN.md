@@ -929,6 +929,7 @@ Notas de la Fase 2A:
 | 2.19a | Textos tras la prueba del 16/11: moverlos después de ponerlos, A+ a la izquierda y A− a la derecha, sin fondo blanco al cambiarlos | Encajo un texto entre líneas del temario, lo muevo a su sitio y no tapa nada | ✅ |
 | 2.19b | Elegir cualquier cosa con un clic (también con una herramienta en la mano) y borrarla con Supr | Hago clic en un subrayado, un dibujo o un texto y Supr lo borra | ✅ |
 | 2.19c | Cambiar el color de lo ya puesto (subrayados, dibujos, formas, textos, notas) | Cambio un resaltado amarillo a verde sin borrarlo y hacerlo otra vez | ✅ |
+| 2.19d | Arreglos de la revisión de la Fase 2: páginas giradas, texto a medio escribir, "Cambios sin guardar" tras guardar, lo borrado sigue en el archivo | Subrayo bien en una página guardada de lado y no pierdo un texto a medio escribir al cerrar | 🔶 |
 
 Notas de la Fase 2B:
 - **2.15: detectar escaneados y ofrecer "Reconocer texto" (16/11/2026).**
@@ -1019,13 +1020,26 @@ Notas de la Fase 2B:
     resaltado, subrayado, tachado, dibujo, forma, nota o texto sin moverlo;
     Deshacer devuelve el de antes. Lo de otros programas solo ofrece Borrar.
     La barra se aparta mientras se arrastra y vuelve al soltar.
+  - 2.19d: arreglos de la revisión de la Fase 2
+    (`revision-codigo-fase-2.md`, A1, A2, M1 y M2). Las letras de una página
+    guardada de lado (`/Rotate`) se leen ya en la página tal como se ve, así
+    que seleccionar, buscar y subrayar caen en su sitio (comprobado contra los
+    píxeles de la página, a 0, 90, 180 y 270 grados y con la página
+    recortada). Guardar, Guardar como, cerrar la pestaña o el programa e
+    imprimir guardan antes el texto o la nota que se está escribiendo.
+    Guardar cuenta también el cambio que aún iba de camino. Al guardar se
+    deja fuera lo que ya nada usa, así que lo borrado desaparece de verdad
+    del archivo. Por eso, lo de otros programas borrado y luego guardado ya
+    no se puede deshacer: el aviso lo dice y remite a Versiones anteriores.
+    Pendiente de decidir con Julen: apuntar en el diario, cada pocos
+    segundos, el texto a medio escribir (por un apagón mientras se escribe).
 
 ## Fase 2C – Herramientas de estudio
 Ordenadas por uso diario.
 
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
-| 2.20 | Panel de anotaciones filtrable por color | Veo todos mis subrayados de un color y salto a cada uno | 🔶 |
+| 2.20 | Panel de anotaciones filtrable por color | Veo todos mis subrayados de un color y salto a cada uno | ✅ |
 | 2.21 | Saltar a artículo, apartado o sección por su número | Escribo "art. 14" o "3.2" en cualquier documento y me lleva allí | ⬜ |
 | 2.22 | Marcadores propios | Marco artículos clave y vuelvo a ellos con un clic | ⬜ |
 | 2.23 | Modo repaso | Lo subrayado se tapa y lo descubro al hacer clic | ⬜ |
