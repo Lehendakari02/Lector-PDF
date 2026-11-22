@@ -14,6 +14,11 @@ a line cut short by a power cut is simply not read. Whenever the file has to be
 rewritten, it is written whole next to the old one and swapped in.
 
 What is written are the orders of ``app.core.commands``, with ``to_dict``.
+
+A note or a text being written is not a change until it is kept, but a power
+cut must not take it either: every few seconds the change it would be is
+written in a *draft* file next to the journal (``write_draft``), replaced
+whole each time. It comes back with the rest of the changes.
 """
 
 import contextlib
@@ -29,6 +34,7 @@ from app.core.history import file_key
 
 FOLDER_NAME = "diario"
 LIVE_SUFFIX = ".jsonl"
+DRAFT_SUFFIX = ".borrador.json"  # the note or text being written
 DISCARDED_MARK = ".descartado"
 KEEP_DISCARDED_DAYS = 7
 VERSION = 1
@@ -86,8 +92,28 @@ class DocumentJournal:
         """How many changes are written down and not saved in the PDF yet."""
         return self._count
 
+    @property
+    def draft_file(self) -> Path:
+        return self.folder / (_name_for(self.path) + DRAFT_SUFFIX)
+
     def entries(self) -> list[Entry]:
         return _read(self.file)[1] if self.file.exists() else []
+
+    def write_draft(self, order: Command | None) -> bool:
+        """What the note or text being written would be if kept now (None:
+        nothing is being written). Written whole, never left half done."""
+        if order is None:
+            self.clear_draft()
+            return True
+        line = {"what": "do", "t": time.time(), "order": order.to_dict()}
+        return _write_whole(self.draft_file, [_header(self.path), line])
+
+    def clear_draft(self) -> None:
+        _remove(self.draft_file)
+
+    def draft(self) -> Command | None:
+        entries = _read(self.draft_file)[1] if self.draft_file.exists() else []
+        return entries[-1][0] if entries else None
 
     def record(self, order: Command, undone: bool = False) -> bool:
         """Write down a change just made. False if it could not be written.
@@ -134,11 +160,18 @@ class DocumentJournal:
             _remove(old)
 
     def restart(self, entries: list[Entry]) -> None:
-        """Leave in the journal exactly these changes (used when recovering)."""
+        """Leave in the journal exactly these changes (used when recovering).
+
+        A draft brought back is one of them now: its file goes."""
         self._write(list(entries))
+        self.clear_draft()
 
     def discard(self) -> None:
         """ "No guardar": set the changes aside. They can be recovered for some days."""
+        draft = self.draft()
+        if draft is not None:  # kept with the rest
+            self.record(draft)
+            self.clear_draft()
         if not self.file.exists():
             return
         if not net(self.entries()):
@@ -157,6 +190,7 @@ class DocumentJournal:
     def forget(self) -> None:
         """Throw the journal of this document away."""
         _remove(self.file)
+        self.clear_draft()
         self._count = 0
 
     def _write(self, entries: list[Entry]) -> None:
@@ -191,6 +225,8 @@ class Journal:
 
     def forget(self, pending: Pending) -> None:
         _remove(pending.file)
+        if not pending.discarded:
+            _remove(_draft_of(pending.file))
 
     def set_aside(self, pending: Pending) -> None:
         """Do not offer these changes at the start any more; keep them some days."""
@@ -213,12 +249,28 @@ class Journal:
             files = sorted(self.folder.glob("*" + LIVE_SUFFIX))
         except OSError:
             return []
+        try:
+            drafts = set(self.folder.glob("*" + DRAFT_SUFFIX))
+        except OSError:
+            drafts = set()
+        # A draft alone (nothing else changed yet) is pending too.
+        files += sorted(
+            draft.with_name(draft.name[: -len(DRAFT_SUFFIX)] + LIVE_SUFFIX)
+            for draft in drafts
+            if not draft.with_name(draft.name[: -len(DRAFT_SUFFIX)] + LIVE_SUFFIX).exists()
+        )
         for file in files:
-            header, entries, when = _read(file)
+            header, entries, when = _read(file) if file.exists() else (None, [], 0.0)
+            discarded = file.name.endswith(DISCARDED_MARK + LIVE_SUFFIX)
+            draft = _draft_of(file)
+            if not discarded and draft in drafts:
+                draft_header, draft_entries, draft_when = _read(draft)
+                header = header or draft_header
+                entries = entries + draft_entries[-1:]
+                when = max(when, draft_when)
             left = net(entries)
             if header is None or not left:
                 continue
-            discarded = file.name.endswith(DISCARDED_MARK + LIVE_SUFFIX)
             found.append(Pending(Path(header["path"]), file, tuple(left), when, discarded))
         return sorted(found, key=lambda pending: pending.when, reverse=True)
 
@@ -228,6 +280,11 @@ class Journal:
 
 def _name_for(path: Path) -> str:
     return hashlib.sha256(file_key(path).encode("utf-8")).hexdigest()[:20]
+
+
+def _draft_of(file: Path) -> Path:
+    """The draft file that goes with a journal file."""
+    return file.with_name(file.name[: -len(LIVE_SUFFIX)] + DRAFT_SUFFIX)
 
 
 def _header(path: Path) -> dict:
