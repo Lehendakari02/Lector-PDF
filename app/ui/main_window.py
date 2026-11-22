@@ -302,6 +302,7 @@ class MainWindow(QMainWindow):
             "fullscreen": self.toggle_full_screen,
             "go_to_page": self.go_to_page,
             "go_to_article": lambda: self.go_to_page(place=True),
+            "bookmark": self.add_bookmark,
             "copy": self.copy,
             "thumbnails": lambda: self.toggle_side_panel(Tab.THUMBNAILS),
             "outline": lambda: self.toggle_side_panel(Tab.OUTLINE),
@@ -1153,6 +1154,9 @@ class MainWindow(QMainWindow):
         self.go_to_page_action = QAction(self.tr("&Ir a página…"), self)
         self.go_to_page_action.setShortcut(QKeySequence("Ctrl+G"))
         self.go_to_page_action.triggered.connect(lambda _checked=False: self.go_to_page())
+        self.bookmark_action = QAction(self.tr("Poner un &marcador aquí"), self)
+        self.bookmark_action.setShortcut(QKeySequence("Ctrl+M"))
+        self.bookmark_action.triggered.connect(lambda _checked=False: self.add_bookmark())
         self.rotate_view_action = QAction(self.tr("&Girar vista"), self)
         self.rotate_view_action.setShortcut(QKeySequence("Ctrl+R"))
         self.rotate_view_action.triggered.connect(
@@ -1168,6 +1172,7 @@ class MainWindow(QMainWindow):
             self.side_panel_action,
             self.full_screen_action,
             self.go_to_page_action,
+            self.bookmark_action,
             self.rotate_view_action,
         ):
             # They must also answer while the menu bar is hidden (full screen).
@@ -2851,6 +2856,18 @@ class MainWindow(QMainWindow):
         self.side_panel_action.setChecked(False)
         self.settings.set(SIDE_PANEL_SETTING, "")
         self.pdf_view.setFocus()
+
+    def add_bookmark(self) -> None:
+        """Bookmark the place being read; it is listed first in the Índice."""
+        if self.pdf_view.page_count == 0:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return
+        title = self.pdf_view.add_bookmark()
+        if title:
+            self.statusBar().showMessage(
+                self.tr("Marcador «{0}» puesto. Lo tienes en el Índice (F4).").format(title),
+                STATUS_MESSAGE_MS,
+            )
 
     def toggle_side_panel(self, tab: Tab | None = None) -> None:
         """Open the panel, or close it if it already shows what is asked."""

@@ -246,7 +246,7 @@ def rank_of(line: str) -> int:
     return MENTION if first.islower() else HEADING
 
 
-def _lines(text: PageText):
+def lines_of(text: PageText):
     """Every line of a page: (first letter, text, rectangle)."""
     for start, stop in text.line_spans():
         line = text.chars[start:stop]
@@ -268,7 +268,7 @@ def places_in_page(text: PageText, wanted: Wanted, page: int) -> list[Place]:
     """Every line of a page that starts with the place, in reading order."""
     return [
         Place(page, start, rect, rank_of(line))
-        for start, line, rect in _lines(text)
+        for start, line, rect in lines_of(text)
         if line_matches(line, wanted)
     ]
 
@@ -334,3 +334,24 @@ class PlaceSearch:
     @property
     def answer(self) -> Place | None:
         return self.found or self.best_other
+
+
+_HEADING_START = re.compile(
+    r"^(?:articulo|art\.|capitulo|titulo|libro|seccion|subseccion|disposicion|anexo|tema|"
+    r"parte|bloque|leccion|unidad|\d+(?:\.\d+)*(?:\.|\)|\s))"
+)
+LONGEST_TITLE = 70
+
+
+def heading_near(text: PageText, top: float, bottom: float) -> str:
+    """The first heading of a page between two heights ("Artículo 14.
+    Igualdad…"), to name a bookmark put there; empty if there is none."""
+    for _start, line, rect in lines_of(text):
+        if rect[3] < top or rect[1] > bottom:
+            continue
+        clean = " ".join(line.split())
+        if rank_of(clean) == HEADING and _HEADING_START.match(_simple(clean)):
+            if len(clean) > LONGEST_TITLE:
+                clean = clean[: LONGEST_TITLE - 1].rstrip() + "…"
+            return clean
+    return ""

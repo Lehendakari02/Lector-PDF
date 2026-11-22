@@ -587,3 +587,17 @@ Con un documento abierto, en el modo Estudiar.
 6. Escribe `art. 900`: abajo pone que no lo encuentra y no se mueve.
 7. En el modo **Estudiar**, el botón **Ir a artículo** (o Ctrl+K → "artículo")
    deja la casilla lista para escribir.
+
+## Fase 2C – Tarea 2.22 – Marcadores propios
+
+1. En la Constitución, ve al artículo 14 (Ctrl+G, `art. 14`) y pulsa
+   **Ctrl+M**: abajo pone «Marcador «Artículo 14.» puesto».
+2. Pon otro en el artículo 1 con el botón **Marcador** del modo Estudiar.
+3. Abre el **Índice** (F4): arriba sale "Mis marcadores" con los dos, en el
+   orden del documento. Un clic en uno te lleva justo a ese artículo.
+4. Clic derecho en uno → **Cambiar nombre…** y ponle "Igualdad". Clic
+   derecho en el otro → **Quitar marcador**. Deshacer lo vuelve a poner.
+5. Guarda y abre el PDF en **Adobe** y en **Edge**: en su lista de
+   marcadores sale "Mis marcadores" con los tuyos, y el índice de la ley
+   sigue igual.
+
