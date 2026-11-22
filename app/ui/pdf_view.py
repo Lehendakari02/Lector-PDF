@@ -500,6 +500,9 @@ class PdfView(QAbstractScrollArea):
         self._changes = 0  # changes made to the document since it was opened
         self._saved_changes = 0  # how many of them are in the file
         self._saves: dict[int, int] = {}  # save number -> changes it carries
+        # Things of other programs taken away since the last save that are too
+        # big to keep a copy of: saving would make them impossible to undo.
+        self._lost_on_save = 0
         self.verticalScrollBar().valueChanged.connect(self._scrolled)
         self.horizontalScrollBar().valueChanged.connect(self._scrolled)
 
@@ -657,6 +660,8 @@ class PdfView(QAbstractScrollArea):
             for page in pages:  # their letters are read again when needed
                 self._texts.pop(page, None)
                 self._asked_texts.discard(page)
+        if _too_big_to_undo_after_saving(order):
+            self._lost_on_save += -1 if undone else 1
         self.mark_modified()
         self._request_pages()
         self.history_changed.emit()
@@ -775,6 +780,12 @@ class PdfView(QAbstractScrollArea):
     # ---- saving ---------------------------------------------------------
 
     @property
+    def loses_undo_on_save(self) -> bool:
+        """Whether saving now would make something of another program, taken
+        away, impossible to bring back with Deshacer (it is too big to copy)."""
+        return self._lost_on_save > 0
+
+    @property
     def modified(self) -> bool:
         """True while the document has changes that are not in its file."""
         return self._changes != self._saved_changes
@@ -807,6 +818,7 @@ class PdfView(QAbstractScrollArea):
             # answered so far was asked before this save, so it is in the file,
             # even one still on its way when Guardar was pressed.
             self._saved_changes = self._changes
+            self._lost_on_save = 0
             if self.journal is not None:
                 self.journal.saved(self.journal.count, path)  # it leaves the journal
         if self._document is not None:
@@ -828,6 +840,7 @@ class PdfView(QAbstractScrollArea):
             self.annotations_shown_changed.emit(True)
         self.set_review(False)
         self._changes = self._saved_changes = 0
+        self._lost_on_save = 0
         self._place_asked = self._place_shown = None
         self._saves.clear()
         self.journal = None
@@ -3224,3 +3237,9 @@ class PdfView(QAbstractScrollArea):
         if 0 <= page < self.page_count:
             gap = self._to_pixels(PAGE_GAP) // 2
             self.verticalScrollBar().setValue(self._to_units(self._tops[page] - gap))
+
+
+def _too_big_to_undo_after_saving(order) -> bool:
+    """Taking away something of another program of which no copy could be kept."""
+    taken = getattr(order, "order", None)
+    return isinstance(order, notes.Remove) and getattr(taken, "too_big", False)

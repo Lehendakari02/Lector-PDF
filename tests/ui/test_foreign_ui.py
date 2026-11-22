@@ -114,12 +114,37 @@ def test_saved_without_it_and_the_rest_is_untouched(window, foreign, wait_until)
     assert types_in(path) == ["Highlight", "Link", "Stamp", "Widget"]
     with pymupdf.open(path) as doc:  # really gone from the file, not only hidden
         assert not any("/Ink" in doc.xref_object(xref) for xref in range(1, doc.xref_length()))
-    # Saved, it is gone for good: Deshacer says so (an earlier version has it).
-    failed = []
-    view.edit_failed.connect(failed.append)
-    view.undo()
+    # Deshacer still puts it back, exactly as it was, from the copy the order keeps.
+    assert view.undo()
     settle(view, wait_until)
-    assert failed and "ink" not in {item.kind for item in view.drawings_of(0)}
+    assert "ink" in {item.kind for item in view.drawings_of(0)}
+    window.save_document()
+    settle(view, wait_until)
+    assert types_in(path) == ["Highlight", "Ink", "Link", "Stamp", "Widget"]
+    assert view.redo()  # and away again
+    settle(view, wait_until)
+    assert "ink" not in {item.kind for item in view.drawings_of(0)}
+
+
+def test_taken_away_saved_by_itself_and_undone(window, foreign, wait_until):
+    """With "guardar solo mientras trabajo": what another program made is
+    never lost for good by a save the user did not ask for."""
+    from app.core import save_settings
+
+    view, path = foreign
+    window.settings.set(save_settings.AUTOSAVE_SETTING, True)
+    window.apply_save_settings()
+    click(view, 450, 525)  # the stamp
+    assert view.remove_picked()
+    settle(view, wait_until)
+    window._autosave()
+    settle(view, wait_until)
+    assert "Stamp" not in types_in(path)
+    assert view.undo()
+    settle(view, wait_until)
+    window._autosave()
+    settle(view, wait_until)
+    assert types_in(path) == ["Highlight", "Ink", "Link", "Stamp", "Widget"]
 
 
 def test_deshacer_puts_it_back_before_saving(window, foreign, wait_until):
@@ -141,3 +166,41 @@ def test_it_is_written_in_the_journal(window, foreign, wait_until):
     view.remove_picked()
     settle(view, wait_until)
     assert view.journal is not None and view.journal.count == 1
+
+
+def test_too_big_to_copy_is_never_saved_by_itself_and_asked_first(
+    window, sample, tmp_path, wait_until
+):
+    """An attachment of several megabytes left by another program: no copy is
+    kept, so saving without it cannot be undone. Never saved by itself, and
+    asked before saving by hand."""
+    import os
+
+    from app.core import save_settings
+    from app.core.foreign import MAX_KEPT_BYTES
+    from app.ui.main_window import FOREIGN_LOST
+
+    path = tmp_path / "adjunto.pdf"
+    with pymupdf.open(sample("boe.pdf")) as doc:
+        doc[0].add_file_annot((450, 525), os.urandom(MAX_KEPT_BYTES + 1000), "grande.bin")
+        doc.save(path)
+    window.show_problem_dialogs = False
+    assert window.open_document(path)
+    view = window.pdf_view
+    wait_until(lambda: 0 in view.cached_pages() and 0 in view._drawings)
+    window.settings.set(save_settings.AUTOSAVE_SETTING, True)
+    window.apply_save_settings()
+    click(view, 452, 527)  # the attachment
+    assert view.remove_picked()
+    settle(view, wait_until)
+    assert view.loses_undo_on_save
+    window._autosave()
+    settle(view, wait_until)
+    assert "FileAttachment" in types_in(path), "not saved by itself"
+    window.save_warning_answer = "cancel"
+    assert not window.save_document()
+    assert FOREIGN_LOST in window._save_warnings(window.current_document)
+    window.save_warning_answer = "save_here"
+    assert window.save_document()
+    settle(view, wait_until)
+    assert "FileAttachment" not in types_in(path) and not view.loses_undo_on_save

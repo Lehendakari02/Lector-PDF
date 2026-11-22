@@ -2,17 +2,24 @@
 
 They are not changed, moved or copied: what another program made is kept as it
 is, and only taken off the page or put back. Taking one away removes it from
-its page's list of annotations; the object itself is left untouched in the
-document, so Deshacer puts back exactly what was there, with its look, its
-pop-up and the replies to it.
+its page's list of annotations, and Deshacer puts back exactly what was
+there, with its look, its pop-up and the replies to it.
+
+Saving leaves out of the file whatever nothing uses any more, so what was taken
+away really goes (see ``app.core.saving``). For Deshacer to work after saving
+too (also when the program saves by itself), the order that takes one away
+keeps a copy of its objects (``Foreign.prepared``, done by the helper just
+before taking it away): putting it back writes them again under their own
+numbers, which nothing else takes in the meantime.
 
 Never touched: form fields and signatures (``Widget``), links, pop-ups on
 their own (they go with their annotation) and areas marked to be blacked out.
 Those are not read as annotations at all.
 """
 
+import base64
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from app.core.commands import CommandError, register_reader
 from app.core.search import Rect
@@ -24,6 +31,12 @@ OTHER_TYPES = frozenset(
     {"Polygon", "PolyLine", "Squiggly", "Stamp", "Caret", "FileAttachment", "Sound"}
 )
 _REFERENCE = re.compile(r"(\d+)\s+(\d+)\s+R")
+# A copy is kept only of what is reasonably small: beyond this, taking it away
+# and saving cannot be undone (the window says so before saving).
+MAX_KEPT_OBJECTS = 64
+MAX_KEPT_BYTES = 4 * 1024 * 1024
+
+Kept = tuple[int, str, bytes | None]  # an object: its number, its text, its stream
 
 
 def key_of(xref: int) -> str:
@@ -42,6 +55,10 @@ class Foreign:
     xrefs: tuple[int, ...]  # the annotation, then its pop-up and the replies to it
     subtype: str  # what it is ("Highlight", "Ink"…): checked before touching it
     rect: Rect  # where it is, as the page is shown
+    # A copy of its objects, to put it back after a save left them out.
+    kept: tuple[Kept, ...] = ()
+    # Whether a copy was tried and could not be made (too big): see ``prepared``.
+    too_big: bool = False
 
     @property
     def name(self) -> str:
@@ -50,7 +67,22 @@ class Foreign:
     def pages(self) -> list[int]:
         return [self.page]
 
+    @property
+    def restorable(self) -> bool:
+        """Whether it can be put back even after saving without it."""
+        return bool(self.kept)
+
+    def prepared(self, doc) -> "Foreign":
+        """The same order with a copy of its objects, taken from ``doc`` now."""
+        if self.kept or self.too_big:
+            return self
+        self._check(doc)
+        kept = _copy_of(doc, self.xrefs)
+        return replace(self, kept=kept) if kept else replace(self, too_big=True)
+
     def apply(self, doc) -> list[int]:
+        if self.kept and not self._is_there(doc):
+            _write_again(doc, self.kept)
         self._check(doc)
         listed, holder = _annotations(doc, self.page)
         there = {xref for xref, _ in listed}
@@ -67,6 +99,10 @@ class Foreign:
         _write(doc, self.page, [entry for entry in listed if entry[0] not in gone], holder)
         return self.pages()
 
+    def _is_there(self, doc) -> bool:
+        xref = self.xrefs[0]
+        return 0 < xref < doc.xref_length() and _subtype(doc, xref) == self.subtype
+
     def _check(self, doc) -> None:
         if not 0 <= self.page < doc.page_count:
             raise CommandError(f"no page {self.page}")
@@ -75,13 +111,26 @@ class Foreign:
             raise CommandError("that annotation is not in this document")
 
     def to_dict(self) -> dict:
-        return {
-            "what": "foreign",
-            "page": self.page,
-            "xrefs": list(self.xrefs),
-            "subtype": self.subtype,
-            "rect": list(self.rect),
-        }
+        return (
+            {
+                "what": "foreign",
+                "page": self.page,
+                "xrefs": list(self.xrefs),
+                "subtype": self.subtype,
+                "rect": list(self.rect),
+            }
+            | (
+                {
+                    "kept": [
+                        [xref, text, None if data is None else base64.b64encode(data).decode()]
+                        for xref, text, data in self.kept
+                    ]
+                }
+                if self.kept
+                else {}
+            )
+            | ({"too_big": True} if self.too_big else {})
+        )
 
     @classmethod
     def from_dict(cls, data: dict) -> "Foreign":
@@ -89,7 +138,18 @@ class Foreign:
         if not xrefs:
             raise ValueError("no annotation")
         x0, y0, x1, y1 = (float(value) for value in data["rect"])
-        return cls(int(data["page"]), xrefs, str(data["subtype"]), (x0, y0, x1, y1))
+        kept = tuple(
+            (int(xref), str(text), None if stream is None else base64.b64decode(stream))
+            for xref, text, stream in data.get("kept", ())
+        )
+        return cls(
+            int(data["page"]),
+            xrefs,
+            str(data["subtype"]),
+            (x0, y0, x1, y1),
+            kept,
+            data.get("too_big") is True,
+        )
 
 
 register_reader("foreign", Foreign.from_dict)
@@ -163,3 +223,46 @@ def _write(doc, page_number: int, listed: list[tuple[int, int]], holder: int | N
         doc.update_object(holder, text)
     else:
         doc.xref_set_key(doc.page_xref(page_number), "Annots", text)
+
+
+def _copy_of(doc, xrefs: tuple[int, ...]) -> tuple[Kept, ...]:
+    """The objects of an annotation and its family, with all they point to
+    (their look, its fonts…), except the page. Empty if it is too much."""
+    seen: set[int] = set()
+    waiting = list(xrefs)
+    kept: list[Kept] = []
+    size = 0
+    while waiting:
+        xref = waiting.pop(0)
+        if xref in seen or not 0 < xref < doc.xref_length():
+            continue
+        seen.add(xref)
+        text = doc.xref_object(xref, compressed=True)
+        if doc.xref_get_key(xref, "Type") in (("name", "/Page"), ("name", "/Pages")):
+            continue  # the page stays where it is
+        data = doc.xref_stream(xref) if doc.xref_is_stream(xref) else None
+        size += len(text) + len(data or b"")
+        if len(kept) >= MAX_KEPT_OBJECTS or size > MAX_KEPT_BYTES:
+            return ()
+        kept.append((xref, text, data))
+        waiting += [int(number) for number, _ in _REFERENCE.findall(text)]
+    return tuple(kept)
+
+
+def _write_again(doc, kept: tuple[Kept, ...]) -> None:
+    """Write the copied objects back where they were missing.
+
+    Only numbers left empty are written (what is still there, like a font
+    others use too, is not touched). A number taken by something else means
+    the copy no longer fits this document: nothing is written.
+    """
+    missing = []
+    for xref, text, data in kept:
+        if not 0 < xref < doc.xref_length():
+            raise CommandError("that annotation is not in this document")
+        if doc.xref_object(xref, compressed=True).strip() == "null":
+            missing.append((xref, text, data))
+    for xref, text, data in missing:
+        doc.update_object(xref, text)
+        if data is not None:
+            doc.update_stream(xref, data)

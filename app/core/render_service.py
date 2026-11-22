@@ -506,6 +506,12 @@ def _worker_main(connection: Connection) -> None:
                                 raise CommandError("there is no text there")
                         else:
                             _, _, _, order, undo = message
+                            prepared = getattr(order, "prepared", None)
+                            if prepared is not None and not undo:
+                                # Takes what it needs from the document first
+                                # (a copy of what it takes away, to undo it
+                                # after saving): the window gets this order back.
+                                order = prepared(doc)
                         pages = order.undo(doc) if undo else order.apply(doc)
                     except Exception as exc:
                         connection.send(("change_failed", token, change_id, str(exc)))

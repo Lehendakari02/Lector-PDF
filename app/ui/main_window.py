@@ -133,6 +133,9 @@ WELCOME_RECENT = 5  # recent documents offered on the welcome page
 # The tools of each mode with their names under the drawing, or only the drawings.
 TOOLBAR_SETTING = "barra_herramientas"
 SAVE_AS, SAVE_HERE = "save_as", "save_here"  # answers to a warning before saving
+# Something of another program taken away, too big to copy: saving makes it
+# impossible to undo. Asked every time, whatever the settings say.
+FOREIGN_LOST = "foreign_lost"
 RESTORE_TRIES = 6
 RESTORE_PAUSE = 0.25  # seconds
 PLACE_DELAY_MS = 2000  # how long after turning the page it is remembered
@@ -1873,6 +1876,8 @@ class MainWindow(QMainWindow):
         found = save_checks.warnings_for(page.path, page.stamp, password)
         if not self.warn_about_temporary_folders and save_checks.TEMPORARY in found:
             found.remove(save_checks.TEMPORARY)
+        if page.view.loses_undo_on_save:
+            found.append(FOREIGN_LOST)
         return found
 
     def _ask_save_warning(self, page: DocumentPage, reason: str) -> str:
@@ -1893,6 +1898,15 @@ class MainWindow(QMainWindow):
                     "«{0}» ha cambiado en el disco desde que lo abriste. Si guardas aquí, se "
                     "pierde lo que haya hecho ese otro programa (quedaría en Archivo → "
                     "Versiones anteriores).\n\nLo más seguro es guardar una copia."
+                ),
+            ),
+            FOREIGN_LOST: (
+                self.tr("No se podrá deshacer"),
+                self.tr(
+                    "En «{0}» has quitado algo hecho con otro programa que es demasiado "
+                    "grande para guardar una copia. Si guardas, Deshacer ya no podrá "
+                    "devolverlo (seguirá en Archivo → Versiones anteriores).\n\nSi no "
+                    "estás seguro, guarda una copia."
                 ),
             ),
             save_checks.TEMPORARY: (
@@ -2027,6 +2041,7 @@ class MainWindow(QMainWindow):
                     save_checks.SIGNED: self.tr("está firmado"),
                     save_checks.CHANGED_OUTSIDE: self.tr("otro programa ha cambiado el archivo"),
                     save_checks.TEMPORARY: self.tr("está en una carpeta temporal"),
+                    FOREIGN_LOST: self.tr("Deshacer ya no podría devolver lo que has quitado"),
                 }[reasons[0]]
                 self.statusBar().showMessage(
                     self.tr("«{0}» no se guarda solo: {1}. Guárdalo tú con Guardar.").format(
@@ -2178,6 +2193,7 @@ class MainWindow(QMainWindow):
         page.stamp = save_checks.stamp_of(path)  # as we left it: ours, not another program's
         # If another program changes it again, that deserves asking again.
         page.accepted_warnings.discard(save_checks.CHANGED_OUTSIDE)
+        page.accepted_warnings.discard(FOREIGN_LOST)  # asked again for the next one
         message = self.tr("Guardado en «{0}».").format(path.name)
         if self._version_not_kept:
             self._version_not_kept = False
