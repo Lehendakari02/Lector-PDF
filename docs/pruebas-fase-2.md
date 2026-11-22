@@ -665,3 +665,13 @@ Con un documento abierto, en el modo Estudiar.
    y estabas cambiando.
 5. Comprueba que el PDF no ha cambiado hasta que pulsas Guardar.
 
+## Fase 2C – Tarea 2.27 – Exportar resumen
+
+1. En un tema con varias cosas resaltadas, subrayadas y alguna nota, pulsa
+   **Exportar resumen** (modo Estudiar).
+2. Guárdalo como PDF: se abre en una pestaña con todo lo marcado, página a
+   página, con sus colores.
+3. Vuelve a exportarlo eligiendo **Documento de Word**: se abre en Word.
+   Comprueba que se lee bien, con los colores, y que puedes editarlo.
+4. Ponle nombre a un color (clic derecho) y exporta otra vez: sale el nombre.
+

@@ -67,9 +67,11 @@ def colors_of(entries: list[Entry]) -> list[Color]:
     return found
 
 
-def _short(text: str) -> str:
+def _short(text: str, longest: int | None = LONGEST_TEXT) -> str:
     text = " ".join(text.split())
-    return text if len(text) <= LONGEST_TEXT else text[: LONGEST_TEXT - 1].rstrip() + "…"
+    if longest is None or len(text) <= longest:
+        return text
+    return text[: longest - 1].rstrip() + "…"
 
 
 def _marked_words(page, rects: tuple[Rect, ...], words: list) -> str:
@@ -90,8 +92,9 @@ def _rect_of(word):
     return pymupdf.Rect(word[:4])
 
 
-def page_entries(doc, page_number: int) -> list[Entry]:
-    """The annotations of one page, from top to bottom."""
+def page_entries(doc, page_number: int, longest: int | None = LONGEST_TEXT) -> list[Entry]:
+    """The annotations of one page, from top to bottom (what they say cut to
+    ``longest`` letters; None: whole, for the summary)."""
     page = doc[page_number]
     if page.first_annot is None:
         return []
@@ -104,23 +107,32 @@ def page_entries(doc, page_number: int) -> list[Entry]:
                 words = page.get_text("words", sort=True)
             text = _marked_words(page, drawn.rects, words)
         entries.append(
-            Entry(page_number, drawn.kind, drawn.name, drawn.rect, drawn.color, _short(text))
+            Entry(
+                page_number, drawn.kind, drawn.name, drawn.rect, drawn.color, _short(text, longest)
+            )
         )
     for note in page_notes(doc, page_number):
         entries.append(
-            Entry(page_number, note.kind, note.name, note.rect, note.color, _short(note.text))
+            Entry(
+                page_number,
+                note.kind,
+                note.name,
+                note.rect,
+                note.color,
+                _short(note.text, longest),
+            )
         )
     entries.sort(key=lambda entry: (round(entry.rect[1]), entry.rect[0]))
     return entries
 
 
-def document_entries(doc) -> list[Entry]:
+def document_entries(doc, longest: int | None = LONGEST_TEXT) -> list[Entry]:
     """Every annotation of the document, in reading order. A page that cannot
     be read is passed over."""
     entries: list[Entry] = []
     for number in range(doc.page_count):
         try:
-            entries.extend(page_entries(doc, number))
+            entries.extend(page_entries(doc, number, longest))
         except Exception:
             continue
     return entries

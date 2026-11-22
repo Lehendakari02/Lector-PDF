@@ -1080,8 +1080,8 @@ Ordenadas por uso diario.
 | 2.24 | Márgenes ampliables | Añado margen a una página y escribo en él; se ve igual en Edge y Adobe | ✅ |
 | 2.25 | Insertar hojas en blanco, de rayas o cuadriculadas | Meto una hoja cuadriculada para un esquema | ✅ (hecha en la 2.13d) |
 | 2.26 | Código de colores propio (opcional, nada predefinido) | Si quiero, pongo nombre a mis colores; si no, no aparece nada | ✅ |
-| 2.26b | Lo que se está escribiendo, a salvo de un apagón (decidido por Julen el 22/11) | Corto la luz a mitad de una nota y al volver la recupero | 🔶 |
-| 2.27 | Exportar resumen (formato por decidir) | Saco un documento con todo lo subrayado, ordenado por página | ⬜ |
+| 2.26b | Lo que se está escribiendo, a salvo de un apagón (decidido por Julen el 22/11) | Corto la luz a mitad de una nota y al volver la recupero | ✅ |
+| 2.27 | Exportar resumen (PDF o Word) | Saco un documento con todo lo subrayado, ordenado por página | 🔶 |
 | 2.28 | Vista de dos documentos lado a lado | Veo el tema y la ley a la vez | ⬜ |
 | 2.29 | Biblioteca del temario | Elijo mi carpeta de temas, busco en todos y veo mi progreso | ⬜ |
 | 2.30 | Enlaces entre documentos (ver `CLAUDE.md`) | Desde el tema 5, un clic abre la Constitución al lado en el artículo 14; si muevo el archivo, el programa lo encuentra o me deja corregirlo | ⬜ |
@@ -1173,6 +1173,18 @@ Notas de la Fase 2C:
     cambios; recuperado, la nota o el texto aparecen puestos.
   - Al guardar la nota o cancelarla, ese apunte desaparece. Con "No guardar"
     se aparta con los demás cambios descartados.
+- **2.27: exportar resumen (22/11/2026).**
+  - Botón **Exportar resumen** del modo Estudiar (o Ctrl+K → "resumen"). Se
+    elige dónde guardarlo y si es PDF o Word (.docx); recuerda el último
+    formato. Propone "<tema> - resumen" junto al documento.
+  - Dentro, página a página: lo resaltado (con su color de fondo), subrayado
+    (subrayado y en su color) o tachado, las notas y los textos, cada uno con
+    su tipo y el nombre propio de su color si lo tiene. Los dibujos no tienen
+    palabras y no salen. Va todo el texto, sin cortar.
+  - Incluye lo que se estaba escribiendo. No cambia el PDF. Al terminar se
+    abre: el PDF en una pestaña, el Word con el programa del ordenador.
+  - El .docx se escribe sin ninguna librería añadida; se ha comprobado que
+    LibreOffice lo abre. Pendiente de abrirlo en Word (prueba manual).
 
 ## Fase 3 – Rellenar y firma manuscrita
 | # | Tarea | Terminado cuando… | Estado |
