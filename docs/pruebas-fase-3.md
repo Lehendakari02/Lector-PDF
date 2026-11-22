@@ -46,3 +46,15 @@ un modelo de la Agencia Tributaria), no documentos con datos de nadie.
 6. Prueba con formularios reales de distintos sitios y dime qué campos no
    reconoce, para añadir esos nombres.
 
+## Tarea 3.4 – Sellos y marcas rápidas
+
+1. Abre un PDF sin campos (un escaneado o un formulario impreso) y pulsa
+   **Sellos** (modo Rellenar y firmar).
+2. Elige **✓ Marca** y haz clic en varias casillas: cada clic pone una. Pulsa
+   Esc (o el botón otra vez) para dejarlo.
+3. Prueba ✗ y ●, la **fecha de hoy** y **Recibido**. Mueve uno y deshaz otro
+   con Ctrl+Z.
+4. **Nuevo sello…**: escribe por ejemplo "Pagado" y ponlo. Cierra y abre el
+   programa: sigue en el menú. Quítalo con "Quitar un sello".
+5. En **Tamaño** elige otro y comprueba que las marcas caben en las casillas.
+6. Guarda y abre el PDF en Edge y en Adobe: las marcas y sellos se ven igual.

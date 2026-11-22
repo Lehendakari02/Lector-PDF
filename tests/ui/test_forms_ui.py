@@ -256,3 +256,48 @@ def test_on_a_scan_a_datum_goes_where_it_is_clicked(window, sample, tmp_path, wa
     assert view.markup_tool == "" and view.text_to_put == ""
     note = view.notes_of(0)[0]
     assert note.rect[1] < 200 < note.rect[3], "the middle of the line at the click"
+
+
+# ---- stamps (3.4) ------------------------------------------------------------------
+
+
+def test_marks_and_stamps_go_where_it_is_clicked(window, sample, tmp_path, wait_until):
+    import shutil
+    from datetime import date
+
+    path = tmp_path / "escaneado.pdf"
+    shutil.copy(sample("escaneado.pdf"), path)
+    window.show_problem_dialogs = False
+    assert window.open_document(path)
+    view = window.pdf_view
+    wait_until(lambda: 0 in view.cached_pages())
+    menu = window.show_stamps()
+    names = [action.text() for action in menu.actions() if action.text()]
+    assert names[:3] == ["✓  Marca", "✗  Cruz", "●  Punto"] and "Recibido" in names
+    menu.actions()[0].trigger()
+    assert view.markup_tool == "stamp" and window.feature_actions["stamps"].isChecked()
+    QTest.mouseClick(view.viewport(), LEFT, NO_KEYS, place(view, 0, 100, 150))
+    QTest.mouseClick(view.viewport(), LEFT, NO_KEYS, place(view, 0, 100, 250))
+    settle(view, wait_until)
+    wait_until(lambda: len(view.drawings_of(0)) == 2)
+    assert view.markup_tool == "stamp", "it stays in hand for the next box"
+    assert window.show_stamps() is None, "the button again leaves the stamp"
+    assert view.markup_tool == ""
+    window.show_stamps().actions()[3].trigger()  # today's date
+    QTest.mouseClick(view.viewport(), LEFT, NO_KEYS, place(view, 0, 300, 400))
+    settle(view, wait_until)
+    today = date.today().strftime("%d/%m/%Y")
+    wait_until(lambda: [note.text for note in view.notes_of(0)] == [today])
+    QTest.keyClick(view, Qt.Key.Key_Escape)
+    assert view.markup_tool == ""
+    window.new_stamp_answer = "  Pagado  "
+    assert window.new_stamp()
+    assert window.settings.get("sellos/propios") == ["Pagado"]
+    assert view.stamp.words == "Pagado" and view.markup_tool == "stamp"
+    QTest.mouseClick(view.viewport(), LEFT, NO_KEYS, place(view, 0, 300, 500))
+    settle(view, wait_until)
+    wait_until(lambda: "Pagado" in [note.text for note in view.notes_of(0)])
+    QTest.keyClick(view, Qt.Key.Key_Escape)
+    assert "Pagado" in [a.text() for a in window.show_stamps().actions()]
+    window.forget_stamp("Pagado")
+    assert window.settings.get("sellos/propios") == []
