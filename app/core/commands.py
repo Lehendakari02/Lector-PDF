@@ -165,7 +165,45 @@ class Command(Protocol):
     def to_dict(self) -> dict: ...
 
 
-_READERS: dict[str, Callable[[dict], Command]] = {"add_markup": AddMarkup.from_dict}
+@dataclass(frozen=True)
+class Together:
+    """Several orders done as one (a signature and its date): one undo takes
+    them all away."""
+
+    orders: tuple
+
+    def pages(self) -> list[int]:
+        return sorted({page for order in self.orders for page in order.pages()})
+
+    def apply(self, doc) -> list[int]:
+        done = []
+        try:
+            for order in self.orders:
+                order.apply(doc)
+                done.append(order)
+        except CommandError:
+            for order in reversed(done):  # all or nothing
+                order.undo(doc)
+            raise
+        return self.pages()
+
+    def undo(self, doc) -> list[int]:
+        for order in reversed(self.orders):
+            order.undo(doc)
+        return self.pages()
+
+    def to_dict(self) -> dict:
+        return {"what": "together", "orders": [order.to_dict() for order in self.orders]}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Together":
+        return cls(tuple(command_from_dict(order) for order in data["orders"]))
+
+
+_READERS: dict[str, Callable[[dict], Command]] = {
+    "add_markup": AddMarkup.from_dict,
+    "together": Together.from_dict,
+}
 
 
 def register_reader(what: str, reader: Callable[[dict], Command]) -> None:
@@ -178,8 +216,10 @@ def command_from_dict(data: dict) -> Command:
     import app.core.bookmarks  # noqa: F401
     import app.core.drawing  # noqa: F401  (their orders register themselves)
     import app.core.foreign  # noqa: F401
+    import app.core.forms  # noqa: F401
     import app.core.margins  # noqa: F401
     import app.core.notes  # noqa: F401
+    import app.core.pictures  # noqa: F401
     import app.core.sheets  # noqa: F401
     import app.core.text_layer  # noqa: F401
 

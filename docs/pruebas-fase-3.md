@@ -76,3 +76,18 @@ un modelo de la Agencia Tributaria), no documentos con datos de nadie.
 6. Cierra y abre el programa: la firma y las iniciales siguen ahí.
    **Quitar mi firma** pregunta antes de quitarla.
 
+## Tarea 3.6 – Firmar con un clic
+
+1. Abre un contrato o cualquier PDF y pulsa **Firmar → Poner mi firma**.
+   Haz clic donde va: sale tu firma y debajo la fecha de hoy.
+2. Arrástrala a otro sitio y hazla más grande o más pequeña por una esquina:
+   no se deforma. Ctrl+Z la quita (con la fecha); Ctrl+Y la vuelve a poner.
+3. **Poner mis iniciales** en otra página: van sin fecha.
+4. En el menú de Firmar quita "Poner la fecha de hoy debajo de la firma" y
+   firma otra vez: va sin fecha.
+5. Pulsa **Ctrl+S**: pregunta si lo guardas como «nombre-firmado.pdf».
+   Acepta y comprueba que el original sigue sin firmar.
+6. Abre el PDF firmado en Edge y en Adobe: la firma se ve igual, sin fondo
+   blanco encima del texto.
+7. Prueba con el lápiz de la Surface y con una página girada.
+

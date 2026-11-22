@@ -3,7 +3,7 @@
 Nothing is changed in place: an annotation that moves is taken away and put
 again somewhere else, in one order (``notes.Replace``), so undo brings it back
 exactly where it was. Everything here works on the orders that put things
-(``AddNote``, ``AddTextBox``, ``AddInk``, ``AddShape``), which is what
+(``AddNote``, ``AddTextBox``, ``AddInk``, ``AddShape``, ``AddPicture``), which is what
 ``PageNote.order()`` and ``PageDrawing.order()`` give for what is on a page.
 
 A mark on the text (highlight, underline, strike-out) belongs to its words: it
@@ -26,6 +26,7 @@ from app.core.notes import (
     Replace,
     box_layout,
 )
+from app.core.pictures import AddPicture
 from app.core.search import Rect
 
 Point = tuple[float, float]
@@ -41,17 +42,17 @@ RIGHT_SIDE, LEFT_SIDE = 4, 5
 
 
 def can_move(order: Command) -> bool:
-    return isinstance(order, AddNote | AddTextBox | AddInk | AddShape)
+    return isinstance(order, AddNote | AddTextBox | AddInk | AddShape | AddPicture)
 
 
 def can_resize(order: Command) -> bool:
     """A note is an icon of a fixed size; everything else that moves can be resized."""
-    return isinstance(order, AddTextBox | AddInk | AddShape)
+    return isinstance(order, AddTextBox | AddInk | AddShape | AddPicture)
 
 
 def bounds(order: Command, page_width: float = 1e9) -> Rect:
     """The rectangle around what an order puts, as the page is shown."""
-    if isinstance(order, Foreign):
+    if isinstance(order, Foreign | AddPicture):
         return order.rect
     if isinstance(order, AddNote):
         x, y = order.point
@@ -117,6 +118,9 @@ def _shifted(order: Command, dx: float, dy: float) -> Command:
         )
     if isinstance(order, AddShape):
         return replace(order, start=move(order.start), end=move(order.end))
+    if isinstance(order, AddPicture):
+        x0, y0, x1, y1 = order.rect
+        return replace(order, rect=(x0 + dx, y0 + dy, x1 + dx, y1 + dy))
     raise TypeError(f"it cannot be moved: {order!r}")
 
 
@@ -226,6 +230,18 @@ def _stretched(order: Command, fixed: Point, point: Point, old: Rect, page: Size
             return replace(order, start=(xs[0], ys[0]), end=(xs[1], ys[1]))
         return replace(order, start=(x0, y0), end=(x1, y1))
     old_width, old_height = old[2] - old[0], old[3] - old[1]
+    if isinstance(order, AddPicture):
+        # A picture keeps its shape: it grows as far as the corner dragged goes.
+        grow = max((x1 - x0) / max(old_width, 0.01), (y1 - y0) / max(old_height, 0.01))
+        grow = min(grow, page[0] / max(old_width, 0.01), page[1] / max(old_height, 0.01))
+        width, height = old_width * grow, old_height * grow
+        if min(width, height) < MIN_SIDE:
+            return None
+        left = fixed[0] if right else fixed[0] - width
+        top = fixed[1] if below else fixed[1] - height
+        left = max(0.0, min(page[0] - width, left))
+        top = max(0.0, min(page[1] - height, top))
+        return replace(order, rect=(left, top, left + width, top + height))
     if isinstance(order, AddInk):
         # A stroke that is a flat line has no height to stretch: it only moves.
         scale_x = (x1 - x0) / old_width if old_width >= 0.01 else 1.0

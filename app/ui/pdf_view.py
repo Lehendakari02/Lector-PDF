@@ -53,8 +53,26 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.core import arrange, bookmarks, doc_links, drawing, margins, notes, pen, places, sheets
-from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE, new_name
+from app.core import (
+    arrange,
+    bookmarks,
+    doc_links,
+    drawing,
+    margins,
+    notes,
+    pen,
+    pictures,
+    places,
+    sheets,
+)
+from app.core.commands import (
+    HIGHLIGHT,
+    MARKUP_KINDS,
+    STRIKEOUT,
+    UNDERLINE,
+    Together,
+    new_name,
+)
 from app.core.doc_links import DocLink
 from app.core.document import PageSize, PdfDocument
 from app.core.drawing import ARROW, BOX, DRAW, ERASER, INK, OVAL, SHAPE_TOOL, PageDrawing
@@ -125,7 +143,9 @@ AUTOSCROLL_MS = 40  # while dragging a selection past the edge of the window
 # What can be held in hand: a marker, the notes, the text, the pen, the shapes
 # or the eraser.
 STAMP_TOOL = "stamp"  # a mark or a stamp goes where the page is clicked
-TOOLS = (*MARKUP_KINDS, NOTE, TEXT_BOX, DRAW, SHAPE_TOOL, ERASER, STAMP_TOOL)
+SIGN_TOOL = "sign"  # one's signature (or initials) goes where the page is clicked
+TOOLS = (*MARKUP_KINDS, NOTE, TEXT_BOX, DRAW, SHAPE_TOOL, ERASER, STAMP_TOOL, SIGN_TOOL)
+DATE_SIZE = 10.0  # points: the date put under a signature
 ERASER_REACH = 5.0  # screen units around the pointer that the eraser takes
 PICK_REACH = 4.0  # screen units around the pointer that count as on a drawing
 HANDLE_SIZE = 9.0  # side of the little squares that resize, in screen units
@@ -508,6 +528,11 @@ class PdfView(QAbstractScrollArea):
         self.my_data_items = lambda: []
         self.text_to_put = ""  # put as it is where the text tool clicks next (a datum)
         self.stamp: Stamp | None = None  # what the stamp tool puts
+        # What the signing tool puts: the picture, how it is called and how
+        # wide it goes, and the date written under it ("" for none).
+        self.picture_in_hand: tuple[bytes, str, float] | None = None
+        self.date_under = ""
+        self.signed_by_hand = False  # a signature was put since it was opened
         self.stamp_size = 12.0
         self._asked_notes: set[int] = set()
         # Where one is being written: a panel, or the page itself for a text.
@@ -2817,6 +2842,50 @@ class PdfView(QAbstractScrollArea):
         self.clear_selection()
         self.set_markup_tool(STAMP_TOOL if stamp is not None else "")
 
+    def use_picture(
+        self, png: bytes | None, description: str = "", width: float = 140.0, date: str = ""
+    ) -> None:
+        """Take one's signature or initials in hand (None: leave it): the next
+        click puts it, with ``date`` written under it."""
+        self.picture_in_hand = (png, description, width) if png else None
+        self.date_under = date if png else ""
+        self.clear_selection()
+        self.set_markup_tool(SIGN_TOOL if png else "")
+
+    def put_picture(self, page: int, x: float, y: float) -> bool:
+        """The picture in hand, centred at a point of the page as shown (kept
+        inside the page), and the date under it if wanted. One change."""
+        if self.picture_in_hand is None or not 0 <= page < self.page_count:
+            return False
+        png, description, width = self.picture_in_hand
+        size = self._sizes[page]
+        width = min(width, size.width)
+        try:
+            x0, y0, x1, y1 = pictures.fitted(png, x, y, width)
+        except Exception:
+            return False
+        dx = max(-x0, min(size.width - x1, 0.0))
+        dy = max(-y0, min(size.height - y1, 0.0))
+        rect = (x0 + dx, y0 + dy, x1 + dx, y1 + dy)
+        order = pictures.AddPicture(page, rect, png, new_name(), description)
+        if self.date_under:
+            top = min(rect[3] + 2, size.height - DATE_SIZE * 1.4)
+            date = notes.new_text_box(
+                page,
+                (max(0.0, rect[0]), max(0.0, top)),
+                self.date_under,
+                notes.SANS,
+                DATE_SIZE,
+                (0.1, 0.1, 0.1),
+                0.0,
+                False,
+            )
+            order = Together((order, date))
+        if not self._do(order):
+            return False
+        self.signed_by_hand = True
+        return True
+
     def put_stamp(self, stamp: Stamp, page: int, x: float, y: float) -> bool:
         """A mark or a stamp centred at a point of the page as shown."""
         if not 0 <= page < self.page_count or self._document is None:
@@ -3203,6 +3272,13 @@ class PdfView(QAbstractScrollArea):
             if point is not None and self.stamp is not None:
                 self.clear_selection()
                 self.put_stamp(self.stamp, *point)
+            return
+        if self._markup_tool == SIGN_TOOL:
+            point = self._point_on_page(position)
+            if point is not None and self.picture_in_hand is not None:
+                self.clear_selection()
+                if self.put_picture(*point):
+                    self.use_picture(None)  # one signature per click on the button
             return
         if self._markup_tool in (DRAW, SHAPE_TOOL):
             point = self._point_on_page(position)
@@ -3608,7 +3684,7 @@ class PdfView(QAbstractScrollArea):
 
     def _update_pointer(self, position: QPoint) -> None:
         """A hand over a note, a cross to put one, an I-beam over text, an arrow elsewhere."""
-        if self._markup_tool == STAMP_TOOL:
+        if self._markup_tool in (STAMP_TOOL, SIGN_TOOL):
             on_page = self._point_on_page(position) is not None
             shape = Qt.CursorShape.CrossCursor if on_page else Qt.CursorShape.ArrowCursor
             self.viewport().setCursor(shape)
@@ -3735,6 +3811,8 @@ class PdfView(QAbstractScrollArea):
                     if item.kind in MARKUP_KINDS
                     else self.tr("Borrar el dibujo")
                     if item.kind == INK
+                    else self.tr("Borrar la firma")
+                    if item.kind == drawing.PICTURE
                     else self.tr("Borrar la anotación")
                     if item.kind == OTHER
                     else self.tr("Borrar la forma")

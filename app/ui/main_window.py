@@ -50,6 +50,7 @@ from app.core import (
     my_signature,
     ocr,
     pen,
+    pictures,
     save_checks,
     save_settings,
     saving,
@@ -132,7 +133,7 @@ from app.ui.margin_dialog import remembered as remembered_margin
 from app.ui.my_data_dialog import MyDataDialog, datum_names
 from app.ui.page_box import PageBox
 from app.ui.password_dialog import PasswordDialog
-from app.ui.pdf_view import PdfView
+from app.ui.pdf_view import SIGN_TOOL, PdfView
 from app.ui.print_dialog import PrintChoices, PrintDialog
 from app.ui.print_run import PrintRun
 from app.ui.recognize_again_dialog import RecognizeAgainDialog
@@ -152,6 +153,13 @@ from app.ui.versions_dialog import RESTORE, VIEW, VersionsDialog
 from app.ui.when import when_text
 from app.ui.zoom_control import ZoomControl
 
+
+def signed_name(path: Path) -> Path:
+    """The name proposed for a document just signed: "contrato-firmado.pdf"."""
+    return path.with_name(f"{path.stem}-firmado.pdf")
+
+
+DATE_SETTING = "firma/fecha"  # whether the date is written under the signature
 # Big enough to press comfortably with a finger on a touch screen.
 MIN_BUTTON_HEIGHT = 40
 # The row with the menu, the modes and the search box is a little lower.
@@ -353,6 +361,10 @@ class MainWindow(QMainWindow):
         self.signature_answer: bytes | None = None
         self.forget_signature_answer: bool | None = None
         self.signature_menu: QMenu | None = None
+        # For the tests: "copy", "same" or "" (cancel) when saving what was just
+        # signed, and what the "Guardar como" window answers, given its suggestion.
+        self.signed_save_answer: str | None = None
+        self.save_as_answer = None
         self.new_stamp_answer: str | None = None  # the tests answer without asking
         self._saving_to_close: list[DocumentPage] = []  # being saved before closing
         self._after_saving = None  # what to do once they are all saved
@@ -1751,6 +1763,9 @@ class MainWindow(QMainWindow):
         stamping = self.feature_actions["stamps"]
         stamping.setCheckable(True)
         stamping.setChecked(view.markup_tool == "stamp")
+        signing = self.feature_actions["sign_drawn"]
+        signing.setCheckable(True)
+        signing.setChecked(view.markup_tool == SIGN_TOOL)
         typing = self.feature_actions["type_text"]
         typing.setCheckable(True)
         typing.setChecked(view.markup_tool == TEXT_BOX)
@@ -2065,7 +2080,41 @@ class MainWindow(QMainWindow):
         if not page.view.modified:
             self.statusBar().showMessage(self.tr("No hay cambios que guardar."), STATUS_MESSAGE_MS)
             return False
+        if (
+            page.view.signed_by_hand
+            and page is self.current_document
+            and not page.path.stem.lower().endswith("-firmado")
+        ):
+            # Just signed: a copy "-firmado" keeps the original as it was.
+            page.view.signed_by_hand = False  # asked once
+            choice = self._signed_save_choice(page)
+            if choice is None:
+                page.view.signed_by_hand = True
+                return False
+            if choice == "copy":
+                return self.save_document_as(suggested=signed_name(page.path))
         return self._save_checked(page)
+
+    def _signed_save_choice(self, page: DocumentPage) -> str | None:
+        """ "copy" (a new file "-firmado"), "same" (this file) or None (cancel)."""
+        if self.signed_save_answer is not None:
+            return self.signed_save_answer or None
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle(self.tr("Guardar el documento firmado"))
+        box.setText(
+            self.tr(
+                "Acabas de firmar «{0}». ¿Lo guardas como un archivo nuevo, «{1}», para "
+                "que el original quede como estaba?"
+            ).format(page.path.name, signed_name(page.path).name)
+        )
+        copy = box.addButton(self.tr("Guardar como «-firmado»"), QMessageBox.ButtonRole.AcceptRole)
+        same = box.addButton(self.tr("Guardar en el mismo"), QMessageBox.ButtonRole.DestructiveRole)
+        box.addButton(self.tr("Cancelar"), QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(copy)
+        box.exec()
+        clicked = box.clickedButton()
+        return "copy" if clicked is copy else "same" if clicked is same else None
 
     def _save_checked(self, page: DocumentPage) -> bool:
         """Save a document in its own file, unless something deserves asking first.
@@ -2159,7 +2208,9 @@ class MainWindow(QMainWindow):
             return SAVE_AS
         return SAVE_HERE if clicked is here else CANCEL
 
-    def save_document_as(self, target: str | Path | None = None) -> bool:
+    def save_document_as(
+        self, target: str | Path | None = None, suggested: Path | None = None
+    ) -> bool:
         """Save the document in front as another file and go on working in that one.
 
         Without ``target`` the user is asked where. Returns True if the saving
@@ -2173,10 +2224,17 @@ class MainWindow(QMainWindow):
         if page.view.saving:
             return False
         if target is None:
-            suggested = page.path.with_name(self.tr("{0} - copia.pdf").format(page.path.stem))
-            chosen, _filter = QFileDialog.getSaveFileName(
-                self, self.tr("Guardar como"), str(suggested), self.tr("Documentos PDF (*.pdf)")
-            )
+            if suggested is None:
+                suggested = page.path.with_name(self.tr("{0} - copia.pdf").format(page.path.stem))
+            if self.save_as_answer is not None:
+                chosen = self.save_as_answer(suggested)
+            else:
+                chosen, _filter = QFileDialog.getSaveFileName(
+                    self,
+                    self.tr("Guardar como"),
+                    str(suggested),
+                    self.tr("Documentos PDF (*.pdf)"),
+                )
             if not chosen:
                 return False
             target = chosen
@@ -3542,12 +3600,65 @@ class MainWindow(QMainWindow):
             my_signature.forget(self.signature_folder, kind)
         return bool(sure)
 
+    @property
+    def date_with_signature(self) -> bool:
+        """Whether today's date is written under the signature (yes, unless said)."""
+        return self.settings.get(DATE_SETTING) is not False
+
+    def put_signature(self, kind: str = my_signature.SIGNATURE) -> bool:
+        """Take the signature (or the initials) in hand: a click puts it."""
+        view = self.pdf_view
+        png = self.saved_signature(kind)
+        if view.page_count == 0 or png is None:
+            return False
+        initials = kind == my_signature.INITIALS
+        date = "" if initials or not self.date_with_signature else stamps.Stamp(stamps.TODAY).text()
+        view.use_picture(
+            png,
+            self.tr("Iniciales") if initials else self.tr("Firma"),
+            pictures.INITIALS_WIDTH if initials else pictures.SIGNATURE_WIDTH,
+            date,
+        )
+        self.statusBar().showMessage(
+            self.tr(
+                "Haz clic donde va. Después puedes moverla y cambiar su tamaño (Esc: dejarlo)."
+            ),
+            STATUS_MESSAGE_MS,
+        )
+        self._refresh_edit_actions()
+        return True
+
     def show_signature(self) -> QMenu | None:
-        """«Firmar»: the first time, make the signature; then a menu with it."""
+        """«Firmar»: the first time, make the signature; then put it with a click."""
+        view = self.pdf_view
+        if view.markup_tool == SIGN_TOOL:
+            view.use_picture(None)  # pressed again: leave it
+            self._refresh_edit_actions()
+            return None
         if self.saved_signature(my_signature.SIGNATURE) is None:
-            self.make_signature(my_signature.SIGNATURE)
+            if self.make_signature(my_signature.SIGNATURE) and view.page_count:
+                self.put_signature()
             return None
         menu = QMenu(self)
+        opened = view.page_count > 0
+        for kind, put in (
+            (my_signature.SIGNATURE, self.tr("Poner mi firma")),
+            (my_signature.INITIALS, self.tr("Poner mis iniciales")),
+        ):
+            saved = self.saved_signature(kind)
+            if saved is None:
+                continue
+            action = menu.addAction(put)
+            picture = QPixmap()
+            picture.loadFromData(saved, "PNG")
+            action.setIcon(QIcon(picture))
+            action.setEnabled(opened)
+            action.triggered.connect(lambda _checked=False, k=kind: self.put_signature(k))
+        dated = menu.addAction(self.tr("Poner la fecha de hoy debajo de la firma"))
+        dated.setCheckable(True)
+        dated.setChecked(self.date_with_signature)
+        dated.toggled.connect(lambda on: self.settings.set(DATE_SETTING, bool(on)))
+        menu.addSeparator()
         for kind, change, make, forget in (
             (
                 my_signature.SIGNATURE,
@@ -3563,17 +3674,13 @@ class MainWindow(QMainWindow):
             ),
         ):
             saved = self.saved_signature(kind)
-            action = menu.addAction(change if saved else make)
-            if saved:
-                picture = QPixmap()
-                picture.loadFromData(saved, "PNG")
-                action.setIcon(QIcon(picture))
-            action.triggered.connect(lambda _checked=False, k=kind: self.make_signature(k))
+            menu.addAction(change if saved else make).triggered.connect(
+                lambda _checked=False, k=kind: self.make_signature(k)
+            )
             if saved:
                 menu.addAction(forget).triggered.connect(
                     lambda _checked=False, k=kind: self.forget_signature(k)
                 )
-            menu.addSeparator()
         self.signature_menu = menu  # the tests pick from it
         menu.popup(QCursor.pos())
         return menu
