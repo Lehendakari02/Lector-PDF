@@ -141,7 +141,13 @@ FEATURES: list[Feature] = [
         "mostrar esconder limpio ver quitar original",
     ),
     _f("bookmark", STUDY, "Marcador", "Marcar esta página para volver a ella", "favorito señal"),
-    _f("go_to_article", STUDY, "Ir a artículo", "Saltar a un artículo o apartado", "saltar número"),
+    _f(
+        "go_to_article",
+        STUDY,
+        "Ir a artículo",
+        "Saltar a un artículo, apartado o capítulo escribiendo su número («art. 14», «3.2»)",
+        "saltar número apartado capítulo título sección disposición ley boe tema",
+    ),
     _f(
         "ocr",
         STUDY,

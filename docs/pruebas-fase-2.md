@@ -572,3 +572,18 @@ Con un documento abierto, en el modo Estudiar.
    de colores encima).
 5. Resalta algo nuevo o borra algo: la lista cambia sola en un momento.
 6. En un documento sin nada, el panel explica que lo que subrayes saldrá ahí.
+
+## Fase 2C – Tarea 2.21 – Saltar a un artículo o apartado
+
+1. Abre la Constitución (o una ley del BOE). Pulsa **Ctrl+G**, escribe
+   `art. 14` y pulsa Intro: el artículo 14 queda arriba de la pantalla, no
+   la línea del índice.
+2. Prueba también `artículo 149`, `capítulo II`, `título preliminar`,
+   `disposición transitoria quinta` y `DA 1`.
+3. En un temario con apartados numerados, escribe `3.2`: va al apartado 3.2.
+4. Escribe un número solo, por ejemplo `14`: va a la página 14, como antes.
+5. Escribe `capítulo primero` varias veces seguidas: cada vez va al
+   siguiente capítulo primero (de otro título) y, tras el último, al primero.
+6. Escribe `art. 900`: abajo pone que no lo encuentra y no se mueve.
+7. En el modo **Estudiar**, el botón **Ir a artículo** (o Ctrl+K → "artículo")
+   deja la casilla lista para escribir.

@@ -53,7 +53,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.core import arrange, drawing, notes, pen, sheets
+from app.core import arrange, drawing, notes, pen, places, sheets
 from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
 from app.core.document import PageSize, PdfDocument
 from app.core.drawing import ARROW, BOX, DRAW, ERASER, INK, OVAL, SHAPE_TOOL, PageDrawing
@@ -79,6 +79,7 @@ SIDE_MARGIN = 16
 MIN_ZOOM = 0.2  # screen pixels per point, before the screen scale
 MAX_ZOOM = 8.0
 ZOOM_STEP = 1.2
+PLACE_MARGIN = 24  # space left above a heading gone to, in Qt units
 WRITING_WAIT_S = 3.0  # longest wait for the text being written to become a change
 WHEEL_NOTCH = 120  # what one notch of a mouse wheel sends
 # A document opens fitted to the width, but never bigger than this (1.0 = 100 %):
@@ -300,6 +301,9 @@ class PdfView(QAbstractScrollArea):
     pen_seen_changed = Signal()  # a pen touched a page for the first time
     annotations_listed = Signal(object)  # every annotation of the document (list of Entry)
     _annotations_ready = Signal(int, object)
+    # An article or section looked for (``go_to_place``): whether it was found.
+    place_answered = Signal(bool)
+    _place_ready = Signal(int, object)
     annotations_shown_changed = Signal(bool)  # what was put on the pages is seen, or hidden
     # The annotation copied last, for every document: the order that puts it.
     copied = None
@@ -382,10 +386,15 @@ class PdfView(QAbstractScrollArea):
             on_reading=self.reading_ready.emit,
             on_reading_failed=self.reading_failed.emit,
             on_annotations=self._annotations_ready.emit,
+            on_place=self._place_ready.emit,
         )
         self._list_id = 0
         self._pick_when_read: tuple[int, str] | None = None
         self._annotations_ready.connect(self._annotations_came)
+        self._place_ready.connect(self._place_came)
+        self._place_asked: tuple[int, places.Wanted] | None = None
+        # The place found last, (wanted, page, letter): the same text again goes on.
+        self._place_shown: tuple[places.Wanted, int, int] | None = None
         self.scanned_pages: list[int] = []  # known once the helper has looked
         self.recognised_pages: list[int] = []  # scans that already have their text
         self.scanned_known = False  # whether it has looked at every page
@@ -693,6 +702,7 @@ class PdfView(QAbstractScrollArea):
         self._sent_sketches.clear()
         self._settling.clear()
         self._latest.clear()
+        self._place_shown = None  # its page may have moved
         self._grab = None
         self.pick(None)
         self.close_note_panel()
@@ -784,6 +794,7 @@ class PdfView(QAbstractScrollArea):
             self._annotations_shown = True
             self.annotations_shown_changed.emit(True)
         self._changes = self._saved_changes = 0
+        self._place_asked = self._place_shown = None
         self._saves.clear()
         self.journal = None
         self._stale.clear()
@@ -922,6 +933,40 @@ class PdfView(QAbstractScrollArea):
     def _annotations_came(self, list_id: int, entries: object) -> None:
         if list_id == self._list_id and self._document is not None:
             self.annotations_listed.emit(list(entries))
+
+    def go_to_place(self, typed: str) -> bool:
+        """Go to an article, a section, a chapter… written as people write it
+        ("art. 14", "3.2", "capítulo II"). False if the text is not one.
+
+        The answer comes through ``place_answered``. The same text again goes
+        on to the next place with that number (a second law in the document).
+        """
+        wanted = places.parse_wanted(typed)
+        if wanted is None or self._document is None:
+            return False
+        after = None
+        if self._place_shown is not None and self._place_shown[0] == wanted:
+            after = self._place_shown[1:]
+        self._place_asked = (self.service.find_place(wanted, after), wanted)
+        return True
+
+    def _place_came(self, place_id: int, place: object) -> None:
+        asked, self._place_asked = self._place_asked, None
+        if asked is None or asked[0] != place_id or self._document is None:
+            if asked is not None and asked[0] != place_id:
+                self._place_asked = asked  # an older answer: still waiting
+            return
+        if place is None or not 0 <= place.page < self.page_count:
+            self.place_answered.emit(False)
+            return
+        self._place_shown = (asked[1], place.page, place.letter)
+        rect = self._shown_rect(place.page, place.rect)
+        zoom = self._render_zoom()
+        top = self._tops[place.page] + rect[1] * zoom
+        margin = self._to_pixels(PLACE_MARGIN)
+        self.verticalScrollBar().setValue(self._to_units(top - margin))
+        self._bring_into_view(place.page, rect, rect)  # sideways, with a lot of zoom
+        self.place_answered.emit(True)
 
     def show_annotation(self, page: int, rect, name: str = "") -> None:
         """Bring an annotation into view (``rect`` as the page is shown) and

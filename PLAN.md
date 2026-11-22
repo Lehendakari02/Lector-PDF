@@ -929,7 +929,7 @@ Notas de la Fase 2A:
 | 2.19a | Textos tras la prueba del 16/11: moverlos después de ponerlos, A+ a la izquierda y A− a la derecha, sin fondo blanco al cambiarlos | Encajo un texto entre líneas del temario, lo muevo a su sitio y no tapa nada | ✅ |
 | 2.19b | Elegir cualquier cosa con un clic (también con una herramienta en la mano) y borrarla con Supr | Hago clic en un subrayado, un dibujo o un texto y Supr lo borra | ✅ |
 | 2.19c | Cambiar el color de lo ya puesto (subrayados, dibujos, formas, textos, notas) | Cambio un resaltado amarillo a verde sin borrarlo y hacerlo otra vez | ✅ |
-| 2.19d | Arreglos de la revisión de la Fase 2: páginas giradas, texto a medio escribir, "Cambios sin guardar" tras guardar, lo borrado sigue en el archivo | Subrayo bien en una página guardada de lado y no pierdo un texto a medio escribir al cerrar | 🔶 |
+| 2.19d | Arreglos de la revisión de la Fase 2: páginas giradas, texto a medio escribir, "Cambios sin guardar" tras guardar, lo borrado sigue en el archivo | Subrayo bien en una página guardada de lado y no pierdo un texto a medio escribir al cerrar | ✅ |
 
 Notas de la Fase 2B:
 - **2.15: detectar escaneados y ofrecer "Reconocer texto" (16/11/2026).**
@@ -1040,7 +1040,7 @@ Ordenadas por uso diario.
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
 | 2.20 | Panel de anotaciones filtrable por color | Veo todos mis subrayados de un color y salto a cada uno | ✅ |
-| 2.21 | Saltar a artículo, apartado o sección por su número | Escribo "art. 14" o "3.2" en cualquier documento y me lleva allí | ⬜ |
+| 2.21 | Saltar a artículo, apartado o sección por su número | Escribo "art. 14" o "3.2" en cualquier documento y me lleva allí | 🔶 |
 | 2.22 | Marcadores propios | Marco artículos clave y vuelvo a ellos con un clic | ⬜ |
 | 2.23 | Modo repaso | Lo subrayado se tapa y lo descubro al hacer clic | ⬜ |
 | 2.24 | Márgenes ampliables | Añado margen a una página y escribo en él; se ve igual en Edge y Adobe | ⬜ |
@@ -1068,6 +1068,23 @@ Notas de la Fase 2C:
     las tres pestañas; se puede estrechar arrastrando su borde.
   - Lo lee el ayudante de una vez (`core/annotation_list.py`); en un PDF de
     cientos de páginas solo se abren las que tienen anotaciones.
+- **2.21: saltar a un artículo o apartado (22/11/2026).**
+  - Se escribe en la casilla de la página (abajo, Ctrl+G) o con "Ir a
+    artículo" (modo Estudiar, Ctrl+K). Un número solo sigue siendo una página.
+  - Entiende "art. 14", "artículo 14 bis", "artículo único", "3.2" o
+    "apartado 3", y "capítulo II" (o "2", o "segundo"), "título preliminar",
+    "sección 1.ª", "disposición adicional primera" (o "DA 1"), "anexo",
+    "tema 5", "libro", "parte"…
+  - Busca el título al principio de una línea, que es donde están: "Artículo
+    14." en el BOE, "3.2. Los derechos" en un temario. No se queda en el
+    índice (líneas con puntos o con el número de página al final) ni en una
+    frase que lo cita ("según el artículo 14"), salvo que no haya otra cosa.
+  - Pone el título arriba de la pantalla. Escribir lo mismo otra vez lleva al
+    siguiente con ese número (otra ley dentro del mismo documento) y, tras el
+    último, vuelve al primero. Si no está, lo dice abajo.
+  - Lo busca el ayudante, página a página, sin parar el dibujo
+    (`core/places.py`). Necesita el texto del documento: en un escaneado,
+    primero "Reconocer texto".
 
 ## Fase 3 – Rellenar y firma manuscrita
 | # | Tarea | Terminado cuando… | Estado |

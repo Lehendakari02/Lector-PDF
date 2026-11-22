@@ -264,6 +264,9 @@ class MainWindow(QMainWindow):
         self.statusBar().setSizeGripEnabled(True)
         self.page_box = PageBox(self.pdf_view)
         self.page_box.go_to.connect(lambda: self.pdf_view.setFocus())
+        self.page_box.told.connect(
+            lambda text: self.statusBar().showMessage(text, STATUS_MESSAGE_MS)
+        )
         self.speed_label = QLabel()
         self.speed_label.setObjectName("speedLabel")
         self.speed_label.setVisible(running_from_source_or_test_build())
@@ -298,6 +301,7 @@ class MainWindow(QMainWindow):
             "rotate_view": lambda: self.pdf_view.rotate_view(),
             "fullscreen": self.toggle_full_screen,
             "go_to_page": self.go_to_page,
+            "go_to_article": lambda: self.go_to_page(place=True),
             "copy": self.copy,
             "thumbnails": lambda: self.toggle_side_panel(Tab.THUMBNAILS),
             "outline": lambda: self.toggle_side_panel(Tab.OUTLINE),
@@ -3144,14 +3148,15 @@ class MainWindow(QMainWindow):
     def _update_position(self, *_args: object) -> None:
         self.page_box.refresh()
 
-    def go_to_page(self) -> None:
-        """Put the cursor in the page number of the status bar."""
+    def go_to_page(self, place: bool = False) -> None:
+        """Put the cursor in the page number of the status bar (where an
+        article or a section can be written too, ``place``)."""
         if self.pdf_view.page_count == 0:
             self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
             return
         if self._full_screen:
             self.set_full_screen(False)  # the page number lives in the status bar
-        self.page_box.start()
+        self.page_box.start(place)
 
     # ---- full screen ----------------------------------------------------
 
