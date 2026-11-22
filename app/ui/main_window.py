@@ -369,6 +369,7 @@ class MainWindow(QMainWindow):
             "beside": self.toggle_beside,
             "library": self.show_library,
             "link": self.link_selection,
+            "fill_form": self.fill_form,
             "margins": self.add_margin,
             "undo": self.undo,
             "redo": self.redo,
@@ -2687,6 +2688,8 @@ class MainWindow(QMainWindow):
             )
         )
         view.edit_failed.connect(self._edit_failed)
+        view.form_found.connect(lambda p=page: self._form_found(p))
+        view.field_refused.connect(lambda why: self.statusBar().showMessage(why, STATUS_MESSAGE_MS))
         view.link_wanted.connect(lambda area, words, p=page: self._link_asked(p, area, words))
         view.doc_link_clicked.connect(lambda link, p=page: self.follow_doc_link(p, link))
         self.pages.addWidget(page)
@@ -3209,6 +3212,36 @@ class MainWindow(QMainWindow):
             return
         if wanted is not None and wanted is not self.current_document:
             self.document_tabs.setCurrentIndex(self.documents.index(wanted))
+
+    # ---- forms ------------------------------------------------------------------
+
+    def fill_form(self) -> bool:
+        """ "Rellenar campos": the keyboard goes to the first field of the form."""
+        view = self.pdf_view
+        if view.page_count == 0:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return False
+        if view.focus_field(+1) is None:
+            self.statusBar().showMessage(
+                self.tr("Este documento no tiene campos de formulario en las páginas que se ven."),
+                STATUS_MESSAGE_MS,
+            )
+            return False
+        self.statusBar().showMessage(
+            self.tr("Escribe y pulsa Tab para pasar al siguiente campo; Esc para terminar."),
+            STATUS_MESSAGE_MS,
+        )
+        return True
+
+    def _form_found(self, page: DocumentPage) -> None:
+        if page is self.current_document:
+            self.statusBar().showMessage(
+                self.tr(
+                    "Este documento es un formulario: haz clic en un campo para rellenarlo "
+                    "(Tab pasa al siguiente)."
+                ),
+                STATUS_MESSAGE_MS,
+            )
 
     # ---- links between documents ---------------------------------------------
 

@@ -1262,7 +1262,7 @@ Notas de la Fase 2C:
 ## Fase 3 – Rellenar y firma manuscrita
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
-| 3.1 | Rellenar formularios PDF | Relleno un formulario oficial y se ve bien en otros lectores | ⬜ |
+| 3.1 | Rellenar formularios PDF | Relleno un formulario oficial y se ve bien en otros lectores | 🔶 |
 | 3.2 | Escribir en PDFs sin campos | Escribo mis datos encima de un documento escaneado | ⬜ |
 | 3.3 | Mis datos (nombre, DNI, dirección…) | Pongo mi DNI en un formulario con un clic | ⬜ |
 | 3.4 | Sellos y marcas rápidas (✓, ✗, fecha, sellos propios) | Marco casillas de un documento sin campos | ⬜ |
@@ -1270,6 +1270,29 @@ Notas de la Fase 2C:
 | 3.6 | Firmar con un clic: colocar, mover, redimensionar, fecha automática | Firmo un contrato en segundos | ⬜ |
 | 3.7 | Iniciales en todas las páginas | Con un clic pongo iniciales en todas las hojas | ⬜ |
 | 3.8 | Versión 0.5 | — | ⬜ |
+
+Notas de la Fase 3:
+- **3.1: rellenar formularios PDF (22/11/2026).**
+  - Al abrir un formulario lo dice en la barra de abajo. Los campos se ven con
+    un tono azul claro para saber dónde rellenar (`PdfView.highlight_fields`).
+  - **Clic en un campo de texto:** se escribe encima, con letras de su tamaño.
+    Intro lo guarda; **Tab** lo guarda y pasa al siguiente (Mayús+Tab, al
+    anterior); Esc lo deja como estaba; un clic fuera también lo guarda. En
+    los de varias líneas, Intro es salto de línea y Ctrl+Intro termina.
+  - **Casillas** y **opciones redondas:** un clic las marca o desmarca.
+    **Desplegables y listas:** un clic muestra las opciones ("Dejar en
+    blanco" para vaciar un desplegable). Los desplegables que admiten texto
+    propio se escriben, con sugerencias.
+  - Solo con el teclado: **Rellenar campos** (modo Rellenar y firmar, o
+    Ctrl+K) lleva al primer campo; Tab recorre todos y Espacio marca o
+    despliega.
+  - Los campos de solo lectura no se cambian (lo dice al pulsarlos).
+  - Cada campo rellenado es una orden (`core/forms.py`, `FillField`): se
+    deshace, va al diario y lo que se está escribiendo entra en el borrador
+    del diario cada pocos segundos. Se guarda como formulario PDF estándar y
+    el aspecto del campo se dibuja de nuevo, así que Adobe y Edge lo ven.
+  - Fuera por ahora: campos de firma (Fase 4), botones, cálculos y
+    JavaScript de los formularios.
 
 ## Fase 4 – Firma con certificado digital
 | # | Tarea | Terminado cuando… | Estado |
