@@ -177,6 +177,12 @@ def test_the_summary_takes_the_note_being_written_and_opens(window, marked, wait
     wait_until(lambda: window.pdf_view.document_path == tmp_path / "resumen.pdf")
     wait_until(lambda: 0 in window.pdf_view._texts)
     assert "escrita a medias" in window.pdf_view._texts[0].chars
+    # Made again while the first one is open: that tab is replaced, not left stale.
+    window.document_tabs.setCurrentIndex(0)
+    count = len(window.documents)
+    assert window.export_summary()
+    wait_until(lambda: window.pdf_view.document_path == tmp_path / "resumen.pdf")
+    assert len(window.documents) == count
 
 
 def test_no_summary_without_a_document_or_over_it(window, marked, tmp_path):

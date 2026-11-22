@@ -69,3 +69,14 @@ def test_the_work_is_done_in_another_process_and_can_be_stopped(tmp_path, sample
     work = LibraryWork(topics * 50, "a")
     work.stop()
     assert work.finished
+
+
+def test_a_huge_folder_is_not_walked_to_the_end(tmp_path):
+    (tmp_path / "Tema 1.pdf").write_bytes(b"%PDF-1.4")
+    deep = tmp_path / "muy" / "lejos"
+    deep.mkdir(parents=True)
+    for index in range(30):
+        (deep / f"otro {index}.txt").write_text("x")
+    (deep / "Tema 9.pdf").write_bytes(b"%PDF-1.4")
+    assert [path.name for path in topics_in(tmp_path, most_entries=3)] == ["Tema 1.pdf"]
+    assert {path.name for path in topics_in(tmp_path)} == {"Tema 1.pdf", "Tema 9.pdf"}

@@ -110,7 +110,9 @@ ROMAN = {"i": 1, "v": 5, "x": 10, "l": 50, "c": 100, "d": 500, "m": 1000}
 _ARTICLE_TYPED = re.compile(r"^(?:articulos?|arts?\.?|a\.)\s*(.+)$")
 _ARTICLE_NUMBER = re.compile(r"^(\d+)\s*(?:\.\s*)?(" + "|".join(LATIN) + r")?\b")
 _SECTION_NUMBER = re.compile(r"^(\d+(?:\.\d+)+|\d+)\.?$")
-_CONTENTS_LINE = re.compile(r"(?:\.\s*){4,}|…{2,}|·{4,}|_{4,}|\s{2,}\d+\s*$|\.\s*\d+\s*$")
+# A number at the end after a point ("Introducción. 4") is a page of a table of
+# contents; a number inside a number ("3.2", "art. 3.1") is not.
+_CONTENTS_LINE = re.compile(r"(?:\.\s*){4,}|…{2,}|·{4,}|_{4,}|\s{2,}\d+\s*$|(?<!\d)\.\s*\d+\s*$")
 
 
 @dataclass(frozen=True)

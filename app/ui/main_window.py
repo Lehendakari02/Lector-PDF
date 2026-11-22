@@ -1776,6 +1776,17 @@ class MainWindow(QMainWindow):
                 self.tr("El resumen no puede ocupar el lugar del documento."),
             )
             return False
+        index = self.index_of_document(target)
+        if index >= 0 and self.documents[index].view.modified:
+            # A summary made before, still open, is replaced only when nothing is lost.
+            self._show_problem(
+                self.tr("Elige otro nombre"),
+                self.tr(
+                    "«{0}» está abierto y tiene cambios sin guardar: el resumen no puede "
+                    "ocupar su lugar."
+                ).format(target.name),
+            )
+            return False
         self.settings.set(
             SUMMARY_FORMAT_SETTING, "docx" if target.suffix.lower() == ".docx" else "pdf"
         )
@@ -1807,6 +1818,11 @@ class MainWindow(QMainWindow):
                 "empty": self.tr("Este documento no tiene nada subrayado ni anotado."),
             },
         )
+        index = self.index_of_document(target)
+        if index >= 0:
+            if self.documents[index].view.modified:
+                return  # changed since it was asked: it is not replaced
+            self._close_page(self.documents[index])  # the old summary, opened again below
         try:
             if target.suffix.lower() == ".docx":
                 write_docx(made, target)

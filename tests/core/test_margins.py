@@ -102,3 +102,17 @@ def test_sides_of_a_turned_page():
 def test_it_is_written_and_read_back_for_the_journal():
     order = AddMargin((0, 3), 10.0, 0.0, 5.5, "m")
     assert command_from_dict(order.to_dict()) == order
+
+
+def test_a_page_whose_boxes_come_from_the_page_tree_grows_too():
+    doc = pymupdf.open()
+    page = doc.new_page(width=400, height=600)
+    parent = int(doc.xref_get_key(page.xref, "Parent")[1].split()[0])
+    doc.xref_set_key(page.xref, "MediaBox", "null")
+    doc.xref_set_key(parent, "MediaBox", "[0 0 400 600]")
+    doc.xref_set_key(parent, "CropBox", "[0 0 400 600]")
+    margin = AddMargin((0,), 0.0, 100.0, 0.0, "m1")
+    margin.apply(doc)
+    assert doc[0].rect.width == pytest.approx(500)
+    margin.undo(doc)
+    assert doc[0].rect.width == pytest.approx(400)

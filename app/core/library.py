@@ -12,8 +12,10 @@ bit; it can be stopped at any time.
 
 from __future__ import annotations
 
+import collections
 import contextlib
 import multiprocessing
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,26 +25,43 @@ from app.core.search import DEFAULT_OPTIONS, SearchOptions, search_document
 FOLDER_SETTING = "biblioteca/carpeta"
 MOST_HITS_PER_DOCUMENT = 200  # more are not useful in a list: open the document
 MOST_DOCUMENTS = 2000  # a folder chosen by mistake (the whole disk) stops here
+MOST_ENTRIES = 50000  # files and folders looked at, at most (a few seconds at worst)
 
 
-def topics_in(folder: str | Path | None) -> list[Path]:
+def topics_in(folder: str | Path | None, most_entries: int | None = None) -> list[Path]:
     """The PDFs of a folder and its folders, in the order of their names
-    ("Tema 2" before "Tema 10"). Hidden folders and files are left out."""
+    ("Tema 2" before "Tema 10"). Hidden folders and files are left out.
+
+    A folder chosen by mistake (the whole disk) is not walked to the end: the
+    look stops after ``most_entries`` files and folders, so the window never
+    stays waiting."""
     if not folder:
         return []
     root = Path(folder)
+    most = MOST_ENTRIES if most_entries is None else most_entries
     found: list[Path] = []
-    try:
-        for path in root.rglob("*"):
-            if len(found) >= MOST_DOCUMENTS:
-                break
-            relative = path.relative_to(root)
-            if any(part.startswith((".", "~$")) for part in relative.parts):
-                continue
-            if path.suffix.lower() == ".pdf" and path.is_file():
-                found.append(path)
-    except OSError:
-        pass
+    looked = 0
+    waiting = collections.deque([root])  # the nearest folders first
+    while waiting and len(found) < MOST_DOCUMENTS and looked < most:
+        here = waiting.popleft()
+        try:
+            with os.scandir(here) as entries:
+                for entry in entries:
+                    looked += 1
+                    if looked > most:
+                        break
+                    if entry.name.startswith((".", "~$", "$")):
+                        continue
+                    try:
+                        if entry.is_dir(follow_symlinks=False):
+                            waiting.append(Path(entry.path))
+                        elif entry.name.lower().endswith(".pdf") and entry.is_file():
+                            found.append(Path(entry.path))
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+    found = found[:MOST_DOCUMENTS]
     return sorted(found, key=lambda path: natural_key(path.relative_to(root)))
 
 
@@ -165,6 +184,7 @@ class LibraryWork:
         self._process.start()
         sender.close()
         self.finished = False
+        self.completed = False  # it said "done": every topic was looked at
 
     def messages(self, most: int = 500) -> list[tuple]:
         found: list[tuple] = []
@@ -173,7 +193,7 @@ class LibraryWork:
                 message = self._connection.recv()
                 found.append(message)
                 if message[0] == "done":
-                    self.finished = True
+                    self.finished = self.completed = True
                     break
         except (EOFError, OSError):
             self.finished = True  # the process ended (or was stopped)

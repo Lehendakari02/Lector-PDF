@@ -56,14 +56,26 @@ def _set_names(doc, page, names: list[str]) -> None:
     doc.xref_set_key(page.xref, MARGINS_KEY, f"({' '.join(names)})" if names else "null")
 
 
+INHERITED = ("MediaBox", "CropBox")  # boxes a page can take from the page tree
+
+
 def _box(doc, page, key: str):
-    kind, value = doc.xref_get_key(page.xref, key)
-    if kind != "array":
-        return None
-    try:
-        return [float(n) for n in value.strip("[]").split()]
-    except ValueError:
-        return None
+    """A box of the page, or None. /MediaBox and /CropBox may be written once
+    for many pages, higher up in the page tree: then that one is the page's."""
+    xref, seen = page.xref, set()
+    while xref and xref not in seen:
+        seen.add(xref)
+        kind, value = doc.xref_get_key(xref, key)
+        if kind == "array":
+            try:
+                return [float(n) for n in value.strip("[]").split()]
+            except ValueError:
+                return None
+        if key not in INHERITED:
+            return None
+        kind, value = doc.xref_get_key(xref, "Parent")
+        xref = int(value.split()[0]) if kind == "xref" else 0
+    return None
 
 
 def _grow(doc, page, room: tuple[float, ...], sign: float) -> None:

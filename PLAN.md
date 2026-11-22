@@ -1085,6 +1085,7 @@ Ordenadas por uso diario.
 | 2.28 | Vista de dos documentos lado a lado | Veo el tema y la ley a la vez | ✅ |
 | 2.29 | Biblioteca del temario | Elijo mi carpeta de temas, busco en todos y veo mi progreso | ✅ |
 | 2.30 | Enlaces entre documentos (ver `CLAUDE.md`) | Desde el tema 5, un clic abre la Constitución al lado en el artículo 14; si muevo el archivo, el programa lo encuentra o me deja corregirlo | ✅ |
+| 2.31b | Arreglos de la revisión del código de la Fase 2C (todos los hallazgos) | Un enlace de otro programa a un archivo movido se corrige sin romperse | ✅ |
 | 2.31 | Versión 0.4 | — | 🔶 número 0.4.0 puesto (22/11/2026); falta que Julen cree la Release v0.4.0 |
 
 Notas de la Fase 2C:
@@ -1232,6 +1233,31 @@ Notas de la Fase 2C:
   - Limitación: si el documento se guarda con "Guardar como" en otra carpeta,
     la ruta relativa ya no vale; al pulsar el enlace se busca como un archivo
     movido.
+
+- **2.31b: arreglos de la revisión del código de la Fase 2C (22/11/2026).**
+  Revisión completa en los archivos del proyecto (`revision-codigo-fase-2c.md`).
+  - **A1:** corregir los enlaces a un archivo movido rompía los enlaces hechos
+    con otros programas cuando su acción es un objeto aparte (pasaban a ir a
+    «fitz: replace me!», y Deshacer no lo arreglaba). Ahora se cambia el
+    archivo donde esté. Cada enlace corregido lleva una marca con el nombre
+    del cambio (`/LectorPDFMended…`), y Deshacer solo vuelve atrás esos: los
+    que ya iban al archivo nuevo se quedan como estaban.
+  - **M1:** un margen en una página cuyas cajas (/MediaBox, /CropBox) vienen
+    del árbol de páginas no se veía: ahora se leen de ahí.
+  - **M2:** la altura de un enlace (/XYZ) se cuenta desde la parte de arriba
+    de la página según sus cajas, no desde su alto: con un margen abajo, Adobe
+    llevaba al sitio equivocado. En páginas guardadas de lado, solo la página.
+  - **M3:** buscar los temas de la carpeta de la biblioteca mira como mucho
+    50 000 archivos y carpetas (las más cercanas primero): una carpeta elegida
+    por error (el disco entero) ya no deja el programa parado.
+  - **B1:** la biblioteca actualiza cada tema sin recorrer la lista entera
+    (con 2000 temas se notaba). **B2:** un tema que rompe el proceso que los
+    lee se marca "No se puede abrir" y se sigue con los demás.
+  - **B3:** el borrador del diario solo se escribe cuando cambia lo escrito
+    (antes, cada 3 segundos aunque no cambiara). **B4:** una línea con solo
+    "3.2" es un título, no una línea del índice. **B5:** el resumen puede
+    sustituir a uno anterior abierto en una pestaña (se cierra y se vuelve a
+    abrir); si esa pestaña tiene cambios sin guardar, no lo pisa.
 
 ## Fase 3 – Rellenar y firma manuscrita
 | # | Tarea | Terminado cuando… | Estado |
