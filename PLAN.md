@@ -1263,8 +1263,8 @@ Notas de la Fase 2C:
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
 | 3.1 | Rellenar formularios PDF | Relleno un formulario oficial y se ve bien en otros lectores | ✅ |
-| 3.2 | Escribir en PDFs sin campos | Escribo mis datos encima de un documento escaneado | 🔶 |
-| 3.3 | Mis datos (nombre, DNI, dirección…) | Pongo mi DNI en un formulario con un clic | ⬜ |
+| 3.2 | Escribir en PDFs sin campos | Escribo mis datos encima de un documento escaneado | ✅ |
+| 3.3 | Mis datos (nombre, DNI, dirección…) | Pongo mi DNI en un formulario con un clic | 🔶 |
 | 3.4 | Sellos y marcas rápidas (✓, ✗, fecha, sellos propios) | Marco casillas de un documento sin campos | ⬜ |
 | 3.5 | Crear y guardar firma e iniciales (dibujar, escribir, importar imagen sin fondo) | Tengo mi firma guardada | ⬜ |
 | 3.6 | Firmar con un clic: colocar, mover, redimensionar, fecha automática | Firmo un contrato en segundos | ⬜ |
@@ -1301,6 +1301,21 @@ Notas de la Fase 3:
   - No hacía falta otra herramienta: tener dos "escribir" distintos
     confundiría. Si al probarlo con documentos reales falta algo (por ejemplo,
     que el texto se ajuste solo a la línea), se añade.
+- **3.3: Mis datos (22/11/2026).**
+  - Botón **Mis datos** (modo Rellenar y firmar). La primera vez pide los
+    datos: nombre, apellidos, DNI/NIE, fecha de nacimiento, dirección, código
+    postal, localidad, provincia, teléfono y correo. Se guardan solo en los
+    ajustes de este ordenador (`mis_datos`); nunca se envían. Se cambian con
+    "Editar mis datos…" (en ese menú o con Ctrl+K).
+  - El botón abre un menú: **"Rellenar el formulario con mis datos (N
+    campos)"** pone cada dato en los campos vacíos que lo piden, reconocidos
+    por su nombre ("D.N.I.", "N.I.F./N.I.E.", "Domicilio", "C.P.", "Nombre y
+    apellidos"…; `core/my_data.py`). Es un solo cambio: Ctrl+Z lo quita todo.
+    En los desplegables elige la opción que coincide ("bizkaia" → "Bizkaia").
+  - Cada dato del menú se puede poner suelto: en un PDF sin campos, se elige
+    y se hace clic donde va (queda como texto). Con clic derecho en un campo,
+    "Poner mis datos" ofrece cualquiera.
+  - Los campos que ya tienen algo no se tocan.
 
 ## Fase 4 – Firma con certificado digital
 | # | Tarea | Terminado cuando… | Estado |

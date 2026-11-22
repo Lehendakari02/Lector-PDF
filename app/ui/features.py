@@ -240,7 +240,21 @@ FEATURES: list[Feature] = [
         "Escribir en cualquier parte, también en documentos escaneados o sin campos",
         "texto escribir encima rellenar escaneado sin campos datos",
     ),
-    _f("my_data", FILL, "Mis datos", "Poner tu nombre, DNI o dirección con un clic", "personales"),
+    _f(
+        "my_data",
+        FILL,
+        "Mis datos",
+        "Poner tu nombre, DNI o dirección con un clic",
+        "mis datos personales nombre dni nie dirección teléfono correo rellenar",
+    ),
+    _f(
+        "my_data_edit",
+        FILL,
+        "Editar mis datos",
+        "Cambiar el nombre, DNI, dirección… que se guardan para los formularios",
+        "mis datos personales editar cambiar",
+        toolbar=False,
+    ),
     _f("stamps", FILL, "Sellos", "Marcas rápidas: ✓, ✗, fecha, sellos propios", "marca casilla"),
     _f("sign_drawn", FILL, "Firmar", "Poner tu firma manuscrita guardada", "firma rúbrica"),
     _f(
