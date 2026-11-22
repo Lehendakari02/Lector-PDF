@@ -925,7 +925,7 @@ Notas de la Fase 2A:
 | 2.16 | OCR en español en segundo plano (progreso, cancelar), enderezando la imagen, guardado como capa de texto estándar | Reconozco un tema escaneado, sigo leyendo mientras tanto, y luego busco en él también en Adobe | ✅ |
 | 2.17 | Rehacer el OCR de PDFs que ya traen uno malo (todo o páginas) | Un PDF con OCR malo pasa a buscarse bien | ✅ |
 | 2.18 | Buscador y subrayado probados con texto de OCR real; búsqueda aproximada opcional | Subrayo y busco en un escaneado igual que en un PDF del BOE | ✅ |
-| 2.19 | Versión 0.3 | Estudio un tema escaneado con el programa | 🔶 número 0.3.0 puesto (16/11/2026); falta que Julen cree la Release v0.3.0 y lo use con un tema escaneado |
+| 2.19 | Versión 0.3 | Estudio un tema escaneado con el programa | 🔶 Release v0.3.0 publicada (16/11/2026); falta usarla con un tema escaneado |
 | 2.19a | Textos tras la prueba del 16/11: moverlos después de ponerlos, A+ a la izquierda y A− a la derecha, sin fondo blanco al cambiarlos | Encajo un texto entre líneas del temario, lo muevo a su sitio y no tapa nada | ✅ |
 | 2.19b | Elegir cualquier cosa con un clic (también con una herramienta en la mano) y borrarla con Supr | Hago clic en un subrayado, un dibujo o un texto y Supr lo borra | ✅ |
 | 2.19c | Cambiar el color de lo ya puesto (subrayados, dibujos, formas, textos, notas) | Cambio un resaltado amarillo a verde sin borrarlo y hacerlo otra vez | ✅ |
@@ -1084,8 +1084,8 @@ Ordenadas por uso diario.
 | 2.27 | Exportar resumen (PDF o Word) | Saco un documento con todo lo subrayado, ordenado por página | ✅ |
 | 2.28 | Vista de dos documentos lado a lado | Veo el tema y la ley a la vez | ✅ |
 | 2.29 | Biblioteca del temario | Elijo mi carpeta de temas, busco en todos y veo mi progreso | ✅ |
-| 2.30 | Enlaces entre documentos (ver `CLAUDE.md`) | Desde el tema 5, un clic abre la Constitución al lado en el artículo 14; si muevo el archivo, el programa lo encuentra o me deja corregirlo | 🔶 |
-| 2.31 | Versión 0.4 | — | ⬜ |
+| 2.30 | Enlaces entre documentos (ver `CLAUDE.md`) | Desde el tema 5, un clic abre la Constitución al lado en el artículo 14; si muevo el archivo, el programa lo encuentra o me deja corregirlo | ✅ |
+| 2.31 | Versión 0.4 | — | 🔶 número 0.4.0 puesto (22/11/2026); falta que Julen cree la Release v0.4.0 |
 
 Notas de la Fase 2C:
 - **2.20: panel de anotaciones (22/11/2026).**
