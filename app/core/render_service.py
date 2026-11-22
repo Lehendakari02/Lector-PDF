@@ -31,6 +31,7 @@ from app.core.drawing import PageDrawing, page_drawings
 from app.core.notes import PageNote, page_notes
 from app.core.ocr import looks_recognised, looks_scanned, page_picture
 from app.core.outline import OutlineEntry, read_outline
+from app.core.places import Place, PlaceSearch, Wanted
 from app.core.saving import FAILED as SAVE_FAILED
 from app.core.saving import SaveError, put_in_place, write_copy
 from app.core.search import (
@@ -231,6 +232,22 @@ def _search_next_page(connection, token, doc, job: _SearchJob, page_texts) -> bo
     return True
 
 
+def _place_next_page(connection, token, doc, job: tuple[int, PlaceSearch], page_texts) -> bool:
+    """Look for a place on one more page. False (and the answer sent) when done."""
+    place_id, looking = job
+    if not looking.done:
+        number = looking.next_page()
+        try:
+            text = _page_text(doc, number, page_texts) if number < doc.page_count else None
+        except Exception:
+            text = None  # a page that cannot be read: the others are looked at
+        looking.take(text)
+    if not looking.done:
+        return True
+    connection.send(("place_found", token, place_id, looking.answer))
+    return False
+
+
 class _SaveFailed(Exception):
     """Saving did not work; ``doc`` is the document to go on with."""
 
@@ -355,6 +372,7 @@ def _worker_main(connection: Connection) -> None:
     prints: list[tuple[int, float, int, bool]] = []  # pages for the printer
     token = 0
     search: _SearchJob | None = None
+    place: tuple[int, PlaceSearch] | None = None  # an article or section looked for
     page_texts: dict[int, PageText] = {}  # letters of pages already read
     # Looking, when there is nothing else to do, for pages that are only a
     # picture (scanned): the next page to look at (None: done) and those found.
@@ -369,7 +387,15 @@ def _worker_main(connection: Connection) -> None:
     while True:
         # Read every waiting message before doing anything, so a newer list of
         # wanted pages (or a newer search) always wins over an older one.
-        busy = wanted or prints or readings or thumbnails or search or checking is not None
+        busy = (
+            wanted
+            or prints
+            or readings
+            or thumbnails
+            or search
+            or place is not None
+            or checking is not None
+        )
         if not busy or connection.poll():
             try:
                 message = connection.recv()
@@ -381,6 +407,7 @@ def _worker_main(connection: Connection) -> None:
             if kind == "open":
                 _, token, path, password = message
                 wanted, prints, thumbnails, search, readings = [], [], [], None, []
+                place = None
                 page_texts.clear()
                 if doc is not None:
                     doc.close()
@@ -420,6 +447,11 @@ def _worker_main(connection: Connection) -> None:
                     )
             elif kind == "cancel_search":
                 search = None
+            elif kind == "place":
+                _, place_token, place_id, wanted_place, after = message
+                place = None
+                if place_token == token and doc is not None:
+                    place = (place_id, PlaceSearch(wanted_place, doc.page_count, after))
             elif kind == "text":
                 _, text_token, page_index = message
                 if text_token == token and doc is not None:
@@ -487,7 +519,7 @@ def _worker_main(connection: Connection) -> None:
                             # far belong to other places now, and the index
                             # points elsewhere. The window searches again.
                             page_texts.clear()
-                            search = None
+                            search = place = None
                             connection.send(("outline", token, read_outline(doc)))
                             checking, scanned, recognised = 0, [], []  # other numbers now
                             readings = []  # the window asks again with the new numbers
@@ -505,6 +537,7 @@ def _worker_main(connection: Connection) -> None:
                         connection.send(("saved", token, save_id, target))
             elif kind == "close":
                 wanted, prints, thumbnails, search, readings = [], [], [], None, []
+                place = None
                 checking = None
                 page_texts.clear()
                 if doc is not None:
@@ -519,7 +552,10 @@ def _worker_main(connection: Connection) -> None:
         if not wanted and not prints and not thumbnails:
             # Nothing to draw: search one more page. Drawing always goes first,
             # so searching a long document never slows the scrolling down.
-            if search is not None:
+            if place is not None:
+                if not _place_next_page(connection, token, doc, place, page_texts):
+                    place = None
+            elif search is not None:
                 if not _search_next_page(connection, token, doc, search, page_texts):
                     search = None
             elif checking is not None:
@@ -588,9 +624,12 @@ class RenderService:
         on_reading: Callable[[int, int, int, int, bytes], None] | None = None,
         on_reading_failed: Callable[[int, str], None] | None = None,
         on_annotations: Callable[[int, list[Entry]], None] | None = None,
+        on_place: Callable[[int, Place | None], None] | None = None,
     ) -> None:
         self._on_annotations = on_annotations or (lambda list_id, entries: None)
         self._list_id = 0
+        self._place_id = 0
+        self._on_place = on_place or (lambda place_id, place: None)
         self._on_reading = on_reading or (lambda page, width, height, dpi, samples: None)
         self._on_reading_failed = on_reading_failed or (lambda page, details: None)
         self._readings: set[int] = set()  # pictures asked for to read, not yet back
@@ -787,6 +826,23 @@ class RenderService:
                 self._reopen()
             self._send(("annotations", self._token, self._list_id))
             return self._list_id
+
+    def find_place(self, wanted: Wanted, after: tuple[int, int] | None = None) -> int:
+        """Look for an article, a section… (``app.core.places``) in the document.
+
+        ``after`` (page, letter) is the place found before, to go on to the
+        next one. The answer (a ``Place``, or None) comes through ``on_place``
+        with the number returned here; a newer question replaces an older one.
+        """
+        with self._lock:
+            self._place_id += 1
+            if self._path is None:
+                self._tell(self._on_place, self._place_id, None)
+                return self._place_id
+            if self._ensure_started():
+                self._reopen()
+            self._send(("place", self._token, self._place_id, wanted, after))
+            return self._place_id
 
     def _reopen(self) -> None:
         """Give a new helper the document again, with the changes not yet saved."""
@@ -1012,6 +1068,9 @@ class RenderService:
                 self._tell(self._on_text, message[2], message[3])
             elif kind == "copied":
                 self._tell(self._on_copied, message[2], message[3])
+            elif kind == "place_found":
+                if message[2] == self._place_id:
+                    self._tell(self._on_place, message[2], message[3])
             elif kind == "annotations":
                 self._tell(self._on_annotations, message[2], message[3])
             elif kind == "notes":
