@@ -191,6 +191,13 @@ FEATURES: list[Feature] = [
         "dos documentos lado a lado dividir pantalla comparar tema ley",
     ),
     _f(
+        "library",
+        STUDY,
+        "Biblioteca",
+        "Tu temario: todos los temas de una carpeta, buscar en todos a la vez y cuánto llevas",
+        "biblioteca temario temas carpeta buscar en todos progreso leído repasado",
+    ),
+    _f(
         "summary",
         STUDY,
         "Exportar resumen",

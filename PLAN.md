@@ -1082,8 +1082,8 @@ Ordenadas por uso diario.
 | 2.26 | Código de colores propio (opcional, nada predefinido) | Si quiero, pongo nombre a mis colores; si no, no aparece nada | ✅ |
 | 2.26b | Lo que se está escribiendo, a salvo de un apagón (decidido por Julen el 22/11) | Corto la luz a mitad de una nota y al volver la recupero | ✅ |
 | 2.27 | Exportar resumen (PDF o Word) | Saco un documento con todo lo subrayado, ordenado por página | ✅ |
-| 2.28 | Vista de dos documentos lado a lado | Veo el tema y la ley a la vez | 🔶 |
-| 2.29 | Biblioteca del temario | Elijo mi carpeta de temas, busco en todos y veo mi progreso | ⬜ |
+| 2.28 | Vista de dos documentos lado a lado | Veo el tema y la ley a la vez | ✅ |
+| 2.29 | Biblioteca del temario | Elijo mi carpeta de temas, busco en todos y veo mi progreso | 🔶 |
 | 2.30 | Enlaces entre documentos (ver `CLAUDE.md`) | Desde el tema 5, un clic abre la Constitución al lado en el artículo 14; si muevo el archivo, el programa lo encuentra o me deja corregirlo | ⬜ |
 | 2.31 | Versión 0.4 | — | ⬜ |
 
@@ -1197,6 +1197,20 @@ Notas de la Fase 2C:
   - La X de esa barra (o volver a pulsar el botón) deja de verlo al lado, sin
     cerrarlo. Cerrar uno de los dos vuelve a uno solo.
   - No se recuerda al cerrar el programa (las pestañas sí vuelven).
+- **2.29: biblioteca del temario (22/11/2026).**
+  - Botón **Biblioteca** del modo Estudiar (o Ctrl+K → "biblioteca"). La
+    primera vez pide la carpeta del temario; se recuerda. Lista todos los PDF
+    de la carpeta y sus subcarpetas, en orden natural ("Tema 2" antes que
+    "Tema 10"). Doble clic abre el tema.
+  - Progreso de cada tema: **leído** (hasta qué página se ha llegado, en %),
+    **subrayados** (cuántos tiene guardados en el archivo) y **repasado**
+    (cuándo se usó el modo repaso por última vez, o "Todavía no").
+  - **Buscar en todos los temas** a la vez, con las reglas del buscador
+    (tildes, ñ, palabras partidas…) y la opción "Palabra completa". Se ve el
+    avance y se puede parar; doble clic en un resultado abre el tema en esa
+    página con la búsqueda marcada.
+  - Todo se lee en un proceso aparte, así que el programa no se queda
+    parado. Como mucho 200 resultados por tema y 2000 temas por carpeta.
 
 ## Fase 3 – Rellenar y firma manuscrita
 | # | Tarea | Terminado cuando… | Estado |
