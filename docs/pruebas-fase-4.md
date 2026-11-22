@@ -25,3 +25,15 @@ funcione y dime lo que no.
 8. Firma otra vez otro documento: tu certificado ya sale elegido.
 9. Pulsa Cancelar en la ventana del PIN de Windows: dice "Firma cancelada" y
    no se crea nada.
+
+## Tarea 4.2 – Firmar con un archivo .p12 o .pfx
+
+1. Usa la copia de tu certificado que guardaste al instalarlo (el archivo
+   .pfx con contraseña).
+2. Firmar con certificado → **Usar un archivo .p12 o .pfx…** → elige el
+   archivo y escribe su contraseña.
+3. El firmado debe salir válido en VALIDe y Adobe, igual que en la 4.1.
+4. Vuelve a firmar otro documento: sale un botón «Usar «tu-archivo.pfx»»;
+   solo pide la contraseña.
+5. Pon mal la contraseña: dice que lo compruebes y no firma.
+

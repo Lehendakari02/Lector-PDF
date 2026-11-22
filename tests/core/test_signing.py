@@ -177,3 +177,20 @@ def test_field_names_do_not_repeat(sample, signer, tmp_path):
         assert signing.next_field_name(PdfFileReader(handle)) == "Firma4"
     assert len(check_signatures(third, signer.signing_cert)) == 3
     shutil.rmtree(tmp_path, ignore_errors=True)
+
+
+@pytest.mark.parametrize(
+    ("made", "refused"),
+    [
+        ({"days_valid": -1, "started_days_ago": 30}, signing.CertificateExpired),
+        ({"started_days_ago": -5}, signing.CertificateExpired),
+        ({"for_signing": False}, signing.NotForSigning),
+    ],
+)
+def test_a_certificate_file_validators_would_refuse_is_refused_now(tmp_path, made, refused):
+    key = certificates.new_key()
+    certificate = certificates.make_certificate("PRUEBA CADUCADA", key, **made)
+    p12 = tmp_path / "viejo.p12"
+    p12.write_bytes(certificates.make_p12("viejo", key, certificate))
+    with pytest.raises(refused):
+        load_p12_signer(p12, certificates.PASSWORD)

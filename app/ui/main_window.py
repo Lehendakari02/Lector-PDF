@@ -162,6 +162,7 @@ def signed_name(path: Path) -> Path:
 
 
 CERTIFICATE_SETTING = "firma/certificado"  # the certificate of Windows used last
+CERTIFICATE_FILE_SETTING = "firma/archivo"  # the certificate file used last
 DATE_SETTING = "firma/fecha"  # whether the date is written under the signature
 # Big enough to press comfortably with a finger on a touch screen.
 MIN_BUTTON_HEIGHT = 40
@@ -4242,12 +4243,16 @@ class MainWindow(QMainWindow):
         if self.signer_answer is not None:
             return self.signer_answer
         dialog = CertificateDialog(
-            self, preferred=str(self.settings.get(CERTIFICATE_SETTING) or "")
+            self,
+            preferred=str(self.settings.get(CERTIFICATE_SETTING) or ""),
+            last_file=str(self.settings.get(CERTIFICATE_FILE_SETTING) or ""),
         )
         if dialog.exec() != CertificateDialog.DialogCode.Accepted or dialog.signer is None:
             return None
         if dialog.chosen:
             self.settings.set(CERTIFICATE_SETTING, dialog.chosen)
+        if dialog.chosen_file:  # where it is, never its password
+            self.settings.set(CERTIFICATE_FILE_SETTING, dialog.chosen_file)
         return dialog.signer
 
     def _signed_target(self, source: Path) -> Path | None:

@@ -14,6 +14,7 @@ import hashlib
 import io
 import os
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 
 from asn1crypto import x509
@@ -32,6 +33,14 @@ MAX_CHAIN_LENGTH = 10
 
 class SigningError(Exception):
     """The document could not be signed. The original file is untouched."""
+
+
+class CertificateExpired(SigningError):
+    """The certificate is out of date (or not valid yet): validators refuse it."""
+
+
+class NotForSigning(SigningError):
+    """The certificate is meant for other uses (encrypting, logging in)."""
 
 
 class PasswordProtected(SigningError):
@@ -111,7 +120,22 @@ def load_p12_signer(path: str | Path, password: str) -> Signer:
         raise SigningError(f"Cannot read the certificate file: {exc}") from exc
     if signer is None:
         raise SigningError("Wrong password, or the file is not a certificate with its key")
+    check_usable(signer.signing_cert)
     return signer
+
+
+def check_usable(certificate: x509.Certificate, now: datetime | None = None) -> None:
+    """Refuse a certificate that validators would refuse anyway: out of date,
+    or not meant for signing (``CertificateExpired``, ``NotForSigning``)."""
+    now = now or datetime.now(UTC)
+    if not certificate.not_valid_before <= now <= certificate.not_valid_after:
+        raise CertificateExpired(
+            f"The certificate is valid from {certificate.not_valid_before:%d/%m/%Y} "
+            f"to {certificate.not_valid_after:%d/%m/%Y}"
+        )
+    usage = certificate.key_usage_value
+    if usage is not None and not {"digital_signature", "non_repudiation"} & set(usage.native):
+        raise NotForSigning("The certificate is not meant for signing")
 
 
 def next_field_name(reader: PdfFileReader) -> str:
