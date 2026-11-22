@@ -53,7 +53,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.core import arrange, bookmarks, drawing, notes, pen, places, sheets
+from app.core import arrange, bookmarks, drawing, margins, notes, pen, places, sheets
 from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE, new_name
 from app.core.document import PageSize, PdfDocument
 from app.core.drawing import ARROW, BOX, DRAW, ERASER, INK, OVAL, SHAPE_TOOL, PageDrawing
@@ -645,6 +645,9 @@ class PdfView(QAbstractScrollArea):
             self._reshape(*order.page_change(undone), getattr(order, "size", None))
             if how in ("do", "redo"):
                 self.scroll_to_page(order.page_change(False)[0])
+        grown = margins.size_change(order, undone)
+        if grown:
+            self._resize(grown)
         # The pictures of those pages are old: they stay on screen until the
         # new ones arrive, so nothing blinks.
         self._stale.update(page for page in pages if 0 <= page < self.page_count)
@@ -725,6 +728,27 @@ class PdfView(QAbstractScrollArea):
         self._current_page = -1  # told again, with the new count
         self._scrolled()
         self.pages_moved.emit(at, by)
+        self.pages_reshaped.emit()
+
+    def _resize(self, grown: dict[int, tuple[float, float]]) -> None:
+        """Some pages are bigger or smaller now (margins): lay them out again,
+        keeping the place being read."""
+        place = self._place()
+        for page, (wider, taller) in grown.items():
+            if 0 <= page < len(self._sizes):
+                size = self._sizes[page]
+                self._sizes[page] = PageSize(size.width + wider, size.height + taller)
+        self._marks = {}
+        self._current_mark = None
+        self._place_shown = None  # the letters moved
+        self.pick(None)
+        self.clear_selection()
+        for page in grown:
+            self._texts.pop(page, None)
+            self._asked_texts.discard(page)
+        self._layout()
+        self._return_to(place)
+        self._scrolled()
         self.pages_reshaped.emit()
 
     def recover(self, entries) -> int:
@@ -882,6 +906,23 @@ class PdfView(QAbstractScrollArea):
         title = title or self.tr("Página {0}").format(page + 1)
         order = bookmarks.AddBookmark(page, round(top, 1), title, new_name(), self._group_title())
         return title if self._do(order) else ""
+
+    def add_margin(
+        self, left: float, right: float, bottom: float, every_page: bool = False
+    ) -> bool:
+        """Blank room (points) on the sides or below the page being read, or
+        every page. Deshacer takes it away again."""
+        if self._document is None or not self.page_count:
+            return False
+        pages = tuple(range(self.page_count)) if every_page else (max(0, self._current_page),)
+        largest = margins.LARGEST
+        if any(
+            self._sizes[page].width + left + right > largest
+            or self._sizes[page].height + bottom > largest
+            for page in pages
+        ):
+            return False
+        return self._do(margins.AddMargin(pages, left, right, bottom, new_name()))
 
     def _group_title(self) -> str:
         return self.tr("Mis marcadores")  # the item of the outline that holds them
