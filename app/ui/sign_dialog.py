@@ -1,5 +1,7 @@
 """Choose the certificate to sign with: one installed in Windows or a file."""
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
@@ -16,7 +18,13 @@ from PySide6.QtWidgets import (
 )
 
 from app.core import windows_store
-from app.core.signing import SigningError, WindowsStoreSigner, load_p12_signer
+from app.core.signing import (
+    CertificateExpired,
+    NotForSigning,
+    SigningError,
+    WindowsStoreSigner,
+    load_p12_signer,
+)
 from app.core.windows_store import StoreCertificate, StoreError
 
 
@@ -45,6 +53,7 @@ class CertificateDialog(QDialog):
         parent: QWidget | None = None,
         certificates: list[StoreCertificate] | None = None,
         preferred: str = "",
+        last_file: str = "",
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(self.tr("Firmar con certificado"))
@@ -52,6 +61,10 @@ class CertificateDialog(QDialog):
         self.signer = None
         self.problem = ""
         self.chosen = ""  # the thumbprint of the certificate of Windows chosen
+        self.chosen_file = ""  # or the certificate file used
+        # For the tests: the password the window would ask for (None: cancel).
+        self.password_answer: str | None = None
+        self.last_file = last_file if last_file and Path(last_file).is_file() else ""
 
         if certificates is None:
             certificates = []
@@ -104,6 +117,11 @@ class CertificateDialog(QDialog):
         )
         self.file_button = QPushButton(self.tr("Usar un archivo .p12 o .pfx…"))
         self.buttons.addButton(self.file_button, QDialogButtonBox.ButtonRole.ActionRole)
+        self.last_file_button = QPushButton(self.tr("Usar «{0}»").format(Path(self.last_file).name))
+        self.last_file_button.setToolTip(self.last_file)
+        self.buttons.addButton(self.last_file_button, QDialogButtonBox.ButtonRole.ActionRole)
+        self.last_file_button.setVisible(bool(self.last_file))  # after: adding shows it
+        self.last_file_button.clicked.connect(lambda: self.ask_password(self.last_file))
         self.buttons.addButton(self.tr("Cancelar"), QDialogButtonBox.ButtonRole.RejectRole)
         self.sign_button.clicked.connect(self.use_selected)
         self.file_button.clicked.connect(self.choose_file)
@@ -155,20 +173,37 @@ class CertificateDialog(QDialog):
             "",
             self.tr("Certificados (*.p12 *.pfx)"),
         )
-        if not path:
-            return
-        password, accepted = QInputDialog.getText(
-            self,
-            self.tr("Contraseña del certificado"),
-            self.tr("Contraseña del archivo (no se guarda):"),
-            QLineEdit.EchoMode.Password,
-        )
-        if accepted:
-            self.use_file(path, password)
+        if path:
+            self.ask_password(path)
+
+    def ask_password(self, path: str) -> bool:
+        if self.password_answer is not None:
+            password, accepted = self.password_answer, True
+        else:
+            password, accepted = QInputDialog.getText(
+                self,
+                self.tr("Contraseña del certificado"),
+                self.tr("Contraseña de «{0}» (no se guarda):").format(Path(path).name),
+                QLineEdit.EchoMode.Password,
+            )
+        return bool(accepted) and self.use_file(path, password)
 
     def use_file(self, path: str, password: str) -> bool:
         try:
             self.signer = load_p12_signer(path, password)
+        except CertificateExpired as error:
+            self.problem = str(error)
+            self.explanation.setText(
+                self.tr(
+                    "El certificado de ese archivo está caducado (o todavía no es válido): "
+                    "una firma con él no sería válida. Renuévalo y vuelve a exportarlo."
+                )
+            )
+            return False
+        except NotForSigning as error:
+            self.problem = str(error)
+            self.explanation.setText(self.tr("El certificado de ese archivo no sirve para firmar."))
+            return False
         except SigningError as error:
             self.problem = str(error)
             self.explanation.setText(
@@ -178,5 +213,6 @@ class CertificateDialog(QDialog):
                 )
             )
             return False
+        self.chosen_file = str(path)
         self.accept()
         return True

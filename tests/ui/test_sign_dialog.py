@@ -175,3 +175,40 @@ def test_window_reports_a_document_that_cannot_be_signed(window, sample, tmp_pat
     assert not (tmp_path / "salida.pdf").exists()
     assert not window.sign_document(sample("con-contrasena.pdf"), tmp_path / "salida.pdf", signer)
     assert "contraseña" in window.statusBar().currentMessage()
+
+
+def test_the_certificate_file_used_last_is_offered_and_bad_ones_explained(qt_app, sample, tmp_path):
+    p12 = tmp_path / "mio.pfx"
+    p12.write_bytes(sample("certificado-prueba.p12").read_bytes())
+    dialog = CertificateDialog(certificates=[], last_file=str(tmp_path / "no-esta.p12"))
+    assert dialog.last_file_button.isHidden(), "a file that is gone is not offered"
+    dialog = CertificateDialog(certificates=[], last_file=str(p12))
+    assert not dialog.last_file_button.isHidden()
+    assert "mio.pfx" in dialog.last_file_button.text()
+    dialog.password_answer = "prueba"
+    dialog.last_file_button.click()
+    assert dialog.signer is not None and dialog.chosen_file == str(p12)
+
+    key = certificates.new_key()
+    old = certificates.make_certificate("VIEJO", key, days_valid=-1, started_days_ago=30)
+    expired = tmp_path / "viejo.p12"
+    expired.write_bytes(certificates.make_p12("viejo", key, old))
+    dialog = CertificateDialog(certificates=[])
+    assert not dialog.use_file(str(expired), certificates.PASSWORD)
+    assert "caducado" in dialog.explanation.text() and dialog.signer is None
+
+
+def test_the_window_remembers_where_the_file_is_but_not_its_password(
+    window, sample, tmp_path, monkeypatch
+):
+    p12 = tmp_path / "mio.p12"
+    p12.write_bytes(sample("certificado-prueba.p12").read_bytes())
+
+    def answered(self):
+        self.use_file(str(p12), "prueba")
+        return self.result()
+
+    monkeypatch.setattr(CertificateDialog, "exec", answered)
+    assert window._choose_signer() is not None
+    assert window.settings.get("firma/archivo") == str(p12)
+    assert "prueba" not in window.settings.path.read_text(encoding="utf-8")

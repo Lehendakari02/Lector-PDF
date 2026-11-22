@@ -1423,7 +1423,7 @@ Notas de la Fase 3:
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
 | 4.1 | Firmar con certificado instalado en Windows (FNMT), partiendo de la prueba 0.8 | El PDF firmado sale válido en VALIDe y en Adobe | 🔶 hecho; falta tu prueba con el certificado FNMT real en VALIDe y Adobe |
-| 4.2 | Firmar con archivo .p12/.pfx | Ídem | ⬜ |
+| 4.2 | Firmar con archivo .p12/.pfx | Ídem | 🔶 hecho; falta tu prueba con tu copia .pfx del certificado FNMT |
 | 4.3 | Firma visible o invisible; sello de tiempo opcional; recordar preferencias | Firmar es elegir dónde y poner el PIN | ⬜ |
 | 4.4 | Firmar varios documentos de una vez | Firmo 10 documentos poniendo el PIN una vez | ⬜ |
 | 4.5 | Firmar con DNIe y lector de tarjetas | Firmo con el DNIe (cuando tenga lector) | ⬜ |
@@ -1446,6 +1446,14 @@ Notas de la Fase 4:
   - El aviso final dice quién firma ("firmado por …").
   - Comprobado aquí con certificados de prueba. **Falta la prueba de Julen con
     el certificado FNMT real** y la validación en VALIDe y Adobe.
+- **4.2: Firmar con un archivo .p12 o .pfx (22/11/2026).**
+  - Ya funcionaba desde la prueba 0.8 ("Usar un archivo .p12 o .pfx…" en la
+    misma ventana). Ahora el programa recuerda **dónde está** el archivo
+    (`firma/archivo`) y la próxima vez ofrece un botón «Usar «mio.pfx»»: solo
+    hay que poner la contraseña, que nunca se guarda.
+  - Un certificado caducado (o que aún no vale) o que no sirve para firmar se
+    rechaza al abrirlo, con una explicación, en vez de hacer una firma que
+    VALIDe daría por mala.
 
 ## Fase 5 – Organizar y convertir
 | # | Tarea | Terminado cuando… | Estado |
