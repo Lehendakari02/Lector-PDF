@@ -191,6 +191,13 @@ FEATURES: list[Feature] = [
         "dos documentos lado a lado dividir pantalla comparar tema ley",
     ),
     _f(
+        "link",
+        STUDY,
+        "Enlazar a…",
+        "Unas palabras que llevan al sitio exacto de otro documento (p. ej. un artículo de la ley)",
+        "enlace enlazar vincular otro documento artículo ley ir a remitir referencia",
+    ),
+    _f(
         "library",
         STUDY,
         "Biblioteca",

@@ -698,3 +698,25 @@ Con un documento abierto, en el modo Estudiar.
 4. Doble clic en un resultado: se abre ese tema en esa página.
 5. Cierra y abre el programa: la biblioteca recuerda la carpeta.
 
+## Fase 2C – Tarea 2.30 – Enlaces entre documentos
+
+Prepara dos carpetas, por ejemplo `Temas` con un tema y `Leyes` con una ley.
+
+1. Abre el tema, selecciona unas palabras (p. ej. "artículo 14 de la
+   Constitución"), clic derecho → **Enlazar a…**.
+2. Elige la ley (de los abiertos, de la biblioteca u "Otro archivo…") y
+   escribe "art. 14". La ley se abre al lado en ese artículo, con una barra
+   "Ve al sitio… y pulsa «Enlazar aquí»". Muévete si hace falta y púlsalo.
+3. Las palabras quedan con una línea de puntos azul. Pasa el ratón: dice a
+   qué documento y página lleva. Ctrl+Z lo quita y Ctrl+Y lo vuelve a poner.
+4. Guarda, cierra la ley y haz clic en el enlace: la ley se abre al lado, en
+   el artículo 14.
+5. Abre el tema guardado en **Adobe Reader** y haz clic en el enlace: debe
+   abrir la ley en esa página (Edge y Chrome suelen bloquearlo; es normal).
+6. Mueve la ley a la carpeta de tu biblioteca y vuelve a pulsar el enlace:
+   la encuentra sola y lo corrige. Muévela a otra carpeta cualquiera: sale
+   "Documento no encontrado"; con "¿Dónde está ahora?…" la eliges y queda
+   corregido.
+7. Copia las dos carpetas a otro ordenador (o a un USB) con la misma
+   estructura: el enlace sigue funcionando.
+
