@@ -4,7 +4,7 @@ import shutil
 import tempfile
 import time
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from PySide6.QtCore import QEvent, QSize, Qt, QTimer, QUrl, Signal, qVersion
 from PySide6.QtGui import (
@@ -45,6 +45,7 @@ from PySide6.QtWidgets import (
 from app import APP_NAME, BUILD_LABEL, __version__
 from app.core import ocr, pen, save_checks, save_settings, saving, sheets, symbols
 from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
+from app.core.doc_links import DocLink, relative_file, resolve
 from app.core.document import PdfDocument, PdfOpenError, engine_version
 from app.core.drawing import (
     ARROW,
@@ -67,6 +68,8 @@ from app.core.history import History, file_key
 from app.core.interface_size import NORMAL_SIZE
 from app.core.journal import FOLDER_NAME as JOURNAL_FOLDER
 from app.core.journal import Journal, Pending
+from app.core.library import FOLDER_SETTING as LIBRARY_FOLDER_SETTING
+from app.core.library import topics_in
 from app.core.marker_styles import (
     LINE_KINDS,
     SEE_THROUGH_KINDS,
@@ -105,6 +108,7 @@ from app.ui.features import (
     translate,
 )
 from app.ui.library_window import LibraryWindow
+from app.ui.link_dialog import LinkDialog
 from app.ui.margin_dialog import MarginChoice, MarginDialog
 from app.ui.margin_dialog import remember as remember_margin
 from app.ui.margin_dialog import remembered as remembered_margin
@@ -263,6 +267,9 @@ class MainWindow(QMainWindow):
         # Two documents at once: the one in front on the left, another beside it.
         self.beside = BesideArea()
         self.beside.close_asked.connect(self.stop_beside)
+        self.beside.link_here.connect(self.finish_link)
+        self.beside.link_cancelled.connect(self.cancel_link)
+        self._pending_link: tuple | None = None  # (source, words area, target)
         self.halves = QSplitter(Qt.Orientation.Horizontal)
         self.halves.setObjectName("documentHalves")
         self.halves.setChildrenCollapsible(False)
@@ -314,6 +321,10 @@ class MainWindow(QMainWindow):
         self.library: LibraryWindow | None = None
         self.library_asks_folder = True  # the first time, it asks for the folder at once
         self.open_exported = True  # a summary made is opened (not in the tests)
+        # For the tests: the other document of a link and where, without the dialog;
+        # and where a document that is not found is now ("" = not known).
+        self.link_answer: tuple[Path, str] | None = None
+        self.where_is_answer: Path | str | None = None
         self._saving_to_close: list[DocumentPage] = []  # being saved before closing
         self._after_saving = None  # what to do once they are all saved
         self.statusBar().addPermanentWidget(self.speed_label)
@@ -357,6 +368,7 @@ class MainWindow(QMainWindow):
             "summary": self.export_summary,
             "beside": self.toggle_beside,
             "library": self.show_library,
+            "link": self.link_selection,
             "margins": self.add_margin,
             "undo": self.undo,
             "redo": self.redo,
@@ -2659,6 +2671,8 @@ class MainWindow(QMainWindow):
             )
         )
         view.edit_failed.connect(self._edit_failed)
+        view.link_wanted.connect(lambda area, words, p=page: self._link_asked(p, area, words))
+        view.doc_link_clicked.connect(lambda link, p=page: self.follow_doc_link(p, link))
         self.pages.addWidget(page)
         return page
 
@@ -3131,7 +3145,7 @@ class MainWindow(QMainWindow):
         width = max(2, self.halves.width())
         self.halves.setSizes([width // 2, width - width // 2])
         # Each half is narrower now: both are shown at a comfortable size again.
-        QTimer.singleShot(0, self._fit_halves)
+        QTimer.singleShot(0, self, self._fit_halves)
         self.document_tabs.setTabToolTip(
             self.documents.index(page), self.tr("{0} (al lado)").format(page.path or page.title)
         )
@@ -3145,6 +3159,7 @@ class MainWindow(QMainWindow):
 
     def stop_beside(self) -> None:
         """Back to one document at a time; the one beside keeps its tab."""
+        self.cancel_link()
         page = self.beside.take()
         self.beside.hide()
         if page is None:
@@ -3154,7 +3169,7 @@ class MainWindow(QMainWindow):
             index = self.documents.index(page)
             self.document_tabs.setTabToolTip(index, str(page.path or page.title))
         self._tab_changed(self.document_tabs.currentIndex())
-        QTimer.singleShot(0, self._fit_halves)
+        QTimer.singleShot(0, self, self._fit_halves)
 
     def _beside_from_tab(self, index: int) -> None:
         """Right click on a tab: see it beside the one in front, or stop."""
@@ -3178,6 +3193,197 @@ class MainWindow(QMainWindow):
             return
         if wanted is not None and wanted is not self.current_document:
             self.document_tabs.setCurrentIndex(self.documents.index(wanted))
+
+    # ---- links between documents ---------------------------------------------
+
+    def link_selection(self) -> bool:
+        """ "Enlazar a…": the words selected lead to a place of another document."""
+        view = self.pdf_view
+        if view.page_count == 0:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return False
+        if not view.ask_link():
+            self.statusBar().showMessage(
+                self.tr(
+                    "Selecciona primero las palabras que quieres enlazar "
+                    "(o haz clic derecho en una nota)."
+                ),
+                STATUS_MESSAGE_MS,
+            )
+            return False
+        return True
+
+    def _link_asked(self, source: DocumentPage, area: tuple, words: str) -> bool:
+        """Which document and where: then the other one is shown beside, at
+        that place, until "Enlazar aquí"."""
+        if source.path is None:
+            return False
+        answer = self.link_answer
+        if answer is None:
+            folder = str(self.settings.get(LIBRARY_FOLDER_SETTING) or "")
+            opened = [
+                (page.title, page.path)
+                for page in self.documents
+                if page is not source and page.path is not None
+            ]
+            mine = file_key(source.path)
+            topics = []
+            for path in topics_in(folder):
+                if file_key(path) == mine:
+                    continue
+                try:
+                    name = str(path.relative_to(folder))
+                except ValueError:
+                    name = path.name
+                topics.append((name, path))
+            dialog = LinkDialog(words, opened, topics, folder or str(source.path.parent), self)
+            if not dialog.exec() or dialog.answer is None:
+                return False
+            answer = dialog.answer
+        target_path, where = Path(answer[0]), answer[1].strip()
+        if file_key(target_path) == file_key(source.path):
+            self.statusBar().showMessage(
+                self.tr("Un enlace lleva a otro documento: elige uno distinto de este."),
+                STATUS_MESSAGE_MS,
+            )
+            return False
+        target = self._open_beside(source, target_path)
+        if target is None:
+            return False
+        if where.isdigit():
+            target.view.scroll_to_page(int(where) - 1)
+        elif where:
+            lost = self.tr("No se ha encontrado «{0}»: ve tú al sitio.").format(where)
+            if target.view.go_to_place(where):
+                target.view.place_answered.connect(
+                    lambda found: found or self.statusBar().showMessage(lost, STATUS_MESSAGE_MS),
+                    Qt.ConnectionType.SingleShotConnection,
+                )
+            else:
+                self.statusBar().showMessage(lost, STATUS_MESSAGE_MS)
+        self._pending_link = (source, area, target)
+        self.beside.ask_link_place(words)
+        return True
+
+    def _open_beside(self, source: DocumentPage, path: Path) -> DocumentPage | None:
+        """Open ``path`` (if it is not open yet) beside ``source``, which stays in front."""
+        if self.index_of_document(path) < 0 and not self.open_document(path):
+            return None
+        target = self.documents[self.index_of_document(path)]
+        if target is source or source not in self.documents:
+            return None
+        if self.beside.page is source:
+            self.stop_beside()  # the one with the link goes to the left half
+        self.document_tabs.setCurrentIndex(self.documents.index(source))
+        self.show_beside(target)
+        return target
+
+    def finish_link(self) -> bool:
+        """ "Enlazar aquí": the link leads to the place shown beside."""
+        pending, self._pending_link = self._pending_link, None
+        self.beside.end_link()
+        if pending is None:
+            return False
+        source, area, target = pending
+        if (
+            source not in self.documents
+            or target not in self.documents
+            or source.path is None
+            or target.path is None
+        ):
+            return False
+        page, top = target.view.place_for_link()
+        file = relative_file(source.path, target.path)
+        if not source.view.add_doc_link(file, page, top, area):
+            return False
+        self.document_tabs.setCurrentIndex(self.documents.index(source))
+        self.statusBar().showMessage(
+            self.tr("Enlace hecho: lleva a {0}, página {1}.").format(target.title, page + 1),
+            STATUS_MESSAGE_MS,
+        )
+        return True
+
+    def cancel_link(self) -> None:
+        self._pending_link = None
+        self.beside.end_link()
+
+    def follow_doc_link(self, source: DocumentPage, link: DocLink) -> bool:
+        """A click on a link: the other document opens beside, at its place.
+        If it is not where the link says, it is looked for (and the links mended)."""
+        if source.path is None:
+            return False
+        path = resolve(source.path, link.file)
+        if not path.is_file():
+            found = self._find_moved(source, link.file)
+            if found is None:
+                found = self._ask_where_is(link.file)
+            if found is None:
+                return False
+            source.view.change_link_file(link.file, relative_file(source.path, found))
+            path = found
+        target = self._open_beside(source, path)
+        if target is None:
+            return False
+        # After both halves have taken their new size.
+        QTimer.singleShot(0, target.view, lambda: target.view.go_to_link_place(link.page, link.top))
+        return True
+
+    def _find_moved(self, source: DocumentPage, file: str) -> Path | None:
+        """The document of a link that is not there: an open one or a topic of
+        the library with the same name, if there is only one."""
+        name = PurePosixPath(file.replace("\\", "/")).name.lower()
+        if not name:
+            return None
+        folder = str(self.settings.get(LIBRARY_FOLDER_SETTING) or "")
+        found: dict[str, Path] = {}
+        candidates = [page.path for page in self.documents if page.path is not None]
+        for path in [*candidates, *topics_in(folder)]:
+            if path.name.lower() == name and file_key(path) != file_key(source.path):
+                found.setdefault(file_key(path), Path(path))
+        if len(found) != 1:
+            return None
+        path = next(iter(found.values()))
+        self.statusBar().showMessage(
+            self.tr(
+                "«{0}» se había movido: está en {1}. Los enlaces a él se han corregido."
+            ).format(path.name, path.parent),
+            STATUS_MESSAGE_MS,
+        )
+        return path
+
+    def _ask_where_is(self, file: str) -> Path | None:
+        """ "Documento no encontrado": the user may say where it is now."""
+        name = PurePosixPath(file.replace("\\", "/")).name
+        answer = self.where_is_answer
+        if answer is None:
+            box = QMessageBox(self)
+            box.setIcon(QMessageBox.Icon.Information)
+            box.setWindowTitle(self.tr("Documento no encontrado"))
+            box.setText(self.tr("No se encuentra «{0}».").format(name))
+            box.setInformativeText(
+                self.tr(
+                    "Puede que se haya movido o cambiado de nombre, o que este documento se "
+                    "haya compartido sin él. Lo subrayado y las notas se siguen viendo."
+                )
+            )
+            where = box.addButton(self.tr("¿Dónde está ahora?…"), QMessageBox.ButtonRole.AcceptRole)
+            box.addButton(self.tr("Cerrar"), QMessageBox.ButtonRole.RejectRole)
+            box.exec()
+            if box.clickedButton() is not where:
+                return None
+            answer, _filter = QFileDialog.getOpenFileName(
+                self,
+                self.tr("¿Dónde está ahora «{0}»?").format(name),
+                "",
+                self.tr("Documentos PDF (*.pdf)"),
+            )
+        if not answer:
+            self.statusBar().showMessage(
+                self.tr("Documento no encontrado: «{0}».").format(name), STATUS_MESSAGE_MS
+            )
+            return None
+        path = Path(answer)
+        return path if path.is_file() else None
 
     def show_search(self) -> None:
         if self.pdf_view.page_count == 0:

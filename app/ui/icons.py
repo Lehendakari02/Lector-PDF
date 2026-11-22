@@ -137,6 +137,10 @@ ICONS: dict[str, str] = {
     "library": (
         '<path d="M4.5 4h3v16h-3zM9.5 4h3v16h-3z"/><path d="M14.5 5.2l2.9-.8 3.6 14.4-2.9.8z"/>'
     ),
+    "link": (
+        '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/>'
+        '<path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'
+    ),
     "beside": (
         '<rect x="3" y="4" width="8" height="16" rx="1.5"/>'
         '<rect x="13" y="4" width="8" height="16" rx="1.5"/><path d="M5.5 8h3M15.5 8h3"/>'

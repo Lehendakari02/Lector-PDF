@@ -1083,8 +1083,8 @@ Ordenadas por uso diario.
 | 2.26b | Lo que se está escribiendo, a salvo de un apagón (decidido por Julen el 22/11) | Corto la luz a mitad de una nota y al volver la recupero | ✅ |
 | 2.27 | Exportar resumen (PDF o Word) | Saco un documento con todo lo subrayado, ordenado por página | ✅ |
 | 2.28 | Vista de dos documentos lado a lado | Veo el tema y la ley a la vez | ✅ |
-| 2.29 | Biblioteca del temario | Elijo mi carpeta de temas, busco en todos y veo mi progreso | 🔶 |
-| 2.30 | Enlaces entre documentos (ver `CLAUDE.md`) | Desde el tema 5, un clic abre la Constitución al lado en el artículo 14; si muevo el archivo, el programa lo encuentra o me deja corregirlo | ⬜ |
+| 2.29 | Biblioteca del temario | Elijo mi carpeta de temas, busco en todos y veo mi progreso | ✅ |
+| 2.30 | Enlaces entre documentos (ver `CLAUDE.md`) | Desde el tema 5, un clic abre la Constitución al lado en el artículo 14; si muevo el archivo, el programa lo encuentra o me deja corregirlo | 🔶 |
 | 2.31 | Versión 0.4 | — | ⬜ |
 
 Notas de la Fase 2C:
@@ -1211,6 +1211,27 @@ Notas de la Fase 2C:
     página con la búsqueda marcada.
   - Todo se lee en un proceso aparte, así que el programa no se queda
     parado. Como mucho 200 resultados por tema y 2000 temas por carpeta.
+- **2.30: enlaces entre documentos (22/11/2026).**
+  - **Crear:** selecciona unas palabras → clic derecho **"Enlazar a…"** (o el
+    botón del modo Estudiar, o Ctrl+K → "enlazar"). También desde una nota
+    (clic derecho → "Enlazar a otro documento…"). Se elige el documento entre
+    los abiertos, los de la biblioteca u "Otro archivo…", y si se sabe, dónde
+    ("art. 14", "3.2", o un número de página). El otro documento se abre al
+    lado en ese sitio; se afina a mano y se pulsa **"Enlazar aquí"**.
+  - Se guarda como enlace PDF estándar a otro archivo (GoToR) con la **ruta
+    relativa** (p. ej. `../Leyes/Constitución.pdf`), la página y la altura.
+    Las palabras enlazadas llevan una línea de puntos azul; al pasar el ratón
+    dice a qué documento y página lleva. Se deshace con Ctrl+Z como todo.
+  - **Abrir:** un clic en el enlace abre el otro documento **al lado**, en el
+    sitio. Los enlaces a otros PDF hechos con otros programas también se abren.
+  - **Archivo movido:** si no está donde dice el enlace, se busca por su
+    nombre entre los abiertos y en la biblioteca; si aparece uno solo, se
+    abre y se corrigen todos los enlaces a él (se puede deshacer). Si no,
+    aviso **"Documento no encontrado"** con "¿Dónde está ahora?…" para
+    elegirlo y corregir todos los enlaces de una vez.
+  - Limitación: si el documento se guarda con "Guardar como" en otra carpeta,
+    la ruta relativa ya no vale; al pulsar el enlace se busca como un archivo
+    movido.
 
 ## Fase 3 – Rellenar y firma manuscrita
 | # | Tarea | Terminado cuando… | Estado |

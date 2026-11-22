@@ -53,8 +53,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.core import arrange, bookmarks, drawing, margins, notes, pen, places, sheets
+from app.core import arrange, bookmarks, doc_links, drawing, margins, notes, pen, places, sheets
 from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE, new_name
+from app.core.doc_links import DocLink
 from app.core.document import PageSize, PdfDocument
 from app.core.drawing import ARROW, BOX, DRAW, ERASER, INK, OVAL, SHAPE_TOOL, PageDrawing
 from app.core.foreign import OTHER
@@ -67,7 +68,7 @@ from app.core.render_service import (
     RenderService,
 )
 from app.core.search import PageText, SearchHit
-from app.core.selection import caret_at, is_on_text, selection_rects, word_at
+from app.core.selection import caret_at, is_on_text, selected_text, selection_rects, word_at
 from app.core.text_layer import AddTextLayer, PageLayer
 from app.ui import theme
 from app.ui.note_panel import NotePanel
@@ -83,6 +84,7 @@ REVIEW_KINDS = (HIGHLIGHT, UNDERLINE)  # what the review mode covers
 COVER_MARGIN = 1.5  # points around a cover that a click still takes
 PLACE_MARGIN = 24  # space left above a heading gone to, in Qt units
 WRITING_WAIT_S = 3.0  # longest wait for the text being written to become a change
+DOC_LINK_COLOR = QColor(30, 90, 220)  # the line under a link to another document
 DRAFT_EVERY_MS = 3000  # the text being written goes to the journal this often
 WHEEL_NOTCH = 120  # what one notch of a mouse wheel sends
 # A document opens fitted to the width, but never bigger than this (1.0 = 100 %):
@@ -299,6 +301,9 @@ class PdfView(QAbstractScrollArea):
     notes_changed = Signal(int)  # the notes and text boxes of a page are known or different
     _notes_ready = Signal(int, object)
     _drawings_ready = Signal(int, object)
+    _links_ready = Signal(int, object)
+    doc_link_clicked = Signal(object)  # a link to another document (doc_links.DocLink)
+    link_wanted = Signal(object, str)  # "Enlazar a…": (page, rects) and their words
     picked_changed = Signal()  # an annotation is picked, or not any more
     item_copied = Signal()  # the picked annotation was copied, to paste it
     pen_seen_changed = Signal()  # a pen touched a page for the first time
@@ -389,6 +394,7 @@ class PdfView(QAbstractScrollArea):
             on_change_failed=self._change_failed.emit,
             on_notes=self._notes_ready.emit,
             on_drawings=self._drawings_ready.emit,
+            on_links=self._links_ready.emit,
             on_scanned=self._scanned_ready.emit,
             on_reading=self.reading_ready.emit,
             on_reading_failed=self.reading_failed.emit,
@@ -409,6 +415,7 @@ class PdfView(QAbstractScrollArea):
         self._scanned_ready.connect(self._store_scanned)
         self._notes_ready.connect(self._store_notes)
         self._drawings_ready.connect(self._store_drawings)
+        self._links_ready.connect(self._store_links)
         # What is drawn or marked on each page, for the eraser.
         self._drawings: dict[int, list[PageDrawing]] = {}
         self._erased: dict[int, set[str]] = {}  # taken away, until the page is read again
@@ -477,6 +484,8 @@ class PdfView(QAbstractScrollArea):
         self.shape_fill = False  # a closed shape is filled with a light tone of its colour
         self.shape_dashed = False
         self._notes: dict[int, list[PageNote]] = {}  # notes and text boxes by page
+        self._doc_links: dict[int, list[DocLink]] = {}  # links to other documents
+        self._link_pressed: DocLink | None = None
         self._asked_notes: set[int] = set()
         # Where one is being written: a panel, or the page itself for a text.
         self.note_panel: NotePanel | TextEditor | None = None
@@ -727,6 +736,7 @@ class PdfView(QAbstractScrollArea):
         self._texts.clear()
         self._asked_texts.clear()
         self._notes.clear()
+        self._doc_links.clear()
         self._asked_notes.clear()
         self._drawings.clear()
         self._erased.clear()
@@ -884,6 +894,7 @@ class PdfView(QAbstractScrollArea):
         self._texts.clear()
         self._asked_texts.clear()
         self._notes.clear()
+        self._doc_links.clear()
         self._asked_notes.clear()
         self._drawings.clear()
         self.scanned_pages = []
@@ -1543,6 +1554,8 @@ class PdfView(QAbstractScrollArea):
                 x0, y0, x1, y1 = self._shown_rect(page, rect)
                 mark = QRectF(x0 * zoom, y0 * zoom, (x1 - x0) * zoom, (y1 - y0) * zoom)
                 painter.fillRect(mark.translated(target.left(), target.top()), SELECTION_COLOR)
+            if self._annotations_shown and self._doc_links.get(page):
+                self._paint_doc_links(painter, page, target, zoom)
             if self._review:
                 self._paint_covers(painter, page, target, zoom)
             self._paint_sketches(painter, page, target, zoom)
@@ -1604,6 +1617,20 @@ class PdfView(QAbstractScrollArea):
         else:
             self._uncovered.add(name)
         self.viewport().update()
+
+    def _paint_doc_links(self, painter: QPainter, page: int, target: QRect, zoom: float) -> None:
+        """A dotted line under the words that open another document."""
+        scale = self._scale()
+        painter.save()
+        pen = QPen(DOC_LINK_COLOR, max(1.0, 1.2 * scale), Qt.PenStyle.DotLine)
+        painter.setPen(pen)
+        for link in self._doc_links.get(page, ()):
+            x0, y0, x1, y1 = self._shown_rect(page, link.rect)
+            y = target.top() + y1 * zoom + scale
+            painter.drawLine(
+                QPointF(target.left() + x0 * zoom, y), QPointF(target.left() + x1 * zoom, y)
+            )
+        painter.restore()
 
     def _paint_covers(self, painter: QPainter, page: int, target: QRect, zoom: float) -> None:
         """A block over every covered mark, in its colour, with no text seen."""
@@ -1916,6 +1943,105 @@ class PdfView(QAbstractScrollArea):
         """The notes and text boxes known of a page (asked for if not yet)."""
         self._want_notes(page)
         return list(self._notes.get(page, ()))
+
+    def _store_links(self, page: int, found: object) -> None:
+        if self._document is None:
+            return
+        links = list(found)
+        if links or page in self._doc_links:
+            self._doc_links[page] = links
+            self.viewport().update()
+
+    def doc_links_of(self, page: int) -> list[DocLink]:
+        return list(self._doc_links.get(page, ()))
+
+    def doc_link_under(self, position: QPoint) -> DocLink | None:
+        """The link to another document under a place of the window."""
+        point = self._point_on_page(position)
+        if point is None or not self._annotations_shown:
+            return None
+        page, x, y = point
+        for link in self._doc_links.get(page, ()):
+            x0, y0, x1, y1 = link.rect
+            if x0 <= x <= x1 and y0 <= y <= y1:
+                return link
+        return None
+
+    def selected_link_area(self) -> tuple[int, tuple] | None:
+        """The words selected to be a link: their page and rectangles (on the
+        page where the selection starts), or None."""
+        chosen = self.selection()
+        if chosen is None or self._document is None:
+            return None
+        page = chosen[0][0]
+        rects = tuple(tuple(float(n) for n in rect) for rect in self._selection_rects(page))
+        return (page, rects) if rects else None
+
+    def selected_words(self) -> str:
+        """The words selected, on the page where the selection starts (short)."""
+        chosen = self.selection()
+        if chosen is None:
+            return ""
+        (first, start), (last, stop) = chosen
+        text = self._texts.get(first)
+        if text is None:
+            return ""
+        words = " ".join(selected_text(text, start, stop if last == first else len(text)).split())
+        return words if len(words) <= 60 else words[:57] + "…"
+
+    def ask_link(self, note: PageNote | None = None) -> bool:
+        """ "Enlazar a…" on the words selected (or on a note): the window asks where."""
+        if note is not None:
+            area, words = (note.page, (tuple(note.rect),)), note.text.split("\n")[0][:40]
+        else:
+            area, words = self.selected_link_area(), self.selected_words()
+        if area is None:
+            return False
+        self.link_wanted.emit(area, words or self.tr("lo seleccionado"))
+        return True
+
+    def add_doc_link(
+        self,
+        file: str,
+        target_page: int,
+        target_top: float | None,
+        area: tuple[int, tuple] | None = None,
+    ) -> bool:
+        """Link some words (``area``, or the ones selected) to a place of
+        another document (``file`` as written in the link, relative)."""
+        area = area or self.selected_link_area()
+        if area is None or self._document is None:
+            return False
+        page, rects = area
+        order = doc_links.AddDocLink(page, rects, file, target_page, target_top, new_name())
+        self.clear_selection()
+        return self._do(order)
+
+    def place_for_link(self) -> tuple[int, float]:
+        """Where a link to this document leads if made now: the page at the
+        top of the window and the height there (PDF points from the bottom)."""
+        page, top = self._top_shown()
+        if top > 0 or self._scroll_y() > self._tops[page]:
+            top += self._to_pixels(PLACE_MARGIN) / self._render_zoom()  # as it is shown
+        height = self._sizes[page].height
+        return page, round(max(0.0, height - min(top, height)), 1)
+
+    def go_to_link_place(self, page: int, top: float | None) -> None:
+        """Show the place a link leads to (``top`` in PDF points from the bottom)."""
+        if not self.page_count:
+            return
+        if not 0 <= page < self.page_count:
+            page = max(0, min(page, self.page_count - 1))
+        if top is None or self._rotation != 0:
+            self.scroll_to_page(page)
+            return
+        shown = max(0.0, self._sizes[page].height - top)
+        y = self._tops[page] + shown * self._render_zoom()
+        self.verticalScrollBar().setValue(self._to_units(y - self._to_pixels(PLACE_MARGIN)))
+
+    def change_link_file(self, old: str, new: str) -> bool:
+        """Every link to ``old`` now goes to ``new`` (the other file moved)."""
+        return old != new and self._do(doc_links.ChangeLinkFile(old, new))
 
     def note_under(self, position: QPoint) -> PageNote | None:
         """The note or text box under a place of the window."""
@@ -2762,6 +2888,8 @@ class PdfView(QAbstractScrollArea):
             return
         if self._markup_tool in MARKUP_KINDS:
             self.pick(None)  # a click on a mark picks it again when the button is let go
+        # A link opens when the button is let go on it (a drag selects its words).
+        self._link_pressed = None if self._markup_tool else self.doc_link_under(position)
         place = self._caret_at(position)
         if place is None:
             self.clear_selection()
@@ -2819,9 +2947,16 @@ class PdfView(QAbstractScrollArea):
             self._drag_grab(position)
             self._end_grab(position)
         was_selecting, self._selecting = self._selecting, False
+        pressed_link, self._link_pressed = self._link_pressed, None
         self._autoscroll.stop()
         if was_selecting and self._markup_tool in MARKUP_KINDS and self.has_selection:
             self.mark_selection(self._markup_tool)  # the marker in hand marks it
+        elif (
+            pressed_link is not None
+            and not self.has_selection
+            and self.doc_link_under(position) == pressed_link
+        ):
+            self.doc_link_clicked.emit(pressed_link)  # a click on a link opens the other one
         elif (
             was_selecting
             and not self.has_selection
@@ -2837,6 +2972,7 @@ class PdfView(QAbstractScrollArea):
         self._sketch_pressures = None
         self._erasing = False
         self._grab = None
+        self._link_pressed = None
         if self._selecting:
             self._selecting = False
             self.clear_selection()
@@ -3124,7 +3260,12 @@ class PdfView(QAbstractScrollArea):
                 return
         note = self.note_under(position)
         writing = self._markup_tool in (NOTE, TEXT_BOX)
-        if note is not None and (note.kind == NOTE or writing):
+        link = self.doc_link_under(position) if not self._markup_tool else None
+        if link is not None and note is None:
+            shape = Qt.CursorShape.PointingHandCursor
+            tip = self.tr("Abre {0}, página {1}").format(Path(link.file).name, link.page + 1)
+            QToolTip.showText(self.viewport().mapToGlobal(position), tip, self.viewport())
+        elif note is not None and (note.kind == NOTE or writing):
             shape = Qt.CursorShape.PointingHandCursor
             tip = note.text[:TIP_LETTERS] + ("…" if len(note.text) > TIP_LETTERS else "")
             if note.kind == NOTE and tip:
@@ -3178,6 +3319,9 @@ class PdfView(QAbstractScrollArea):
             )
             remove.setEnabled(note.removable)
             remove.triggered.connect(lambda _checked=False: self.remove_note(note))
+            menu.addAction(self.tr("Enlazar a otro documento…")).triggered.connect(
+                lambda _checked=False: self.ask_link(note)
+            )
         item = self.item_under(where)
         if item is not None:
             self.pick(item)
@@ -3218,6 +3362,9 @@ class PdfView(QAbstractScrollArea):
             mark = menu.addAction(name)
             mark.setEnabled(self.has_selection)
             mark.triggered.connect(lambda _checked=False, k=kind: self.mark_selection(k))
+        link = menu.addAction(self.tr("Enlazar a…"))
+        link.setEnabled(self.has_selection)
+        link.triggered.connect(lambda _checked=False: self.ask_link())
         menu.addSeparator()
         undo = menu.addAction(self.tr("Deshacer"))
         undo.setEnabled(self.can_undo)
