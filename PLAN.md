@@ -1086,7 +1086,7 @@ Ordenadas por uso diario.
 | 2.29 | Biblioteca del temario | Elijo mi carpeta de temas, busco en todos y veo mi progreso | ✅ |
 | 2.30 | Enlaces entre documentos (ver `CLAUDE.md`) | Desde el tema 5, un clic abre la Constitución al lado en el artículo 14; si muevo el archivo, el programa lo encuentra o me deja corregirlo | ✅ |
 | 2.31b | Arreglos de la revisión del código de la Fase 2C (todos los hallazgos) | Un enlace de otro programa a un archivo movido se corrige sin romperse | ✅ |
-| 2.31 | Versión 0.4 | — | 🔶 número 0.4.0 puesto (22/11/2026); falta que Julen cree la Release v0.4.0 |
+| 2.31 | Versión 0.4 | — | ✅ Release v0.4.0 publicada (22/11/2026) |
 
 Notas de la Fase 2C:
 - **2.20: panel de anotaciones (22/11/2026).**
@@ -1268,8 +1268,8 @@ Notas de la Fase 2C:
 | 3.4 | Sellos y marcas rápidas (✓, ✗, fecha, sellos propios) | Marco casillas de un documento sin campos | ✅ |
 | 3.5 | Crear y guardar firma e iniciales (dibujar, escribir, importar imagen sin fondo) | Tengo mi firma guardada | ✅ |
 | 3.6 | Firmar con un clic: colocar, mover, redimensionar, fecha automática | Firmo un contrato en segundos | ✅ |
-| 3.7 | Iniciales en todas las páginas | Con un clic pongo iniciales en todas las hojas | 🔶 |
-| 3.8 | Versión 0.5 | — | ⬜ |
+| 3.7 | Iniciales en todas las páginas | Con un clic pongo iniciales en todas las hojas | ✅ |
+| 3.8 | Versión 0.5 | — | 🔶 número 0.5.0 puesto (22/11/2026); falta que Julen cree la Release v0.5.0 |
 
 Notas de la Fase 3:
 - **3.1: rellenar formularios PDF (22/11/2026).**
