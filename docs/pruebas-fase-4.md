@@ -6,7 +6,8 @@ funcione y dime lo que no.
 ## Tarea 4.1 – Firmar con el certificado instalado en Windows (FNMT)
 
 1. Abre un PDF cualquiera y, en el modo Rellenar y firmar, pulsa **Firmar con
-   certificado**.
+   certificado**. Haz clic en la página donde quieres la firma (desde la
+   tarea 4.3; ver más abajo).
 2. Sale la lista de certificados de Windows: tu certificado FNMT debe estar
    elegido. Los del propio ordenador salen apagados.
 3. Pulsa **Firmar con este**. Windows te pide la contraseña o el PIN en su
@@ -37,3 +38,24 @@ funcione y dime lo que no.
    solo pide la contraseña.
 5. Pon mal la contraseña: dice que lo compruebes y no firma.
 
+
+## Tarea 4.3 – Firma visible o invisible y sello de tiempo
+
+1. Firmar con certificado: al pasar el ratón por la página sale un recuadro
+   azul discontinuo. Haz clic donde quieras la firma.
+2. El firmado muestra un recuadro con tu firma manuscrita a la izquierda (si
+   la tienes guardada) y a la derecha "Firmado digitalmente por", tu nombre y
+   la fecha. Míralo también en Adobe y en Edge: debe verse igual.
+3. Prueba en una página girada (Organizar → girar, guardar y firmar): el
+   recuadro sale derecho.
+4. Pulsa Esc en vez de hacer clic: no se firma nada.
+5. **Ajustes → Firma**:
+   - "Invisible": al firmar ya no pide sitio; la firma solo se ve en el
+     panel de firmas de Adobe.
+   - Quita "Poner mi firma manuscrita en el recuadro": el recuadro solo lleva
+     el texto.
+   - Activa "Añadir un sello de tiempo": firma un documento y súbelo a VALIDe;
+     debe decir que tiene sello de tiempo (dime qué pone). En Adobe, en las
+     propiedades de la firma, sale "La firma incluye un sello de hora".
+   - Con el sello activado, desconecta internet y firma: avisa y ofrece
+     "Firmar sin sello de tiempo".

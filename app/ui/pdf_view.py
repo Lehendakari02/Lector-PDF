@@ -89,6 +89,7 @@ from app.core.render_service import (
 )
 from app.core.search import PageText, SearchHit
 from app.core.selection import caret_at, is_on_text, selected_text, selection_rects, word_at
+from app.core.signing import BOX_SIZE
 from app.core.stamps import MARKS, Stamp, mark_order, stamp_width, text_look
 from app.core.text_layer import AddTextLayer, PageLayer
 from app.ui import theme
@@ -109,6 +110,8 @@ WRITING_WAIT_S = 3.0  # longest wait for the text being written to become a chan
 DOC_LINK_COLOR = QColor(30, 90, 220)  # the line under a link to another document
 FIELD_COLOR = QColor(40, 110, 230, 38)  # over the boxes of a form, to see where to fill
 FIELD_FOCUS_COLOR = QColor(40, 110, 230)  # around the field the keyboard is on
+PLACE_COLOR = QColor(40, 110, 230)  # where a signature with a certificate would go
+PLACE_FILL = QColor(40, 110, 230, 28)
 DRAFT_EVERY_MS = 3000  # the text being written goes to the journal this often
 WHEEL_NOTCH = 120  # what one notch of a mouse wheel sends
 # A document opens fitted to the width, but never bigger than this (1.0 = 100 %):
@@ -144,7 +147,20 @@ AUTOSCROLL_MS = 40  # while dragging a selection past the edge of the window
 # or the eraser.
 STAMP_TOOL = "stamp"  # a mark or a stamp goes where the page is clicked
 SIGN_TOOL = "sign"  # one's signature (or initials) goes where the page is clicked
-TOOLS = (*MARKUP_KINDS, NOTE, TEXT_BOX, DRAW, SHAPE_TOOL, ERASER, STAMP_TOOL, SIGN_TOOL)
+# Where a signature with a certificate goes: a click says it and nothing is
+# put on the page (``certificate_place`` tells the window).
+PLACE_TOOL = "certificate"
+TOOLS = (
+    *MARKUP_KINDS,
+    NOTE,
+    TEXT_BOX,
+    DRAW,
+    SHAPE_TOOL,
+    ERASER,
+    STAMP_TOOL,
+    SIGN_TOOL,
+    PLACE_TOOL,
+)
 DATE_SIZE = 10.0  # points: the date put under a signature
 ERASER_REACH = 5.0  # screen units around the pointer that the eraser takes
 PICK_REACH = 4.0  # screen units around the pointer that count as on a drawing
@@ -328,6 +344,9 @@ class PdfView(QAbstractScrollArea):
     pages_reshaped = Signal()
     pages_moved = Signal(int, int)  # a page put in at (1) or taken from (-1) a place
     text_changed = Signal(object)  # the letters of these pages are different (OCR)
+    # The place chosen for a signature with a certificate: page and rectangle
+    # (as shown), see ``choose_certificate_place``.
+    certificate_place = Signal(int, object)
     # The grey picture of a page, to read its text: page, width, height, dpi, bytes.
     reading_ready = Signal(int, int, int, int, object)
     reading_failed = Signal(int, str)
@@ -490,6 +509,7 @@ class PdfView(QAbstractScrollArea):
         # The review mode: what is highlighted or underlined is covered, and a
         # click uncovers one (by its name) until the mode is left.
         self._review = False
+        self._place_hover = None  # (page, box) where the certificate signature would go
         self._uncovered: set[str] = set()
         self._review_click = False  # the press uncovered something: its release does nothing
         # A text being changed in its editor: (page, its name). Its page is
@@ -621,6 +641,9 @@ class PdfView(QAbstractScrollArea):
         and the shapes draw while the button is held, and the eraser takes
         away what it is passed over."""
         kind = kind if kind in TOOLS else ""
+        if kind != PLACE_TOOL and self._place_hover is not None:
+            self._place_hover = None
+            self.viewport().update()
         if kind != TEXT_BOX:
             self.text_to_put = ""  # a datum waiting for its place is let go too
         if kind != self._markup_tool:
@@ -1638,6 +1661,12 @@ class PdfView(QAbstractScrollArea):
             if self._review:
                 self._paint_covers(painter, page, target, zoom)
             self._paint_sketches(painter, page, target, zoom)
+            if self._place_hover is not None and self._place_hover[0] == page:
+                x0, y0, x1, y1 = self._shown_rect(page, self._place_hover[1])
+                box = QRectF(x0 * zoom, y0 * zoom, (x1 - x0) * zoom, (y1 - y0) * zoom)
+                painter.setPen(QPen(PLACE_COLOR, max(1.0, 1.5 * scale), Qt.PenStyle.DashLine))
+                painter.setBrush(PLACE_FILL)
+                painter.drawRect(box.translated(target.left(), target.top()))
 
     # ---- review mode ------------------------------------------------------
 
@@ -2900,6 +2929,30 @@ class PdfView(QAbstractScrollArea):
         self.clear_selection()
         self.set_markup_tool(SIGN_TOOL if png else "")
 
+    def choose_certificate_place(self, choosing: bool = True) -> None:
+        """The next click on a page says where the signature with a
+        certificate goes (``certificate_place``); Esc lets it go."""
+        self.clear_selection()
+        self.set_markup_tool(PLACE_TOOL if choosing else "")
+
+    def certificate_box(self, page: int, x: float, y: float) -> tuple[float, float, float, float]:
+        """The box of a signature with a certificate centred at a point of the
+        page as shown, kept inside the page."""
+        size = self._sizes[page]
+        width, height = min(BOX_SIZE[0], size.width), min(BOX_SIZE[1], size.height)
+        x0 = max(0.0, min(size.width - width, x - width / 2))
+        y0 = max(0.0, min(size.height - height, y - height / 2))
+        return (x0, y0, x0 + width, y0 + height)
+
+    def put_certificate_place(self, page: int, x: float, y: float) -> bool:
+        """Say that the signature with a certificate goes here."""
+        if self._markup_tool != PLACE_TOOL or not 0 <= page < self.page_count:
+            return False
+        rect = self.certificate_box(page, x, y)
+        self.choose_certificate_place(False)
+        self.certificate_place.emit(page, rect)
+        return True
+
     def put_picture(self, page: int, x: float, y: float) -> bool:
         """The picture in hand, centred at a point of the page as shown (kept
         inside the page), and the date under it if wanted. One change."""
@@ -3338,6 +3391,11 @@ class PdfView(QAbstractScrollArea):
                 self.clear_selection()
                 self.put_stamp(self.stamp, *point)
             return
+        if self._markup_tool == PLACE_TOOL:
+            point = self._point_on_page(position)
+            if point is not None:
+                self.put_certificate_place(*point)
+            return
         if self._markup_tool == SIGN_TOOL:
             point = self._point_on_page(position)
             if point is not None and self.picture_in_hand is not None:
@@ -3749,7 +3807,13 @@ class PdfView(QAbstractScrollArea):
 
     def _update_pointer(self, position: QPoint) -> None:
         """A hand over a note, a cross to put one, an I-beam over text, an arrow elsewhere."""
-        if self._markup_tool in (STAMP_TOOL, SIGN_TOOL):
+        if self._markup_tool == PLACE_TOOL or self._place_hover is not None:
+            point = self._point_on_page(position) if self._markup_tool == PLACE_TOOL else None
+            hover = None if point is None else (point[0], self.certificate_box(*point))
+            if hover != self._place_hover:
+                self._place_hover = hover
+                self.viewport().update()
+        if self._markup_tool in (STAMP_TOOL, SIGN_TOOL, PLACE_TOOL):
             on_page = self._point_on_page(position) is not None
             shape = Qt.CursorShape.CrossCursor if on_page else Qt.CursorShape.ArrowCursor
             self.viewport().setCursor(shape)

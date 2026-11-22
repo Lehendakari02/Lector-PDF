@@ -48,6 +48,7 @@ from PySide6.QtWidgets import (
 
 from app import APP_NAME, BUILD_LABEL, __version__
 from app.core import (
+    certificate_settings,
     my_data,
     my_signature,
     ocr,
@@ -102,7 +103,13 @@ from app.core.ocr_cache import FOLDER_NAME as OCR_CACHE_FOLDER
 from app.core.ocr_cache import OcrCache
 from app.core.paths import data_dir, is_portable
 from app.core.settings import Settings
-from app.core.signing import PasswordProtected, SigningError, sign_pdf
+from app.core.signing import (
+    PasswordProtected,
+    SigningError,
+    TimestampFailed,
+    Visible,
+    sign_pdf,
+)
 from app.core.stamps import Stamp
 from app.core.summary import summary_of, write_docx, write_pdf
 from app.core.tool_keys import FAVOURITE_KEYS, TOOL_KEYS, tool_keys_wanted
@@ -373,6 +380,8 @@ class MainWindow(QMainWindow):
         self.sign_save_answer: bool | None = None
         self.signer_answer = None
         self.sign_target_answer = None
+        # For the tests: whether to sign without a timestamp when the server fails.
+        self.timestamp_failed_answer: bool | None = None
         self._sign_when_saved: DocumentPage | None = None
         self.save_as_answer = None
         self.new_stamp_answer: str | None = None  # the tests answer without asking
@@ -2795,6 +2804,9 @@ class MainWindow(QMainWindow):
         view.history_changed.connect(self._schedule_autosave)
         view.modified_changed.connect(lambda _modified: self._schedule_autosave())
         view.markup_tool_changed.connect(lambda _kind, p=page: self._edit_state_changed(p))
+        view.certificate_place.connect(
+            lambda number, rect, p=page: self._certificate_placed(p, number, rect)
+        )
         view.selection_changed.connect(lambda _has, p=page: self._edit_state_changed(p))
         view.picked_changed.connect(lambda p=page: self._edit_state_changed(p))
         view.annotations_shown_changed.connect(lambda _on, p=page: self._edit_state_changed(p))
@@ -4183,10 +4195,11 @@ class MainWindow(QMainWindow):
         """«Firmar con certificado»: the document in front, as it is saved.
 
         Changes not saved are saved first (asked), so that what is signed is
-        what is seen. Then the certificate (the one used last time comes first)
-        and where the signed document goes: a copy «-firmado» unless the
+        what is seen. A visible signature (the default) needs a place: a click
+        on the page says it. Then the certificate (the one used last time comes
+        first) and where the signed document goes: a copy «-firmado» unless the
         document already is one. Returns True if it was signed (or the saving
-        before signing has started).
+        before signing, or choosing the place, has started).
         """
         page = self.current_document
         view = page.view
@@ -4206,13 +4219,37 @@ class MainWindow(QMainWindow):
                 self._sign_when_saved = None
                 return False
             return True
+        if certificate_settings.visible_wanted(self.settings):
+            view.choose_certificate_place()
+            self.statusBar().showMessage(
+                self.tr(
+                    "Haz clic en la página donde quieres la firma. Esc para cancelar. "
+                    "(Firma invisible: en Ajustes → Firma.)"
+                ),
+                STATUS_MESSAGE_MS * 3,
+            )
+            return True
+        return self._sign_at(page, None)
+
+    def _certificate_placed(self, page: DocumentPage, number: int, rect) -> bool:
+        """The place of a visible signature was chosen on ``page``."""
+        if page.path is None or page.view.modified:
+            # Changed after «Firmar con certificado» was pressed: start again.
+            self.sign_with_certificate()
+            return False
+        png = None
+        if certificate_settings.handwritten_wanted(self.settings):
+            png = self.saved_signature(my_signature.SIGNATURE)
+        return self._sign_at(page, Visible(number, tuple(rect), png))
+
+    def _sign_at(self, page: DocumentPage, visible: Visible | None) -> bool:
         signer = self._choose_signer()
         if signer is None:
             return False
         target = self._signed_target(page.path)
         if target is None:
             return False
-        return self.sign_document(page.path, target, signer)
+        return self.sign_document(page.path, target, signer, visible)
 
     def _save_before_signing(self, page: DocumentPage) -> bool:
         if self.sign_save_answer is not None:
@@ -4237,6 +4274,24 @@ class MainWindow(QMainWindow):
         self._sign_when_saved = None
         if worked and page is self.current_document:
             QTimer.singleShot(0, self.sign_with_certificate)
+
+    def _sign_without_timestamp(self) -> bool:
+        if self.timestamp_failed_answer is not None:
+            return self.timestamp_failed_answer
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle(self.tr("Sin sello de tiempo"))
+        box.setText(
+            self.tr(
+                "No se ha podido conseguir el sello de tiempo (puede que no haya conexión "
+                "a internet). La firma es válida igualmente sin él."
+            )
+        )
+        go = box.addButton(self.tr("Firmar sin sello de tiempo"), QMessageBox.ButtonRole.AcceptRole)
+        box.addButton(self.tr("Cancelar"), QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(go)
+        box.exec()
+        return box.clickedButton() is go
 
     def _choose_signer(self):
         """The certificate to sign with, ready (None: cancelled)."""
@@ -4274,10 +4329,13 @@ class MainWindow(QMainWindow):
             target = target.with_name(target.name + ".pdf")
         return target
 
-    def sign_document(self, source: Path, target: Path, signer) -> bool:
+    def sign_document(
+        self, source: Path, target: Path, signer, visible: Visible | None = None
+    ) -> bool:
         """Sign ``source`` into ``target`` and tell how it went. The signed
         document is shown: in its own tab if it was open (``source`` itself,
-        signed in its place), or in a new one."""
+        signed in its place), or in a new one. With a timestamp if the
+        settings ask for one; if its server fails, signing without it is offered."""
         source, target = Path(source), Path(target)
         open_tab = self.index_of_document(target)
         in_place = open_tab >= 0 or (target.exists() and file_key(target) == file_key(source))
@@ -4287,8 +4345,17 @@ class MainWindow(QMainWindow):
             handle, name = tempfile.mkstemp(dir=target.parent, prefix=".firmado-", suffix=".pdf")
             os.close(handle)
             written = Path(name)
+        server = ""
+        if certificate_settings.timestamp_wanted(self.settings):
+            server = certificate_settings.timestamp_server(self.settings)
         try:
-            sign_pdf(source, written, signer)
+            try:
+                sign_pdf(source, written, signer, visible, server)
+            except TimestampFailed as error:
+                self.reporter.log.record(type(error), error, error.__traceback__, "sello de tiempo")
+                if not self._sign_without_timestamp():
+                    raise SigningCancelled() from error
+                sign_pdf(source, written, signer, visible)
         except SigningCancelled:
             self.statusBar().showMessage(self.tr("Firma cancelada."), STATUS_MESSAGE_MS)
             self._forget_file(written if in_place else None)
