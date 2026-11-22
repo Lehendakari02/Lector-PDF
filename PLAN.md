@@ -1264,8 +1264,8 @@ Notas de la Fase 2C:
 |---|-------|-------------------|--------|
 | 3.1 | Rellenar formularios PDF | Relleno un formulario oficial y se ve bien en otros lectores | ✅ |
 | 3.2 | Escribir en PDFs sin campos | Escribo mis datos encima de un documento escaneado | ✅ |
-| 3.3 | Mis datos (nombre, DNI, dirección…) | Pongo mi DNI en un formulario con un clic | 🔶 |
-| 3.4 | Sellos y marcas rápidas (✓, ✗, fecha, sellos propios) | Marco casillas de un documento sin campos | ⬜ |
+| 3.3 | Mis datos (nombre, DNI, dirección…) | Pongo mi DNI en un formulario con un clic | ✅ |
+| 3.4 | Sellos y marcas rápidas (✓, ✗, fecha, sellos propios) | Marco casillas de un documento sin campos | 🔶 |
 | 3.5 | Crear y guardar firma e iniciales (dibujar, escribir, importar imagen sin fondo) | Tengo mi firma guardada | ⬜ |
 | 3.6 | Firmar con un clic: colocar, mover, redimensionar, fecha automática | Firmo un contrato en segundos | ⬜ |
 | 3.7 | Iniciales en todas las páginas | Con un clic pongo iniciales en todas las hojas | ⬜ |
@@ -1316,6 +1316,19 @@ Notas de la Fase 3:
     y se hace clic donde va (queda como texto). Con clic derecho en un campo,
     "Poner mis datos" ofrece cualquiera.
   - Los campos que ya tienen algo no se tocan.
+- **3.4: Sellos y marcas rápidas (22/11/2026).**
+  - Botón **Sellos** (modo Rellenar y firmar, también con Ctrl+K). Abre un
+    menú: ✓ Marca, ✗ Cruz, ● Punto, Fecha de hoy, «Recibido» y los sellos
+    propios. Se elige uno y se hace clic donde va; sigue en la mano para
+    marcar más casillas, hasta Esc o volver a pulsar el botón.
+  - Las marcas son trazos dibujados (tinta PDF estándar), no letras: se ven
+    igual en cualquier lector, tenga las fuentes que tenga. La fecha
+    (dd/mm/aaaa, en negro) y los sellos (rojo, negrita) son texto PDF estándar.
+    Todo se mueve, borra y deshace como cualquier dibujo o texto.
+  - "Nuevo sello…" guarda un sello con las palabras que se quiera (hasta 12,
+    en los ajustes `sellos/propios`); "Quitar un sello" lo olvida.
+    "Tamaño" elige entre cuatro (12 puntos por defecto, el de una casilla) y
+    se recuerda.
 
 ## Fase 4 – Firma con certificado digital
 | # | Tarea | Terminado cuando… | Estado |

@@ -43,7 +43,7 @@ from PySide6.QtWidgets import (
 )
 
 from app import APP_NAME, BUILD_LABEL, __version__
-from app.core import my_data, ocr, pen, save_checks, save_settings, saving, sheets, symbols
+from app.core import my_data, ocr, pen, save_checks, save_settings, saving, sheets, stamps, symbols
 from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
 from app.core.doc_links import DocLink, relative_file, resolve
 from app.core.document import PdfDocument, PdfOpenError, engine_version
@@ -87,6 +87,7 @@ from app.core.ocr_cache import OcrCache
 from app.core.paths import data_dir, is_portable
 from app.core.settings import Settings
 from app.core.signing import PasswordProtected, SigningError, sign_pdf
+from app.core.stamps import Stamp
 from app.core.summary import summary_of, write_docx, write_pdf
 from app.core.tool_keys import FAVOURITE_KEYS, TOOL_KEYS, tool_keys_wanted
 from app.core.updates import Release
@@ -332,6 +333,8 @@ class MainWindow(QMainWindow):
         # For the tests: «Mis datos» as written in the dialog, without showing it.
         self.my_data_answer: MyData | None = None
         self.my_data_menu: QMenu | None = None
+        self.stamps_menu: QMenu | None = None
+        self.new_stamp_answer: str | None = None  # the tests answer without asking
         self._saving_to_close: list[DocumentPage] = []  # being saved before closing
         self._after_saving = None  # what to do once they are all saved
         self.statusBar().addPermanentWidget(self.speed_label)
@@ -382,6 +385,7 @@ class MainWindow(QMainWindow):
             "fill_form": self.fill_form,
             "my_data": self.show_my_data,
             "my_data_edit": self.edit_my_data,
+            "stamps": self.show_stamps,
             "margins": self.add_margin,
             "undo": self.undo,
             "redo": self.redo,
@@ -1723,6 +1727,9 @@ class MainWindow(QMainWindow):
             action = self.feature_actions[kind]
             action.setCheckable(True)
             action.setChecked(view.markup_tool == kind)
+        stamping = self.feature_actions["stamps"]
+        stamping.setCheckable(True)
+        stamping.setChecked(view.markup_tool == "stamp")
         typing = self.feature_actions["type_text"]
         typing.setCheckable(True)
         typing.setChecked(view.markup_tool == TEXT_BOX)
@@ -3350,6 +3357,104 @@ class MainWindow(QMainWindow):
             STATUS_MESSAGE_MS,
         )
         self._refresh_edit_actions()
+
+    # ---- stamps ------------------------------------------------------------------
+
+    @property
+    def stamp_size(self) -> float:
+        size = self.settings.get(stamps.SIZE_SETTING)
+        return float(size) if size in stamps.SIZES else stamps.DEFAULT_SIZE
+
+    def show_stamps(self) -> QMenu | None:
+        """«Sellos»: a mark or a stamp to put with a click wherever it goes."""
+        view = self.pdf_view
+        if view.page_count == 0:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            self._refresh_edit_actions()
+            return None
+        if view.markup_tool == "stamp":
+            view.use_stamp(None)  # pressed again: leave it
+            self._refresh_edit_actions()
+            return None
+        menu = QMenu(self)
+        today = Stamp(stamps.TODAY).text()
+        for stamp, name in (
+            (Stamp(stamps.CHECK), self.tr("✓  Marca")),
+            (Stamp(stamps.CROSS), self.tr("✗  Cruz")),
+            (Stamp(stamps.DOT), self.tr("●  Punto")),
+            (Stamp(stamps.TODAY), self.tr("Fecha de hoy ({0})").format(today)),
+            (Stamp(stamps.RECEIVED, self.tr("Recibido")), self.tr("Recibido")),
+        ):
+            menu.addAction(name).triggered.connect(
+                lambda _checked=False, s=stamp: self.use_stamp(s)
+            )
+        own = stamps.own_stamps(self.settings.get(stamps.OWN_SETTING))
+        if own:
+            menu.addSeparator()
+            for words in own:
+                menu.addAction(words).triggered.connect(
+                    lambda _checked=False, w=words: self.use_stamp(Stamp(stamps.OWN, w))
+                )
+        menu.addSeparator()
+        menu.addAction(self.tr("Nuevo sello…")).triggered.connect(
+            lambda _checked=False: self.new_stamp()
+        )
+        if own:
+            forget = menu.addMenu(self.tr("Quitar un sello"))
+            for words in own:
+                forget.addAction(words).triggered.connect(
+                    lambda _checked=False, w=words: self.forget_stamp(w)
+                )
+        sizes = menu.addMenu(self.tr("Tamaño"))
+        for size, name in zip(
+            stamps.SIZES,
+            (self.tr("Pequeño"), self.tr("Normal"), self.tr("Grande"), self.tr("Muy grande")),
+            strict=True,
+        ):
+            action = sizes.addAction(name)
+            action.setCheckable(True)
+            action.setChecked(size == self.stamp_size)
+            action.triggered.connect(
+                lambda _checked=False, s=size: self.settings.set(stamps.SIZE_SETTING, s)
+            )
+        self.stamps_menu = menu  # the tests pick from it
+        menu.popup(QCursor.pos())
+        return menu
+
+    def use_stamp(self, stamp: Stamp) -> None:
+        view = self.pdf_view
+        view.stamp_size = self.stamp_size
+        view.use_stamp(stamp)
+        self.statusBar().showMessage(
+            self.tr("Haz clic donde quieras ponerlo; cada clic pone otro (Esc: dejarlo)."),
+            STATUS_MESSAGE_MS,
+        )
+        self._refresh_edit_actions()
+
+    def new_stamp(self) -> bool:
+        """A stamp with words of one's own («Pagado», «Copia»…), kept for next time."""
+        words = self.new_stamp_answer
+        if words is None:
+            words, ok = QInputDialog.getText(
+                self,
+                self.tr("Nuevo sello"),
+                self.tr("Lo que dirá el sello (por ejemplo, «Pagado» o «Copia»):"),
+            )
+            if not ok:
+                return False
+        words = " ".join(words.split())[:60]
+        if not words:
+            return False
+        own = stamps.own_stamps(self.settings.get(stamps.OWN_SETTING))
+        if words not in own:
+            self.settings.set(stamps.OWN_SETTING, [*own, words][-stamps.MOST_OWN :])
+        if self.pdf_view.page_count:
+            self.use_stamp(Stamp(stamps.OWN, words))
+        return True
+
+    def forget_stamp(self, words: str) -> None:
+        own = stamps.own_stamps(self.settings.get(stamps.OWN_SETTING))
+        self.settings.set(stamps.OWN_SETTING, [kept for kept in own if kept != words])
 
     def _form_found(self, page: DocumentPage) -> None:
         if page is self.current_document:

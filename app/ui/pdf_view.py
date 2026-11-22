@@ -71,6 +71,7 @@ from app.core.render_service import (
 )
 from app.core.search import PageText, SearchHit
 from app.core.selection import caret_at, is_on_text, selected_text, selection_rects, word_at
+from app.core.stamps import MARKS, Stamp, mark_order, text_look
 from app.core.text_layer import AddTextLayer, PageLayer
 from app.ui import theme
 from app.ui.field_editor import FieldEditor
@@ -123,7 +124,8 @@ END_OF_PAGE = 10**9  # a caret after the last letter, whatever the page has
 AUTOSCROLL_MS = 40  # while dragging a selection past the edge of the window
 # What can be held in hand: a marker, the notes, the text, the pen, the shapes
 # or the eraser.
-TOOLS = (*MARKUP_KINDS, NOTE, TEXT_BOX, DRAW, SHAPE_TOOL, ERASER)
+STAMP_TOOL = "stamp"  # a mark or a stamp goes where the page is clicked
+TOOLS = (*MARKUP_KINDS, NOTE, TEXT_BOX, DRAW, SHAPE_TOOL, ERASER, STAMP_TOOL)
 ERASER_REACH = 5.0  # screen units around the pointer that the eraser takes
 PICK_REACH = 4.0  # screen units around the pointer that count as on a drawing
 HANDLE_SIZE = 9.0  # side of the little squares that resize, in screen units
@@ -505,6 +507,8 @@ class PdfView(QAbstractScrollArea):
         # «Mis datos», for the menu of a field: (how it is called, value).
         self.my_data_items = lambda: []
         self.text_to_put = ""  # put as it is where the text tool clicks next (a datum)
+        self.stamp: Stamp | None = None  # what the stamp tool puts
+        self.stamp_size = 12.0
         self._asked_notes: set[int] = set()
         # Where one is being written: a panel, or the page itself for a text.
         self.note_panel: NotePanel | TextEditor | None = None
@@ -2807,6 +2811,27 @@ class PdfView(QAbstractScrollArea):
             )
         )
 
+    def use_stamp(self, stamp: Stamp | None) -> None:
+        """Take a mark or a stamp in hand (None: leave it): each click puts one."""
+        self.stamp = stamp
+        self.clear_selection()
+        self.set_markup_tool(STAMP_TOOL if stamp is not None else "")
+
+    def put_stamp(self, stamp: Stamp, page: int, x: float, y: float) -> bool:
+        """A mark or a stamp centred at a point of the page as shown."""
+        if not 0 <= page < self.page_count or self._document is None:
+            return False
+        size = self.stamp_size
+        if stamp.kind in MARKS:
+            return self._do(mark_order(stamp.kind, page, x, y, size))
+        text = stamp.text()
+        if not text:
+            return False
+        look = text_look(stamp, size)
+        # The middle of its line at the click; it starts a little to the left.
+        start = max(0.0, x - 0.25 * size * len(text))
+        return self.put_text_box(page, start, y - 0.55 * size, text, **look)
+
     def draw_shape(self, kind: str, page: int, start, end) -> bool:
         """Put a line, an arrow, a box or an oval. False if it is too small."""
         if not 0 <= page < self.page_count:
@@ -3173,6 +3198,12 @@ class PdfView(QAbstractScrollArea):
                 self._start_grab(item, handle, position)
                 return
             self.pick(None)
+        if self._markup_tool == STAMP_TOOL:
+            point = self._point_on_page(position)
+            if point is not None and self.stamp is not None:
+                self.clear_selection()
+                self.put_stamp(self.stamp, *point)
+            return
         if self._markup_tool in (DRAW, SHAPE_TOOL):
             point = self._point_on_page(position)
             if point is not None:
@@ -3577,6 +3608,11 @@ class PdfView(QAbstractScrollArea):
 
     def _update_pointer(self, position: QPoint) -> None:
         """A hand over a note, a cross to put one, an I-beam over text, an arrow elsewhere."""
+        if self._markup_tool == STAMP_TOOL:
+            on_page = self._point_on_page(position) is not None
+            shape = Qt.CursorShape.CrossCursor if on_page else Qt.CursorShape.ArrowCursor
+            self.viewport().setCursor(shape)
+            return
         if self._markup_tool in (DRAW, SHAPE_TOOL, ERASER):
             handle = self._handle_under(position) if self._markup_tool == SHAPE_TOOL else None
             if handle is not None:
