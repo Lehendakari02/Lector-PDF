@@ -170,3 +170,27 @@ def test_a_field_that_cannot_be_changed_says_so(window, tmp_path, sample, wait_u
     click_field(view, "nombre")
     assert view.field_editor is None
     assert "no se puede cambiar" in window.statusBar().currentMessage()
+
+
+def test_on_a_scan_escribir_writes_anywhere(window, sample, tmp_path, wait_until):
+    import shutil
+
+    from app.core.notes import TEXT_BOX
+    from app.ui.text_editor import TextEditor
+
+    path = tmp_path / "escaneado.pdf"
+    shutil.copy(sample("escaneado.pdf"), path)
+    window.show_problem_dialogs = False
+    assert window.open_document(path)
+    view = window.pdf_view
+    wait_until(lambda: 0 in view.cached_pages())
+    window.feature_actions["type_text"].trigger()
+    assert view.markup_tool == TEXT_BOX
+    assert window.feature_actions["type_text"].isChecked()
+    QTest.mouseClick(view.viewport(), LEFT, NO_KEYS, place(view, 0, 120, 200))
+    editor = view.note_panel
+    assert isinstance(editor, TextEditor)
+    QTest.keyClicks(editor.edit, "12345678Z")
+    QTest.keyClick(editor.edit, Qt.Key.Key_Return, Qt.KeyboardModifier.ControlModifier)
+    settle(view, wait_until)
+    wait_until(lambda: [note.text for note in view.notes_of(0)] == ["12345678Z"])

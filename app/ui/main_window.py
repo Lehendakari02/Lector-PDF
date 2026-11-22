@@ -360,6 +360,9 @@ class MainWindow(QMainWindow):
             "strikeout": lambda: self.use_marker(STRIKEOUT),
             "note": lambda: self.use_writing_tool(NOTE),
             "text_box": lambda: self.use_writing_tool(TEXT_BOX),
+            # On a document without fields (a scan, a letter) one writes anywhere:
+            # it is the same text, in the mode of filling.
+            "type_text": lambda: self.use_writing_tool(TEXT_BOX),
             "draw": lambda: self.use_writing_tool(DRAW),
             "shapes": lambda: self.use_writing_tool(SHAPE_TOOL),
             "eraser": lambda: self.use_writing_tool(ERASER),
@@ -1711,6 +1714,9 @@ class MainWindow(QMainWindow):
             action = self.feature_actions[kind]
             action.setCheckable(True)
             action.setChecked(view.markup_tool == kind)
+        typing = self.feature_actions["type_text"]
+        typing.setCheckable(True)
+        typing.setChecked(view.markup_tool == TEXT_BOX)
         hide = self.feature_actions["hide_annotations"]
         hide.setCheckable(True)
         hide.setChecked(not view.annotations_shown)
