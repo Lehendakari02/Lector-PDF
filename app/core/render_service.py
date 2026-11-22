@@ -45,6 +45,7 @@ from app.core.search import (
     read_page_text,
 )
 from app.core.selection import selected_text
+from app.core.versions import VersionError, Versions
 
 # Never draw absurdly large images, whatever is asked (protects memory).
 MAX_PIXELS_PER_PAGE = 60_000_000
@@ -533,8 +534,13 @@ def _worker_main(connection: Connection) -> None:
                             checking, scanned, recognised = 0, [], []  # other numbers now
                             readings = []  # the window asks again with the new numbers
             elif kind == "save":
-                _, save_token, save_id, target = message
+                _, save_token, save_id, target, keep_version = message
                 if save_token == token and doc is not None:
+                    if keep_version is not None:
+                        try:
+                            Versions(*keep_version).keep(target)
+                        except (VersionError, OSError):
+                            connection.send(("version_failed", token, save_id))
                     try:
                         doc = _save_document(doc, doc_path, doc_password, target)
                     except _SaveFailed as failed:
@@ -625,6 +631,7 @@ class RenderService:
         on_print_lost: Callable[[int], None] | None = None,
         on_saved: Callable[[int, Path], None] | None = None,
         on_save_failed: Callable[[int, str, str], None] | None = None,
+        on_version_failed: Callable[[int], None] | None = None,
         on_changed: Callable[[int, Command, list[int], bool], None] | None = None,
         on_change_failed: Callable[[int, str], None] | None = None,
         on_notes: Callable[[int, list[PageNote]], None] | None = None,
@@ -653,6 +660,7 @@ class RenderService:
         self._unsaved: list[tuple[Command, bool]] = []
         self._on_saved = on_saved or (lambda save_id, path: None)
         self._on_save_failed = on_save_failed or (lambda save_id, kind, details: None)
+        self._on_version_failed = on_version_failed or (lambda save_id: None)
         self._save_id = 0
         self._saving: set[int] = set()  # saves asked for, not yet answered
         self._in_flight: set[int] = set()  # changes asked for, not yet answered
@@ -898,13 +906,18 @@ class RenderService:
             self._tell(self._on_change_failed, number, "no document is open")
         return number
 
-    def save(self, target: str | Path | None = None) -> int:
+    def save(self, target: str | Path | None = None, keep_version: tuple | None = None) -> int:
         """Save the open document, in its own file or (``target``) in another one.
 
         Returns a number; the answer comes with it through ``on_saved`` (with the
         file the document lives in from then on) or ``on_save_failed`` (with
         one of the kinds of ``app.core.saving`` and the details). Saving never
         leaves a file half written, and a failure loses nothing.
+
+        ``keep_version`` (the arguments of ``app.core.versions.Versions``): first
+        keep a copy of the file as it is, among the earlier versions. The helper
+        does it, so that copying a big file never holds the window up; if it
+        cannot, ``on_version_failed`` says so and the saving goes on.
         """
         with self._lock:
             self._save_id += 1
@@ -917,7 +930,7 @@ class RenderService:
                     self._reopen()
                 self._saving.add(number)
                 where = os.path.abspath(target if target is not None else self._path)
-                self._send(("save", self._token, number, where))
+                self._send(("save", self._token, number, where, keep_version))
         if failed:
             self._tell(self._on_save_failed, number, SAVE_FAILED, "no document is open")
         return number
@@ -1110,6 +1123,8 @@ class RenderService:
                     self._saving.discard(message[2])
                     self._path = Path(message[3])  # after "Save as", the new file
                 self._tell(self._on_saved, message[2], Path(message[3]))
+            elif kind == "version_failed":
+                self._tell(self._on_version_failed, message[2])
             elif kind == "save_failed":
                 self._saving.discard(message[2])
                 self._tell(self._on_save_failed, message[2], message[3], message[4])

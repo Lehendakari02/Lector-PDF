@@ -2062,22 +2062,31 @@ class MainWindow(QMainWindow):
         self, page: DocumentPage, target: Path | None, by_itself: bool = False
     ) -> None:
         page.saving_by_itself = by_itself
-        self._keep_version(target if target is not None else page.path)
+        keep = self._version_wanted(target if target is not None else page.path)
         self.statusBar().showMessage(self.tr("Guardando…"))
-        page.view.save(target)
+        page.view.save(target, keep)
         self._refresh_save_actions()
 
-    def _keep_version(self, file: Path | None) -> None:
-        """Before a file is saved over for the first time in this session, keep
-        a copy of how it was. Not being able to must not stop the saving."""
+    def _version_wanted(self, file: Path | None) -> tuple | None:
+        """Before a file is saved over for the first time in this session, a copy
+        of how it was is kept: what the helper needs to make it, or None.
+
+        The helper copies it, so that a big file never holds the window up.
+        Not being able to must not stop the saving (``_version_failed``).
+        """
         if file is None or file_key(file) in self._versioned:
-            return
-        try:
-            self.versions.keep(file)
-        except VersionError:
-            self._version_not_kept = True  # said with the result of the saving
-            return
+            return None
         self._versioned.add(file_key(file))
+        return (
+            str(self.versions.folder),
+            self.versions.max_per_document,
+            self.versions.max_total_bytes,
+        )
+
+    def _version_failed(self, page: DocumentPage) -> None:
+        self._version_not_kept = True  # said with the result of the saving
+        if page.path is not None:
+            self._versioned.discard(file_key(page.path))  # tried again next time
 
     # ---- earlier versions --------------------------------------------------
 
@@ -2466,6 +2475,7 @@ class MainWindow(QMainWindow):
         view.save_failed.connect(
             lambda number, kind, details, p=page: self._save_failed(p, number, kind)
         )
+        view.version_not_kept.connect(lambda _number, p=page: self._version_failed(p))
         page.search_panel.closed.connect(self.close_search)
         page.search_panel.box.textChanged.connect(self._panel_search_typed)
         page.side_panel.closed.connect(self.close_side_panel)

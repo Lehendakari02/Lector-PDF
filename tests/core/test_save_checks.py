@@ -134,3 +134,25 @@ def test_an_ordinary_file_has_no_warnings(tmp_path):
     shutil.copy(SAMPLES / "boe.pdf", path)
     found = warnings_for(path, stamp_of(path), temp_dir=tmp_path / "otra")
     assert _but_temporary(found) == []
+
+
+def test_a_long_document_with_a_form_is_looked_at_quickly(tmp_path):
+    """Asked at every save: the pages are not gone through one by one."""
+    import time
+
+    import pymupdf
+
+    path = tmp_path / "largo.pdf"
+    doc = pymupdf.open()
+    for _ in range(3000):
+        doc.new_page()
+    widget = pymupdf.Widget()
+    widget.field_type = pymupdf.PDF_WIDGET_TYPE_SIGNATURE
+    widget.field_name = "firma"
+    widget.rect = pymupdf.Rect(50, 50, 250, 120)
+    doc[-1].add_widget(widget)
+    doc.save(path)
+    doc.close()
+    start = time.perf_counter()
+    assert not is_signed(path)
+    assert time.perf_counter() - start < 0.5

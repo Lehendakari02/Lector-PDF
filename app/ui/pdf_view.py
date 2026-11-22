@@ -315,6 +315,7 @@ class PdfView(QAbstractScrollArea):
     _change_failed = Signal(int, str)
     saved = Signal(int, object)
     save_failed = Signal(int, str, str)
+    version_not_kept = Signal(int)  # the copy of how the file was could not be made
     _saved = Signal(int, object)
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -381,6 +382,7 @@ class PdfView(QAbstractScrollArea):
             on_print_lost=self.print_page_lost.emit,
             on_saved=self._saved.emit,
             on_save_failed=self.save_failed.emit,
+            on_version_failed=self.version_not_kept.emit,
             on_changed=self._changed.emit,
             on_change_failed=self._change_failed.emit,
             on_notes=self._notes_ready.emit,
@@ -801,13 +803,14 @@ class PdfView(QAbstractScrollArea):
         if not was:
             self.modified_changed.emit(True)
 
-    def save(self, target: str | Path | None = None) -> int:
+    def save(self, target: str | Path | None = None, keep_version: tuple | None = None) -> int:
         """Save the document in its file, or in ``target`` ("Save as").
 
         The answer comes through ``saved`` or ``save_failed`` with the number
         returned here. After "Save as" the document lives in the new file.
+        ``keep_version``: see ``RenderService.save``.
         """
-        number = self.service.save(target)
+        number = self.service.save(target, keep_version)
         self._saves[number] = self._changes
         return number
 

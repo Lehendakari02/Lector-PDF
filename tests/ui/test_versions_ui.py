@@ -213,3 +213,19 @@ def test_the_list_when_there_are_no_versions(qt_app):
     assert "Todavía no hay" in dialog.message.text()
     assert dialog.list.isHidden()
     assert not dialog.view_button.isEnabled() and not dialog.restore_button.isEnabled()
+
+
+def test_a_version_that_cannot_be_kept_does_not_stop_saving(window, opened, wait_until):
+    """The helper makes the copy (a big file never holds the window up); if it
+    cannot, the saving goes on and the message says so."""
+    window.versions.folder.parent.mkdir(parents=True, exist_ok=True)
+    window.versions.folder.write_text("not a folder")  # nothing can be kept there
+    path = opened()
+    mark(window, wait_until)
+    save(window, wait_until)
+    assert marks_in(path) == 1
+    assert "No se ha podido conservar la versión anterior" in window.statusBar().currentMessage()
+    window.versions.folder.unlink()
+    mark(window, wait_until, first=20)
+    save(window, wait_until)  # tried again: it works now
+    assert len(window.versions.of(path)) == 1
