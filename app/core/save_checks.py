@@ -12,6 +12,7 @@ Nothing here asks anything: it only tells. The window decides what to do.
 """
 
 import os
+import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -73,12 +74,39 @@ def is_signed(path: str | Path, password: str | None = None) -> bool:
                 return False
             if doc.get_sigflags() <= 0:
                 return False
-            for page in doc:
-                for widget in page.widgets(types=[pymupdf.PDF_WIDGET_TYPE_SIGNATURE]):
-                    if widget.is_signed:
-                        return True
+            # The form's own list of fields, not every page: it is asked at
+            # every save, and a document of hundreds of pages must not wait.
+            return _has_signed_field(doc)
     except Exception:  # PyMuPDF raises several unrelated error types
         return False
+
+
+_REFERENCE = re.compile(r"(\d+)\s+0\s+R")
+
+
+def _has_signed_field(doc) -> bool:
+    """Whether a field of the form is a signature with a value (signed)."""
+    kind, value = doc.xref_get_key(doc.pdf_catalog(), "AcroForm/Fields")
+    if kind == "xref":
+        kind, value = "array", doc.xref_object(int(value.split()[0]), compressed=True)
+    if kind != "array":
+        return False
+    waiting = [(int(xref), False) for xref in _REFERENCE.findall(value)]
+    seen: set[int] = set()
+    while waiting:
+        xref, inherited_sig = waiting.pop()
+        if xref in seen or not 0 < xref < doc.xref_length() or len(seen) > 100_000:
+            continue
+        seen.add(xref)
+        field_type = doc.xref_get_key(xref, "FT")
+        is_sig = field_type == ("name", "/Sig") or (field_type[0] == "null" and inherited_sig)
+        if is_sig and doc.xref_get_key(xref, "V")[0] in ("xref", "dict"):
+            return True
+        kids_kind, kids = doc.xref_get_key(xref, "Kids")
+        if kids_kind == "xref":
+            kids_kind, kids = "array", doc.xref_object(int(kids.split()[0]), compressed=True)
+        if kids_kind == "array":
+            waiting += [(int(kid), is_sig) for kid in _REFERENCE.findall(kids)]
     return False
 
 

@@ -75,6 +75,8 @@ from app.core.marker_styles import (
 )
 from app.core.notes import MONO, NOTE, SANS, SERIF, TEXT_BOX
 from app.core.ocr import OcrError
+from app.core.ocr_cache import FOLDER_NAME as OCR_CACHE_FOLDER
+from app.core.ocr_cache import OcrCache
 from app.core.paths import data_dir, is_portable
 from app.core.settings import Settings
 from app.core.signing import PasswordProtected, SigningError, sign_pdf
@@ -135,6 +137,9 @@ WELCOME_RECENT = 5  # recent documents offered on the welcome page
 # The tools of each mode with their names under the drawing, or only the drawings.
 TOOLBAR_SETTING = "barra_herramientas"
 SAVE_AS, SAVE_HERE = "save_as", "save_here"  # answers to a warning before saving
+# Something of another program taken away, too big to copy: saving makes it
+# impossible to undo. Asked every time, whatever the settings say.
+FOREIGN_LOST = "foreign_lost"
 RESTORE_TRIES = 6
 RESTORE_PAUSE = 0.25  # seconds
 PLACE_DELAY_MS = 2000  # how long after turning the page it is remembered
@@ -169,6 +174,8 @@ class MainWindow(QMainWindow):
         # Every change is written down here at once, apart from the PDF, next to
         # the settings (so the portable version keeps it in its own folder).
         self.journal = Journal(self.settings.path.parent / JOURNAL_FOLDER)
+        # Pages recognised in a run that has not ended yet (a power cut).
+        self.ocr_cache = OcrCache(self.settings.path.parent / OCR_CACHE_FOLDER)
         # The safety net under "Guardar": how each PDF was before it was saved.
         self.versions = Versions(self.settings.path.parent / VERSIONS_FOLDER)
         # Saving by itself, only for whoever turns it on: after a while without
@@ -1970,6 +1977,8 @@ class MainWindow(QMainWindow):
         found = save_checks.warnings_for(page.path, page.stamp, password)
         if not self.warn_about_temporary_folders and save_checks.TEMPORARY in found:
             found.remove(save_checks.TEMPORARY)
+        if page.view.loses_undo_on_save:
+            found.append(FOREIGN_LOST)
         return found
 
     def _ask_save_warning(self, page: DocumentPage, reason: str) -> str:
@@ -1990,6 +1999,15 @@ class MainWindow(QMainWindow):
                     "«{0}» ha cambiado en el disco desde que lo abriste. Si guardas aquí, se "
                     "pierde lo que haya hecho ese otro programa (quedaría en Archivo → "
                     "Versiones anteriores).\n\nLo más seguro es guardar una copia."
+                ),
+            ),
+            FOREIGN_LOST: (
+                self.tr("No se podrá deshacer"),
+                self.tr(
+                    "En «{0}» has quitado algo hecho con otro programa que es demasiado "
+                    "grande para guardar una copia. Si guardas, Deshacer ya no podrá "
+                    "devolverlo (seguirá en Archivo → Versiones anteriores).\n\nSi no "
+                    "estás seguro, guarda una copia."
                 ),
             ),
             save_checks.TEMPORARY: (
@@ -2124,6 +2142,7 @@ class MainWindow(QMainWindow):
                     save_checks.SIGNED: self.tr("está firmado"),
                     save_checks.CHANGED_OUTSIDE: self.tr("otro programa ha cambiado el archivo"),
                     save_checks.TEMPORARY: self.tr("está en una carpeta temporal"),
+                    FOREIGN_LOST: self.tr("Deshacer ya no podría devolver lo que has quitado"),
                 }[reasons[0]]
                 self.statusBar().showMessage(
                     self.tr("«{0}» no se guarda solo: {1}. Guárdalo tú con Guardar.").format(
@@ -2139,22 +2158,31 @@ class MainWindow(QMainWindow):
         self, page: DocumentPage, target: Path | None, by_itself: bool = False
     ) -> None:
         page.saving_by_itself = by_itself
-        self._keep_version(target if target is not None else page.path)
+        keep = self._version_wanted(target if target is not None else page.path)
         self.statusBar().showMessage(self.tr("Guardando…"))
-        page.view.save(target)
+        page.view.save(target, keep)
         self._refresh_save_actions()
 
-    def _keep_version(self, file: Path | None) -> None:
-        """Before a file is saved over for the first time in this session, keep
-        a copy of how it was. Not being able to must not stop the saving."""
+    def _version_wanted(self, file: Path | None) -> tuple | None:
+        """Before a file is saved over for the first time in this session, a copy
+        of how it was is kept: what the helper needs to make it, or None.
+
+        The helper copies it, so that a big file never holds the window up.
+        Not being able to must not stop the saving (``_version_failed``).
+        """
         if file is None or file_key(file) in self._versioned:
-            return
-        try:
-            self.versions.keep(file)
-        except VersionError:
-            self._version_not_kept = True  # said with the result of the saving
-            return
+            return None
         self._versioned.add(file_key(file))
+        return (
+            str(self.versions.folder),
+            self.versions.max_per_document,
+            self.versions.max_total_bytes,
+        )
+
+    def _version_failed(self, page: DocumentPage) -> None:
+        self._version_not_kept = True  # said with the result of the saving
+        if page.path is not None:
+            self._versioned.discard(file_key(page.path))  # tried again next time
 
     # ---- earlier versions --------------------------------------------------
 
@@ -2245,6 +2273,12 @@ class MainWindow(QMainWindow):
                 ).format(document.name),
             )
             return False
+        if reopened and index >= 0:
+            # Back to its place among the tabs, not at the end.
+            now = self.index_of_document(document)
+            if 0 <= now != index and index < len(self.documents):
+                self.document_tabs.moveTab(now, index)
+                self.document_tabs.setCurrentIndex(index)
         if reopened and index >= 0 and 0 < place < self.pdf_view.page_count:
             self.pdf_view.scroll_to_page(place)
         self.statusBar().showMessage(
@@ -2275,6 +2309,7 @@ class MainWindow(QMainWindow):
         page.stamp = save_checks.stamp_of(path)  # as we left it: ours, not another program's
         # If another program changes it again, that deserves asking again.
         page.accepted_warnings.discard(save_checks.CHANGED_OUTSIDE)
+        page.accepted_warnings.discard(FOREIGN_LOST)  # asked again for the next one
         message = self.tr("Guardado en «{0}».").format(path.name)
         if self._version_not_kept:
             self._version_not_kept = False
@@ -2542,6 +2577,7 @@ class MainWindow(QMainWindow):
         view.save_failed.connect(
             lambda number, kind, details, p=page: self._save_failed(p, number, kind)
         )
+        view.version_not_kept.connect(lambda _number, p=page: self._version_failed(p))
         page.search_panel.closed.connect(self.close_search)
         page.search_panel.box.textChanged.connect(self._panel_search_typed)
         page.side_panel.closed.connect(self.close_side_panel)
@@ -3158,7 +3194,8 @@ class MainWindow(QMainWindow):
         return page
 
     def _start_recognition(self, page: DocumentPage, pages: list[int], replace=False) -> bool:
-        run = TextRecognition(page.view, pages, page, replace)
+        self.ocr_cache.forget_old()
+        run = TextRecognition(page.view, pages, page, replace, self.ocr_cache)
         page.text_recognition = run
         run.progressed.connect(page.ocr_banner.show_progress)
         run.finished.connect(

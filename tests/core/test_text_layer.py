@@ -108,12 +108,13 @@ def test_undo_takes_away_exactly_what_was_written():
         assert doc.xref_get_key(doc[0].xref, LAYER_KEY)[0] == "null"
 
 
-def test_written_twice_or_taken_away_twice_says_so():
+def test_written_twice_does_nothing_and_taken_away_twice_says_so():
     with scanned_doc() as doc:
         order = order_for()
         order.apply(doc)
-        with pytest.raises(CommandError):
-            order.apply(doc)
+        before = doc.xref_get_key(doc[0].xref, "Contents")
+        order.apply(doc)  # the same text: nothing changes (recovering what was saved)
+        assert doc.xref_get_key(doc[0].xref, "Contents") == before
         order.undo(doc)
         with pytest.raises(CommandError):
             order.undo(doc)
@@ -225,3 +226,36 @@ def test_visible_text_stays_when_recognising_again():
 def test_replace_is_written_in_the_journal():
     order = AddTextLayer(order_for().layers, replace=True)
     assert command_from_dict(order.to_dict()) == order
+
+
+def test_applying_the_same_text_again_does_nothing(tmp_path):
+    """Recovering changes already saved (power cut right after saving) must not fail."""
+    doc = pymupdf.open()
+    doc.new_page()
+    order = AddTextLayer((PageLayer(0, (1, 0, 0, 1, 0, 0), (("hola", 50, 50, 90, 62),)),))
+    order.apply(doc)
+    saved = tmp_path / "guardado.pdf"
+    doc.save(saved)
+    with pymupdf.open(saved) as again:
+        assert order.apply(again) == [0]
+        assert again[0].get_text().split() == ["hola"]
+        other = AddTextLayer((PageLayer(0, (1, 0, 0, 1, 0, 0), (("adiós", 50, 50, 90, 62),)),))
+        with pytest.raises(CommandError):
+            other.apply(again)  # another text on a page that has one: still refused
+        order.undo(again)
+        assert not has_layer(again, 0)
+
+
+def test_recognising_again_twice_with_the_same_text_keeps_one_undo(tmp_path):
+    doc = pymupdf.open()
+    doc.new_page()
+    first = AddTextLayer((PageLayer(0, (1, 0, 0, 1, 0, 0), (("malo", 50, 50, 90, 62),)),))
+    first.apply(doc)
+    again = AddTextLayer(
+        (PageLayer(0, (1, 0, 0, 1, 0, 0), (("bueno", 50, 50, 90, 62),)),), replace=True
+    )
+    again.apply(doc)
+    again.apply(doc)  # given twice: the second time changes nothing
+    assert doc[0].get_text().split() == ["bueno"]
+    again.undo(doc)
+    assert doc[0].get_text().split() == ["malo"]

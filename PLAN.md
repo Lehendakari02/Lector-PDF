@@ -930,6 +930,7 @@ Notas de la Fase 2A:
 | 2.19b | Elegir cualquier cosa con un clic (también con una herramienta en la mano) y borrarla con Supr | Hago clic en un subrayado, un dibujo o un texto y Supr lo borra | ✅ |
 | 2.19c | Cambiar el color de lo ya puesto (subrayados, dibujos, formas, textos, notas) | Cambio un resaltado amarillo a verde sin borrarlo y hacerlo otra vez | ✅ |
 | 2.19d | Arreglos de la revisión de la Fase 2: páginas giradas, texto a medio escribir, "Cambios sin guardar" tras guardar, lo borrado sigue en el archivo | Subrayo bien en una página guardada de lado y no pierdo un texto a medio escribir al cerrar | ✅ |
+| 2.19e | Resto de la revisión de la Fase 2: Deshacer lo de otros programas tras guardar, recuperar texto reconocido, OCR a salvo de un apagón, letras de otros idiomas y menores | Quito una nota de Adobe, se guarda sola y Deshacer la devuelve; tras un apagón a mitad del OCR no empieza de cero | ✅ |
 
 Notas de la Fase 2B:
 - **2.15: detectar escaneados y ofrecer "Reconocer texto" (16/11/2026).**
@@ -1033,6 +1034,39 @@ Notas de la Fase 2B:
     no se puede deshacer: el aviso lo dice y remite a Versiones anteriores.
     Pendiente de decidir con Julen: apuntar en el diario, cada pocos
     segundos, el texto a medio escribir (por un apagón mientras se escribe).
+    Decidido el 22/11/2026 (sí, cada 3 segundos): tarea 2.26b.
+  - 2.19e: el resto de la revisión de la Fase 2 (M3, M4, B1 a B6 de
+    `revision-codigo-fase-2.md`), hecho en el hilo de la revisión (22/11/2026):
+    - **Lo de otros programas se puede deshacer también después de guardar**
+      (preocupación de Julen: con "Guardar solo mientras trabajo" se guardaba
+      sin querer y ya no había vuelta). Al quitar una anotación de otro
+      programa, la orden se lleva una copia de sus objetos (la anotación, su
+      ventana, las respuestas y su aspecto; `Foreign.prepared`, que hace el
+      ayudante justo antes de quitarla). Deshacer la vuelve a escribir con sus
+      mismos números. Si es enorme (más de 4 MB o 64 objetos, por ejemplo un
+      adjunto grande), no se copia: entonces nunca se guarda sola y, al
+      guardar a mano, sale siempre el aviso "No se podrá deshacer".
+    - Recuperar tras un apagón el texto reconocido que ya estaba guardado no
+      da error: cada página apunta qué texto lleva (`/LectorPDFOCRId`) y
+      aplicarlo otra vez no hace nada.
+    - **Reconocer texto a salvo de un apagón:** cada página leída se guarda
+      aparte al momento (carpeta `reconocido`, junto al diario; nunca en el
+      PDF), por la huella de su imagen. Si se va la luz a mitad, al volver a
+      pulsar "Reconocer texto" las páginas ya leídas no se leen otra vez. Al
+      terminar bien se borran; lo que quede de una vez que no terminó, a los
+      7 días.
+    - Si el ayudante se cae con un cambio de camino, la ventana lo da por no
+      hecho (antes podía quedarse pintado sin estar en el documento).
+    - La copia de "Versiones anteriores" la hace el ayudante, no la ventana:
+      un PDF enorme ya no la deja parada al guardar. Mirar si un PDF está
+      firmado ya no recorre todas las páginas (en uno de 3.000, al instante).
+    - Restaurar una versión deja la pestaña en su sitio (antes iba al final).
+    - Textos con símbolos y letras de otros idiomas («Łódź», «Ştefan»,
+      «Ελλάδα»): esas letras van con la fuente de los símbolos, que ahora
+      las lleva (28 KB). Antes salían como «?».
+    - Diario: quitar lo hecho y deshecho se hace de una pasada (con OCR de
+      cientos de páginas, recuperar no se queda pensando).
+    - B5 (pruebas circulares con páginas giradas) ya lo resolvió la 2.19d.
 
 ## Fase 2C – Herramientas de estudio
 Ordenadas por uso diario.

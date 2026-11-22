@@ -45,6 +45,7 @@ from app.core.search import (
     read_page_text,
 )
 from app.core.selection import selected_text
+from app.core.versions import VersionError, Versions
 
 # Never draw absurdly large images, whatever is asked (protects memory).
 MAX_PIXELS_PER_PAGE = 60_000_000
@@ -507,6 +508,12 @@ def _worker_main(connection: Connection) -> None:
                                 raise CommandError("there is no text there")
                         else:
                             _, _, _, order, undo = message
+                            prepared = getattr(order, "prepared", None)
+                            if prepared is not None and not undo:
+                                # Takes what it needs from the document first
+                                # (a copy of what it takes away, to undo it
+                                # after saving): the window gets this order back.
+                                order = prepared(doc)
                         pages = order.undo(doc) if undo else order.apply(doc)
                     except Exception as exc:
                         connection.send(("change_failed", token, change_id, str(exc)))
@@ -528,8 +535,13 @@ def _worker_main(connection: Connection) -> None:
                             checking, scanned, recognised = 0, [], []  # other numbers now
                             readings = []  # the window asks again with the new numbers
             elif kind == "save":
-                _, save_token, save_id, target = message
+                _, save_token, save_id, target, keep_version = message
                 if save_token == token and doc is not None:
+                    if keep_version is not None:
+                        try:
+                            Versions(*keep_version).keep(target)
+                        except (VersionError, OSError):
+                            connection.send(("version_failed", token, save_id))
                     try:
                         doc = _save_document(doc, doc_path, doc_password, target)
                     except _SaveFailed as failed:
@@ -620,6 +632,7 @@ class RenderService:
         on_print_lost: Callable[[int], None] | None = None,
         on_saved: Callable[[int, Path], None] | None = None,
         on_save_failed: Callable[[int, str, str], None] | None = None,
+        on_version_failed: Callable[[int], None] | None = None,
         on_changed: Callable[[int, Command, list[int], bool], None] | None = None,
         on_change_failed: Callable[[int, str], None] | None = None,
         on_notes: Callable[[int, list[PageNote]], None] | None = None,
@@ -648,8 +661,10 @@ class RenderService:
         self._unsaved: list[tuple[Command, bool]] = []
         self._on_saved = on_saved or (lambda save_id, path: None)
         self._on_save_failed = on_save_failed or (lambda save_id, kind, details: None)
+        self._on_version_failed = on_version_failed or (lambda save_id: None)
         self._save_id = 0
         self._saving: set[int] = set()  # saves asked for, not yet answered
+        self._in_flight: set[int] = set()  # changes asked for, not yet answered
         self._on_print = on_print or (lambda page: None)
         self._on_print_failed = on_print_failed or (lambda page: None)
         self._on_print_lost = on_print_lost or (lambda page: None)
@@ -692,6 +707,7 @@ class RenderService:
             self._drawing = None
             self._bad_pages = set()
             self._unsaved = []
+            self._in_flight.clear()
             self._readings.clear()
             self._ensure_started()
             self._send(("open", self._token, str(self._path), password))
@@ -886,18 +902,24 @@ class RenderService:
             if ready:
                 if self._ensure_started():
                     self._reopen()
+                self._in_flight.add(number)
                 self._send(message(number))
         if not ready:
             self._tell(self._on_change_failed, number, "no document is open")
         return number
 
-    def save(self, target: str | Path | None = None) -> int:
+    def save(self, target: str | Path | None = None, keep_version: tuple | None = None) -> int:
         """Save the open document, in its own file or (``target``) in another one.
 
         Returns a number; the answer comes with it through ``on_saved`` (with the
         file the document lives in from then on) or ``on_save_failed`` (with
         one of the kinds of ``app.core.saving`` and the details). Saving never
         leaves a file half written, and a failure loses nothing.
+
+        ``keep_version`` (the arguments of ``app.core.versions.Versions``): first
+        keep a copy of the file as it is, among the earlier versions. The helper
+        does it, so that copying a big file never holds the window up; if it
+        cannot, ``on_version_failed`` says so and the saving goes on.
         """
         with self._lock:
             self._save_id += 1
@@ -910,7 +932,7 @@ class RenderService:
                     self._reopen()
                 self._saving.add(number)
                 where = os.path.abspath(target if target is not None else self._path)
-                self._send(("save", self._token, number, where))
+                self._send(("save", self._token, number, where, keep_version))
         if failed:
             self._tell(self._on_save_failed, number, SAVE_FAILED, "no document is open")
         return number
@@ -929,6 +951,7 @@ class RenderService:
             self._searching = False
             self._token += 1
             self._unsaved = []
+            self._in_flight.clear()
             self._readings.clear()
             if self.is_running():
                 self._send(("close",))
@@ -1089,8 +1112,11 @@ class RenderService:
                 if number:  # 0: given again to a new helper, already counted
                     with self._lock:
                         self._unsaved.append((order, undo))
+                        self._in_flight.discard(number)
                     self._tell(self._on_changed, number, order, pages, undo)
             elif kind == "change_failed":
+                with self._lock:
+                    self._in_flight.discard(message[2])
                 if message[2]:
                     self._tell(self._on_change_failed, message[2], message[3])
             elif kind == "saved":
@@ -1099,6 +1125,8 @@ class RenderService:
                     self._saving.discard(message[2])
                     self._path = Path(message[3])  # after "Save as", the new file
                 self._tell(self._on_saved, message[2], Path(message[3]))
+            elif kind == "version_failed":
+                self._tell(self._on_version_failed, message[2])
             elif kind == "save_failed":
                 self._saving.discard(message[2])
                 self._tell(self._on_save_failed, message[2], message[3], message[4])
@@ -1112,6 +1140,7 @@ class RenderService:
         lost_search = bad_page = None
         lost_prints: set[int] = set()
         lost_saves: set[int] = set()
+        lost_changes: set[int] = set()
         lost_readings: set[int] = set()
         with self._lock:
             crashed = not self._closing and connection is self._connection
@@ -1132,6 +1161,9 @@ class RenderService:
                 self._searching = False
                 lost_prints, self._printing = self._printing, set()
                 lost_saves, self._saving = self._saving, set()
+                # A change on its way died with the helper: the window is told,
+                # so that nothing is shown as done that is not in the document.
+                lost_changes, self._in_flight = self._in_flight, set()
                 lost_readings, self._readings = self._readings, set()
         # The printer is told about every page it was waiting for: it asks again
         # for the good ones and leaves out the one that killed the helper.
@@ -1139,6 +1171,8 @@ class RenderService:
             self._tell(self._on_print_failed if page == bad_page else self._on_print_lost, page)
         for page in sorted(lost_readings):
             self._tell(self._on_reading_failed, page, "the helper ended before drawing it")
+        for number in sorted(lost_changes):
+            self._tell(self._on_change_failed, number, "the helper ended before doing it")
         for number in sorted(lost_saves):
             self._tell(self._on_save_failed, number, SAVE_FAILED, "the helper ended while saving")
         if crashed and bad_page is not None:

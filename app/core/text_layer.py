@@ -23,6 +23,8 @@ The words use Helvetica, which every reader has, with the Windows letters
 them is written as "?", and the rest of the word is still found.
 """
 
+import hashlib
+import json
 import math
 from dataclasses import dataclass
 
@@ -30,6 +32,9 @@ from app.core.commands import CommandError, register_reader
 
 LAYER_KEY = "LectorPDFOCR"  # on the page: the content streams that are ours
 BEFORE_KEY = "LectorPDFOCRBefore"  # on the page: how it was before recognising it again
+# On the page: which text it is (a fingerprint of the words). Applying the
+# same order twice (recovering changes that were already saved) does nothing.
+ID_KEY = "LectorPDFOCRId"
 INVISIBLE = 3  # the kind of text that is not drawn (``get_texttrace``)
 FONT_NAME = "LectorOCR"  # the name of the font in the page's resources
 FONT_OBJECT = "<</Type/Font/Subtype/Type1/BaseFont/Helvetica/Encoding/WinAnsiEncoding>>"
@@ -74,6 +79,12 @@ class PageLayer:
         level = tuple(round(value, 6) for value in pymupdf.Matrix(quarter))
         return cls(recognised.page, level, tuple(words))
 
+    @property
+    def fingerprint(self) -> str:
+        """What tells this text apart from any other, whatever page it is on."""
+        written = json.dumps([list(self.matrix), [list(word) for word in self.words]])
+        return hashlib.sha256(written.encode("utf-8")).hexdigest()[:24]
+
 
 @dataclass(frozen=True)
 class AddTextLayer:
@@ -92,9 +103,13 @@ class AddTextLayer:
         for layer in self.layers:
             if not 0 <= layer.page < doc.page_count:
                 raise CommandError(f"no page {layer.page}")
+        # Pages that already have exactly this text (the order was carried out
+        # before, and saved) are left as they are.
+        waiting = [layer for layer in self.layers if not _already(doc, layer)]
+        for layer in waiting:
             if not self.replace and has_layer(doc, layer.page):
                 raise CommandError(f"page {layer.page} already has its text written")
-        for layer in self.layers:
+        for layer in waiting:
             if self.replace:
                 clear_invisible_text(doc, layer.page)
             _write(doc, layer)
@@ -155,7 +170,7 @@ def has_invisible_text(page) -> bool:
 def _raw(doc, xref: int, key: str) -> str:
     """A key of an object as written in the file ("null" when it has none)."""
     kind, value = doc.xref_get_key(xref, key)
-    return value if kind in ("xref", "array", "dict") else "null"
+    return value if kind in ("xref", "array", "dict", "name") else "null"
 
 
 def clear_invisible_text(doc, page_number: int) -> None:
@@ -170,7 +185,8 @@ def clear_invisible_text(doc, page_number: int) -> None:
         f"<</Contents {_raw(doc, page_xref, 'Contents')} "
         f"/Resources {_raw(doc, page_xref, 'Resources')} "
         f"/Layer {_raw(doc, page_xref, LAYER_KEY)} "
-        f"/Before {_raw(doc, page_xref, BEFORE_KEY)}>>",
+        f"/Before {_raw(doc, page_xref, BEFORE_KEY)} "
+        f"/Id {_raw(doc, page_xref, ID_KEY)}>>",
     )
     spans = [span["bbox"] for span in page.get_texttrace() if span["type"] == INVISIBLE]
     if spans:
@@ -182,6 +198,7 @@ def clear_invisible_text(doc, page_number: int) -> None:
             text=pymupdf.PDF_REDACT_TEXT_REMOVE,
         )
     doc.xref_set_key(page_xref, LAYER_KEY, "null")  # ours went with the rest
+    doc.xref_set_key(page_xref, ID_KEY, "null")
     doc.xref_set_key(page_xref, BEFORE_KEY, f"{note} 0 R")
 
 
@@ -194,12 +211,20 @@ def _put_back(doc, page_number: int) -> None:
         ("Resources", "Resources"),
         ("Layer", LAYER_KEY),
         ("Before", BEFORE_KEY),
+        ("Id", ID_KEY),
     ):
         doc.xref_set_key(page_xref, page_key, _raw(doc, note, key))
 
 
 def has_layer(doc, page_number: int) -> bool:
     return bool(_ours(doc, doc.page_xref(page_number)))
+
+
+def _already(doc, layer: PageLayer) -> bool:
+    """Whether the page already has exactly this text written by us."""
+    page_xref = doc.page_xref(layer.page)
+    kind, value = doc.xref_get_key(page_xref, ID_KEY)
+    return bool(_ours(doc, page_xref)) and kind == "name" and value == f"/{layer.fingerprint}"
 
 
 def _ours(doc, page_xref: int) -> list[int]:
@@ -325,6 +350,7 @@ def _write(doc, layer: PageLayer) -> None:
     ours = _new_stream(doc, content)
     doc.xref_set_key(page_xref, "Contents", _references([opening, *before, ours]))
     doc.xref_set_key(page_xref, LAYER_KEY, _references([opening, ours]))
+    doc.xref_set_key(page_xref, ID_KEY, f"/{layer.fingerprint}")
 
 
 def remove_layer(doc, page_number: int) -> None:
@@ -334,3 +360,4 @@ def remove_layer(doc, page_number: int) -> None:
     left = [xref for xref in _contents(doc, page_xref) if xref not in ours]
     doc.xref_set_key(page_xref, "Contents", _references(left))
     doc.xref_set_key(page_xref, LAYER_KEY, "null")
+    doc.xref_set_key(page_xref, ID_KEY, "null")
