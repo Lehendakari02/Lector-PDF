@@ -675,3 +675,14 @@ Con un documento abierto, en el modo Estudiar.
    Comprueba que se lee bien, con los colores, y que puedes editarlo.
 4. Ponle nombre a un color (clic derecho) y exporta otra vez: sale el nombre.
 
+## Fase 2C – Tarea 2.28 – Dos documentos lado a lado
+
+1. Abre un tema y una ley. En el modo Estudiar pulsa **Ver al lado**: la
+   ventana se parte en dos, el tema a un lado y la ley al otro.
+2. Haz clic en la ley y subraya algo; haz clic en el tema y subraya otra
+   cosa: cada subrayado va a su documento. El zoom y "Página" de abajo siguen
+   al lado donde has hecho clic.
+3. Mueve la raya del medio para dar más sitio a uno.
+4. Clic derecho en una pestaña → **Ver al lado** con un tercer documento.
+5. La X de "Al lado: …" vuelve a un solo documento, sin cerrar ninguno.
+

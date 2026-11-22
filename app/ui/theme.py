@@ -421,6 +421,10 @@ QToolButton#tabCloseButton {{
 QToolButton#tabCloseButton:hover {{ background: {c.hover}; }}
 QToolButton#tabCloseButton:pressed {{ background: {c.accent_soft}; }}
 QSplitter#documentSplitter::handle {{ background: {c.border}; }}
+QSplitter#documentHalves::handle {{ background: {c.border}; }}
+QWidget#besideBar {{ background: {c.window}; border-bottom: 1px solid {c.border}; }}
+QLabel#besideTitle {{ color: {c.muted}; padding: 2px 0; }}
+QLabel#besideTitle[active="true"] {{ color: {c.accent}; font-weight: bold; }}
 QLabel#panelTitle {{ font-size: 12pt; font-weight: 700; }}
 QLabel#searchStatus {{ color: {c.muted}; font-size: 9pt; }}
 QWidget#searchPanel QListWidget {{ border: none; padding: 0; }}

@@ -6,7 +6,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QSize, Qt, QTimer, QUrl, qVersion
+from PySide6.QtCore import QEvent, QSize, Qt, QTimer, QUrl, Signal, qVersion
 from PySide6.QtGui import (
     QAction,
     QActionGroup,
@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
     QProgressDialog,
     QPushButton,
     QSizePolicy,
+    QSplitter,
     QStackedWidget,
     QTabBar,
     QToolBar,
@@ -116,6 +117,7 @@ from app.ui.recovery_dialog import RecoveryDialog
 from app.ui.search_panel import SearchPanel
 from app.ui.settings_dialog import SettingsDialog
 from app.ui.shape_icons import shape_icon
+from app.ui.side_by_side import BesideArea
 from app.ui.side_panel import SidePanel, Tab
 from app.ui.sign_dialog import CertificateDialog
 from app.ui.text_recognition import TextRecognition
@@ -257,8 +259,20 @@ class MainWindow(QMainWindow):
         self.update_banner = UpdateBanner()
         central_layout.addWidget(self.update_banner)
         central_layout.addWidget(self.document_tabs)
-        central_layout.addWidget(self.pages, 1)
+        # Two documents at once: the one in front on the left, another beside it.
+        self.beside = BesideArea()
+        self.beside.close_asked.connect(self.stop_beside)
+        self.halves = QSplitter(Qt.Orientation.Horizontal)
+        self.halves.setObjectName("documentHalves")
+        self.halves.setChildrenCollapsible(False)
+        self.halves.setHandleWidth(4)
+        self.halves.addWidget(self.pages)
+        self.halves.addWidget(self.beside)
+        self.beside.hide()
+        central_layout.addWidget(self.halves, 1)
         self.setCentralWidget(central)
+        # A click in one half makes the tools act on its document.
+        QApplication.instance().focusChanged.connect(self._focus_moved)
         # A page kept ready for the next document that is opened. While nothing
         # is open it also stands in as "the current document" (an empty one).
         self._spare = self._new_page()
@@ -268,6 +282,7 @@ class MainWindow(QMainWindow):
         self.update_banner.skip_wanted.connect(self._skip_new_version)
         self.document_tabs.currentChanged.connect(self._tab_changed)
         self.document_tabs.tabCloseRequested.connect(self.close_document)
+        self.document_tabs.beside_asked.connect(self._beside_from_tab)
         self.document_tabs.tabMoved.connect(self._tab_moved)
 
         self.search_action = QAction(self.tr("Buscar en el documento"), self)
@@ -337,6 +352,7 @@ class MainWindow(QMainWindow):
             "hide_annotations": self.toggle_annotations,
             "review": self.toggle_review,
             "summary": self.export_summary,
+            "beside": self.toggle_beside,
             "margins": self.add_margin,
             "undo": self.undo,
             "redo": self.redo,
@@ -2950,6 +2966,9 @@ class MainWindow(QMainWindow):
         if page not in self.documents:
             return
         index = self.documents.index(page)
+        if page is self.beside.page:
+            self.beside.take()
+            self.beside.hide()
         self.documents.pop(index)
         self._remember_place(page)
         self._set_changes_aside(page)
@@ -2986,7 +3005,11 @@ class MainWindow(QMainWindow):
         if left is not None and left is not page:
             self._autosave_page(left)  # "guardar solo" also saves when leaving a tab
         if self.documents:
-            self.pages.setCurrentWidget(page)
+            if page is self.beside.page:
+                self._keep_one_in_front()
+            else:
+                self.pages.setCurrentWidget(page)
+            self.beside.set_active(page is self.beside.page)
             self.setWindowTitle(f"{page.title} – {APP_NAME}")
             page.view.setFocus()
             if page.mode is not self._mode:
@@ -3006,6 +3029,125 @@ class MainWindow(QMainWindow):
         self._show_speed(page)
         if self._full_screen:
             self._hide_panels_for_full_screen()
+
+    # ---- two documents side by side ------------------------------------------
+
+    @property
+    def beside_page(self) -> DocumentPage | None:
+        return self.beside.page
+
+    def _front_half(self) -> DocumentPage | None:
+        """The document shown on the left half."""
+        widget = self.pages.currentWidget()
+        return widget if widget in self.documents else None
+
+    def _keep_one_in_front(self) -> None:
+        """The left half always shows a document that is not the one beside."""
+        if self._front_half() is not None:
+            return
+        others = [page for page in self.documents if page is not self.beside.page]
+        if others:
+            self.pages.setCurrentWidget(others[0])
+        else:
+            self.stop_beside()
+
+    def toggle_beside(self) -> None:
+        """See two documents at once, or stop: the button of the tool bar."""
+        if self.beside.page is not None:
+            self.stop_beside()
+            return
+        if not self.documents:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return
+        front = self.current_document
+        others = [page for page in self.documents if page is not front]
+        if len(others) == 1:
+            self.show_beside(others[0])
+        elif others:
+            menu = QMenu(self)
+            menu.setTitle(self.tr("¿Qué documento quieres ver al lado?"))
+            for page in others:
+                menu.addAction(page.title, lambda p=page: self.show_beside(p))
+            self.beside_menu = menu  # the tests pick from it
+            menu.popup(QCursor.pos())
+        else:
+            self.statusBar().showMessage(
+                self.tr("Elige el otro documento: se abrirá al lado."), STATUS_MESSAGE_MS
+            )
+            before = set(self.documents)
+            self.choose_and_open()
+            opened = [page for page in self.documents if page not in before]
+            if opened:
+                self.document_tabs.setCurrentIndex(self.documents.index(front))
+                self.show_beside(opened[-1])
+
+    def show_beside(self, page: DocumentPage) -> bool:
+        """Put an open document on the right half, beside the one in front."""
+        if page not in self.documents:
+            return False
+        if self.beside.page is page:
+            return True
+        if self.beside.page is not None:
+            self.stop_beside()
+        front = self._front_half()
+        if front is page or front is None:  # another one goes to the left half
+            others = [other for other in self.documents if other is not page]
+            if not others:
+                return False
+            self.document_tabs.setCurrentIndex(self.documents.index(others[0]))
+        self.pages.removeWidget(page)
+        self.beside.put(page)
+        self.beside.show()
+        width = max(2, self.halves.width())
+        self.halves.setSizes([width // 2, width - width // 2])
+        # Each half is narrower now: both are shown at a comfortable size again.
+        QTimer.singleShot(0, self._fit_halves)
+        self.document_tabs.setTabToolTip(
+            self.documents.index(page), self.tr("{0} (al lado)").format(page.path or page.title)
+        )
+        self._tab_changed(self.document_tabs.currentIndex())
+        return True
+
+    def _fit_halves(self) -> None:
+        for page in (self._front_half(), self.beside.page):
+            if page is not None and page.view.page_count:
+                page.view.fit_comfortable()
+
+    def stop_beside(self) -> None:
+        """Back to one document at a time; the one beside keeps its tab."""
+        page = self.beside.take()
+        self.beside.hide()
+        if page is None:
+            return
+        self.pages.addWidget(page)
+        if page in self.documents:
+            index = self.documents.index(page)
+            self.document_tabs.setTabToolTip(index, str(page.path or page.title))
+        self._tab_changed(self.document_tabs.currentIndex())
+        QTimer.singleShot(0, self._fit_halves)
+
+    def _beside_from_tab(self, index: int) -> None:
+        """Right click on a tab: see it beside the one in front, or stop."""
+        if not 0 <= index < len(self.documents):
+            return
+        page = self.documents[index]
+        if page is self.beside.page:
+            self.stop_beside()
+        else:
+            self.show_beside(page)
+
+    def _focus_moved(self, _old, new) -> None:
+        """A click or Tab into one half: the tools act on its document."""
+        if new is None or self.beside.page is None:
+            return
+        if self.beside.isAncestorOf(new):
+            wanted = self.beside.page
+        elif self.pages.isAncestorOf(new):
+            wanted = self._front_half()
+        else:
+            return
+        if wanted is not None and wanted is not self.current_document:
+            self.document_tabs.setCurrentIndex(self.documents.index(wanted))
 
     def show_search(self) -> None:
         if self.pdf_view.page_count == 0:
@@ -3564,6 +3706,24 @@ class DocumentTabBar(QTabBar):
         button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         button.clicked.connect(lambda: self._close_tab_of(button))
         self.setTabButton(index, QTabBar.ButtonPosition.RightSide, button)
+
+    beside_asked = Signal(int)  # right click → "Ver al lado" on that tab
+
+    def contextMenuEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        index = self.tabAt(event.pos())
+        if index < 0 or self.count() < 2:
+            return
+        window = self.window()
+        beside = getattr(window, "beside_page", None)
+        documents = getattr(window, "documents", [])
+        shown = 0 <= index < len(documents) and documents[index] is beside
+        menu = QMenu(self)
+        menu.addAction(
+            self.tr("Dejar de verlo al lado") if shown else self.tr("Ver al lado"),
+            lambda: self.beside_asked.emit(index),
+        )
+        menu.addAction(self.tr("Cerrar"), lambda: self.tabCloseRequested.emit(index))
+        menu.exec(event.globalPos())
 
     def _close_tab_of(self, button: QToolButton) -> None:
         for index in range(self.count()):

@@ -184,6 +184,13 @@ FEATURES: list[Feature] = [
         "repasar estudiar memorizar tapar ocultar recordar examen",
     ),
     _f(
+        "beside",
+        STUDY,
+        "Ver al lado",
+        "Ver dos documentos a la vez, uno junto al otro (por ejemplo, el tema y la ley)",
+        "dos documentos lado a lado dividir pantalla comparar tema ley",
+    ),
+    _f(
         "summary",
         STUDY,
         "Exportar resumen",

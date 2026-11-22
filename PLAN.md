@@ -1081,8 +1081,8 @@ Ordenadas por uso diario.
 | 2.25 | Insertar hojas en blanco, de rayas o cuadriculadas | Meto una hoja cuadriculada para un esquema | ✅ (hecha en la 2.13d) |
 | 2.26 | Código de colores propio (opcional, nada predefinido) | Si quiero, pongo nombre a mis colores; si no, no aparece nada | ✅ |
 | 2.26b | Lo que se está escribiendo, a salvo de un apagón (decidido por Julen el 22/11) | Corto la luz a mitad de una nota y al volver la recupero | ✅ |
-| 2.27 | Exportar resumen (PDF o Word) | Saco un documento con todo lo subrayado, ordenado por página | 🔶 |
-| 2.28 | Vista de dos documentos lado a lado | Veo el tema y la ley a la vez | ⬜ |
+| 2.27 | Exportar resumen (PDF o Word) | Saco un documento con todo lo subrayado, ordenado por página | ✅ |
+| 2.28 | Vista de dos documentos lado a lado | Veo el tema y la ley a la vez | 🔶 |
 | 2.29 | Biblioteca del temario | Elijo mi carpeta de temas, busco en todos y veo mi progreso | ⬜ |
 | 2.30 | Enlaces entre documentos (ver `CLAUDE.md`) | Desde el tema 5, un clic abre la Constitución al lado en el artículo 14; si muevo el archivo, el programa lo encuentra o me deja corregirlo | ⬜ |
 | 2.31 | Versión 0.4 | — | ⬜ |
@@ -1185,6 +1185,18 @@ Notas de la Fase 2C:
     abre: el PDF en una pestaña, el Word con el programa del ordenador.
   - El .docx se escribe sin ninguna librería añadida; se ha comprobado que
     LibreOffice lo abre. Pendiente de abrirlo en Word (prueba manual).
+- **2.28: dos documentos lado a lado (22/11/2026).**
+  - Botón **Ver al lado** del modo Estudiar (o Ctrl+K → "lado", o clic
+    derecho en una pestaña → "Ver al lado"). Con dos documentos abiertos pone
+    el otro a la derecha; con más, pregunta cuál; con uno solo, pide abrir
+    el segundo. La ventana se parte en dos mitades iguales (se puede mover la
+    raya) y cada documento se ajusta a su mitad.
+  - Cada documento sigue con su pestaña. Las herramientas, la barra de página
+    y el zoom trabajan sobre la mitad en la que se hace clic; la de la derecha
+    lo indica con su título en color ("Al lado: …").
+  - La X de esa barra (o volver a pulsar el botón) deja de verlo al lado, sin
+    cerrarlo. Cerrar uno de los dos vuelve a uno solo.
+  - No se recuerda al cerrar el programa (las pestañas sí vuelven).
 
 ## Fase 3 – Rellenar y firma manuscrita
 | # | Tarea | Terminado cuando… | Estado |
