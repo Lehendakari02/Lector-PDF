@@ -44,12 +44,14 @@ class CertificateDialog(QDialog):
         self,
         parent: QWidget | None = None,
         certificates: list[StoreCertificate] | None = None,
+        preferred: str = "",
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(self.tr("Firmar con certificado"))
         self.setMinimumSize(560, 380)
         self.signer = None
         self.problem = ""
+        self.chosen = ""  # the thumbprint of the certificate of Windows chosen
 
         if certificates is None:
             certificates = []
@@ -112,11 +114,10 @@ class CertificateDialog(QDialog):
         layout.addWidget(self.list, 1)
         layout.addWidget(self.buttons)
 
-        first_usable = next(
-            (row for row, certificate in enumerate(certificates) if certificate.usable),
-            -1,
-        )
-        self.list.setCurrentRow(first_usable)
+        usable = [row for row, certificate in enumerate(certificates) if certificate.usable]
+        # The one used last time first, if it is still there and good.
+        remembered = [row for row in usable if certificates[row].thumbprint == preferred]
+        self.list.setCurrentRow((remembered or usable or [-1])[0])
         self._update_buttons()
 
     def selected(self) -> StoreCertificate | None:
@@ -136,6 +137,7 @@ class CertificateDialog(QDialog):
             return
         try:
             self.signer = WindowsStoreSigner(certificate, window_handle=int(self.winId()))
+            self.chosen = certificate.thumbprint
         except Exception as error:
             self.problem = str(error)
             self.explanation.setText(

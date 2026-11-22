@@ -1,5 +1,7 @@
 """Main window: the work modes, their tools and the function finder."""
 
+import contextlib
+import os
 import shutil
 import tempfile
 import time
@@ -159,6 +161,7 @@ def signed_name(path: Path) -> Path:
     return path.with_name(f"{path.stem}-firmado.pdf")
 
 
+CERTIFICATE_SETTING = "firma/certificado"  # the certificate of Windows used last
 DATE_SETTING = "firma/fecha"  # whether the date is written under the signature
 # Big enough to press comfortably with a finger on a touch screen.
 MIN_BUTTON_HEIGHT = 40
@@ -364,6 +367,12 @@ class MainWindow(QMainWindow):
         # For the tests: "copy", "same" or "" (cancel) when saving what was just
         # signed, and what the "Guardar como" window answers, given its suggestion.
         self.signed_save_answer: str | None = None
+        # For the tests, signing with a certificate: whether to save first, the
+        # signer chosen, and where the signed document goes (given the proposal).
+        self.sign_save_answer: bool | None = None
+        self.signer_answer = None
+        self.sign_target_answer = None
+        self._sign_when_saved: DocumentPage | None = None
         self.save_as_answer = None
         self.new_stamp_answer: str | None = None  # the tests answer without asking
         self._saving_to_close: list[DocumentPage] = []  # being saved before closing
@@ -2499,10 +2508,12 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(message, STATUS_MESSAGE_MS)
         self._refresh_save_actions()
         self._saved_before_closing(page, True)
+        self._sign_after_saving(page, True)
 
     def _save_failed(self, page: DocumentPage, _number: int, kind: str) -> None:
         self._refresh_save_actions()
         self._saved_before_closing(page, False)
+        self._sign_after_saving(page, False)
         name = page.title
         reasons = {
             saving.LOCKED: self.tr(
@@ -4165,49 +4176,127 @@ class MainWindow(QMainWindow):
         error = OcrError(details)
         self.reporter.log.record(type(error), error, None, "reconocer texto")
 
-    # ---- signing (proof of concept of task 0.8) ------------------------
+    # ---- signing with a digital certificate -------------------------------
 
-    def sign_with_certificate(self) -> None:
-        """Ask for a certificate and a new file name, and sign the open document."""
-        source = self.pdf_view.document_path
-        if source is None:
+    def sign_with_certificate(self) -> bool:
+        """«Firmar con certificado»: the document in front, as it is saved.
+
+        Changes not saved are saved first (asked), so that what is signed is
+        what is seen. Then the certificate (the one used last time comes first)
+        and where the signed document goes: a copy «-firmado» unless the
+        document already is one. Returns True if it was signed (or the saving
+        before signing has started).
+        """
+        page = self.current_document
+        view = page.view
+        if view.page_count == 0 or page.path is None:
             self.statusBar().showMessage(
                 self.tr("Abre el documento que quieres firmar."), STATUS_MESSAGE_MS
             )
-            return
-        dialog = CertificateDialog(self)
-        if dialog.exec() != CertificateDialog.DialogCode.Accepted or dialog.signer is None:
-            return
-        suggested = source.with_name(f"{source.stem}-firmado.pdf")
-        target, _filter = QFileDialog.getSaveFileName(
-            self,
-            self.tr("Guardar el documento firmado como"),
-            str(suggested),
-            self.tr("Documentos PDF (*.pdf)"),
+            return False
+        view.finish_writing()
+        if view.saving:
+            return False
+        if view.modified:
+            if not self._save_before_signing(page):
+                return False
+            self._sign_when_saved = page
+            if not self.save_document(page):
+                self._sign_when_saved = None
+                return False
+            return True
+        signer = self._choose_signer()
+        if signer is None:
+            return False
+        target = self._signed_target(page.path)
+        if target is None:
+            return False
+        return self.sign_document(page.path, target, signer)
+
+    def _save_before_signing(self, page: DocumentPage) -> bool:
+        if self.sign_save_answer is not None:
+            return self.sign_save_answer
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle(self.tr("Firmar con certificado"))
+        box.setText(
+            self.tr(
+                "«{0}» tiene cambios sin guardar. Para que entren en la firma, primero se guardan."
+            ).format(page.path.name)
         )
-        if target:
-            self.sign_document(source, Path(target), dialog.signer)
+        go = box.addButton(self.tr("Guardar y firmar"), QMessageBox.ButtonRole.AcceptRole)
+        box.addButton(self.tr("Cancelar"), QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(go)
+        box.exec()
+        return box.clickedButton() is go
+
+    def _sign_after_saving(self, page: DocumentPage, worked: bool) -> None:
+        if self._sign_when_saved is not page:
+            return
+        self._sign_when_saved = None
+        if worked and page is self.current_document:
+            QTimer.singleShot(0, self.sign_with_certificate)
+
+    def _choose_signer(self):
+        """The certificate to sign with, ready (None: cancelled)."""
+        if self.signer_answer is not None:
+            return self.signer_answer
+        dialog = CertificateDialog(
+            self, preferred=str(self.settings.get(CERTIFICATE_SETTING) or "")
+        )
+        if dialog.exec() != CertificateDialog.DialogCode.Accepted or dialog.signer is None:
+            return None
+        if dialog.chosen:
+            self.settings.set(CERTIFICATE_SETTING, dialog.chosen)
+        return dialog.signer
+
+    def _signed_target(self, source: Path) -> Path | None:
+        """Where the signed document goes: asked, «-firmado» proposed."""
+        suggested = source if source.stem.lower().endswith("-firmado") else signed_name(source)
+        if self.sign_target_answer is not None:
+            chosen = self.sign_target_answer(suggested)
+        else:
+            chosen, _filter = QFileDialog.getSaveFileName(
+                self,
+                self.tr("Guardar el documento firmado como"),
+                str(suggested),
+                self.tr("Documentos PDF (*.pdf)"),
+            )
+        if not chosen:
+            return None
+        target = Path(chosen).absolute()
+        if target.suffix.lower() != ".pdf":
+            target = target.with_name(target.name + ".pdf")
+        return target
 
     def sign_document(self, source: Path, target: Path, signer) -> bool:
-        """Sign ``source`` into ``target`` and tell how it went."""
-        if target.resolve() == source.resolve():
-            self._show_problem(
-                self.tr("Elige otro nombre"),
-                self.tr("De momento el documento firmado se guarda como una copia nueva."),
-            )
-            return False
+        """Sign ``source`` into ``target`` and tell how it went. The signed
+        document is shown: in its own tab if it was open (``source`` itself,
+        signed in its place), or in a new one."""
+        source, target = Path(source), Path(target)
+        open_tab = self.index_of_document(target)
+        in_place = open_tab >= 0 or (target.exists() and file_key(target) == file_key(source))
+        written = target
+        if in_place:
+            # The open file cannot be replaced while it is shown: sign beside it.
+            handle, name = tempfile.mkstemp(dir=target.parent, prefix=".firmado-", suffix=".pdf")
+            os.close(handle)
+            written = Path(name)
         try:
-            sign_pdf(source, target, signer)
+            sign_pdf(source, written, signer)
         except SigningCancelled:
             self.statusBar().showMessage(self.tr("Firma cancelada."), STATUS_MESSAGE_MS)
+            self._forget_file(written if in_place else None)
             return False
         except PasswordProtected:
+            self._forget_file(written if in_place else None)
             self._show_problem(
                 self.tr("Este PDF tiene contraseña"),
                 self.tr("Todavía no se pueden firmar documentos con contraseña."),
             )
             return False
         except SigningError as error:
+            self._forget_file(written if in_place else None)
             self.reporter.log.record(type(error), error, error.__traceback__, "firmar")
             self._show_problem(
                 self.tr("No se ha podido firmar"),
@@ -4217,7 +4306,19 @@ class MainWindow(QMainWindow):
                 ),
             )
             return False
-        message = self.tr("Documento firmado y guardado como «{0}».").format(target.name)
+        if in_place and not self._put_signed_in_place(written, target):
+            return False
+        if self.index_of_document(target) < 0:
+            self.open_document(target)
+        who = getattr(getattr(signer, "signing_cert", None), "subject", None)
+        name = ""
+        if who is not None:
+            name = who.native.get("common_name", "") if hasattr(who, "native") else ""
+        message = (
+            self.tr("Documento firmado por {0} y guardado como «{1}».").format(name, target.name)
+            if name
+            else self.tr("Documento firmado y guardado como «{0}».").format(target.name)
+        )
         self.statusBar().showMessage(message, STATUS_MESSAGE_MS)
         if self.show_problem_dialogs:
             QMessageBox.information(
@@ -4230,6 +4331,53 @@ class MainWindow(QMainWindow):
                     "(valide.redsara.es)."
                 ),
             )
+        return True
+
+    @staticmethod
+    def _forget_file(path: Path | None) -> None:
+        if path is not None:
+            with contextlib.suppress(OSError):
+                path.unlink()
+
+    def _put_signed_in_place(self, signed: Path, target: Path) -> bool:
+        """The signed copy takes the place of the open file ``target``: its tab
+        lets go of it, how it was is kept among the earlier versions, and it
+        opens again at the same page."""
+        index = self.index_of_document(target)
+        place = -1
+        if index >= 0:
+            place = self.documents[index].view.current_page
+            self.close_document(index, ask=False)
+        with contextlib.suppress(Exception):
+            self.versions.keep(target)
+        error = ""
+        for _attempt in range(RESTORE_TRIES):
+            try:
+                os.replace(signed, target)
+                error = ""
+                break
+            except OSError as failed:
+                error = str(failed)
+                time.sleep(RESTORE_PAUSE)  # the helper may need a moment to let go
+        if error:
+            self._forget_file(signed)
+            if index >= 0:
+                self.open_document(target)
+            self._show_problem(
+                self.tr("No se ha podido firmar"),
+                self.tr(
+                    "«{0}» sigue como estaba: otro programa lo tiene abierto. Ciérralo y "
+                    "vuelve a firmar, o firma una copia con otro nombre."
+                ).format(target.name),
+            )
+            return False
+        if index >= 0 and self.open_document(target):
+            now = self.index_of_document(target)
+            if 0 <= now != index and index < len(self.documents):
+                self.document_tabs.moveTab(now, index)
+                self.document_tabs.setCurrentIndex(index)
+            if 0 < place < self.pdf_view.page_count:
+                self.pdf_view.scroll_to_page(place)
         return True
 
     def _document_failed(self, _message: str) -> None:
