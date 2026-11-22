@@ -194,3 +194,65 @@ def test_on_a_scan_escribir_writes_anywhere(window, sample, tmp_path, wait_until
     QTest.keyClick(editor.edit, Qt.Key.Key_Return, Qt.KeyboardModifier.ControlModifier)
     settle(view, wait_until)
     wait_until(lambda: [note.text for note in view.notes_of(0)] == ["12345678Z"])
+
+
+# ---- «Mis datos» (3.3) ----------------------------------------------------------
+
+
+def test_my_data_are_asked_once_and_fill_the_form_in_one_click(window, form, wait_until):
+    from app.core.my_data import ID, NAME, PROVINCE, MyData
+
+    window.my_data_answer = MyData.from_setting(
+        {NAME: "Íñigo", ID: "12345678Z", PROVINCE: "bizkaia"}
+    )
+    menu = window.show_my_data()
+    assert window.settings.get("mis_datos")["id"] == "12345678Z", "kept for the next time"
+    first = menu.actions()[0]
+    assert "3 campos" in first.text()
+    first.trigger()
+    settle(form, wait_until)
+    wait_until(lambda: value_of(form, "dni") == "12345678Z")
+    assert value_of(form, "nombre") == "Íñigo" and value_of(form, "provincia") == "Bizkaia"
+    assert "3 campos" in window.statusBar().currentMessage()
+    assert form.undo(), "one change"
+    wait_until(lambda: value_of(form, "dni") == "" and value_of(form, "nombre") == "")
+
+
+def test_a_datum_in_the_menu_of_a_field(window, form, wait_until):
+    from app.core.my_data import ID, MyData
+
+    window.my_data_answer = MyData.from_setting({ID: "12345678Z"})
+    assert window.edit_my_data()
+    field = next(f for f in form.fields_of(0) if f.name == "direccion")
+    x0, y0, x1, y1 = field.rect
+    menu = form.context_menu(place(form, 0, (x0 + x1) / 2, (y0 + y1) / 2))
+    mine = next(a for a in menu.actions() if a.text() == "Poner mis datos").menu()
+    (datum,) = mine.actions()
+    assert datum.text() == "DNI / NIE: 12345678Z"
+    datum.trigger()
+    settle(form, wait_until)
+    wait_until(lambda: value_of(form, "direccion") == "12345678Z")
+
+
+def test_on_a_scan_a_datum_goes_where_it_is_clicked(window, sample, tmp_path, wait_until):
+    import shutil
+
+    from app.core.my_data import ID, MyData
+
+    path = tmp_path / "escaneado.pdf"
+    shutil.copy(sample("escaneado.pdf"), path)
+    window.show_problem_dialogs = False
+    assert window.open_document(path)
+    view = window.pdf_view
+    wait_until(lambda: 0 in view.cached_pages())
+    window.my_data_answer = MyData.from_setting({ID: "12345678Z"})
+    menu = window.show_my_data()
+    assert not any("Rellenar el formulario" in a.text() for a in menu.actions())
+    next(a for a in menu.actions() if a.text().startswith("DNI")).trigger()
+    assert view.text_to_put == "12345678Z"
+    QTest.mouseClick(view.viewport(), LEFT, NO_KEYS, place(view, 0, 120, 200))
+    settle(view, wait_until)
+    wait_until(lambda: [note.text for note in view.notes_of(0)] == ["12345678Z"])
+    assert view.markup_tool == "" and view.text_to_put == ""
+    note = view.notes_of(0)[0]
+    assert note.rect[1] < 200 < note.rect[3], "the middle of the line at the click"

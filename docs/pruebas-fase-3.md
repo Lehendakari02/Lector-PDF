@@ -32,3 +32,17 @@ un modelo de la Agencia Tributaria), no documentos con datos de nadie.
 3. Arrastra un texto para colocarlo mejor; cambia su tamaño con A+ y A−.
 4. Guarda y abre el PDF en Adobe y en Edge: el texto se ve en su sitio.
 
+## Tarea 3.3 – Mis datos
+
+1. Abre un formulario y pulsa **Mis datos** (modo Rellenar y firmar). La
+   primera vez pide tus datos: escríbelos y pulsa Guardar.
+2. En el menú, pulsa **"Rellenar el formulario con mis datos"**: cada dato va
+   a su campo (nombre, DNI, dirección…). Revisa que no se ha puesto nada en
+   un sitio que no toca. Ctrl+Z lo quita todo de una vez.
+3. Clic derecho en un campo → **Poner mis datos** → elige uno.
+4. Abre un escaneado, pulsa Mis datos, elige tu DNI y haz clic donde va.
+5. Cierra y abre el programa: tus datos siguen ahí ("Editar mis datos…" para
+   cambiarlos).
+6. Prueba con formularios reales de distintos sitios y dime qué campos no
+   reconoce, para añadir esos nombres.
+

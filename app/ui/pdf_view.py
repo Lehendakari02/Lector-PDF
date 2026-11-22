@@ -59,7 +59,8 @@ from app.core.doc_links import DocLink
 from app.core.document import PageSize, PdfDocument
 from app.core.drawing import ARROW, BOX, DRAW, ERASER, INK, OVAL, SHAPE_TOOL, PageDrawing
 from app.core.foreign import OTHER
-from app.core.forms import CHECK, COMBO, RADIO, TEXT, FillField, FormField
+from app.core.forms import CHECK, COMBO, RADIO, TEXT, FillField, FillFields, FormField
+from app.core.my_data import choice_for
 from app.core.notes import NOTE, TEXT_BOX, PageNote
 from app.core.outline import OutlineEntry
 from app.core.render_service import (
@@ -501,6 +502,9 @@ class PdfView(QAbstractScrollArea):
         self.field_editor: FieldEditor | None = None
         self._field_focus: FormField | None = None  # the field the keyboard is on
         self.choice_menu: QMenu | None = None  # the choices of a list (the tests pick)
+        # «Mis datos», for the menu of a field: (how it is called, value).
+        self.my_data_items = lambda: []
+        self.text_to_put = ""  # put as it is where the text tool clicks next (a datum)
         self._asked_notes: set[int] = set()
         # Where one is being written: a panel, or the page itself for a text.
         self.note_panel: NotePanel | TextEditor | None = None
@@ -572,6 +576,8 @@ class PdfView(QAbstractScrollArea):
         and the shapes draw while the button is held, and the eraser takes
         away what it is passed over."""
         kind = kind if kind in TOOLS else ""
+        if kind != TEXT_BOX:
+            self.text_to_put = ""  # a datum waiting for its place is let go too
         if kind != self._markup_tool:
             self._sketch = None
             self._erasing = False
@@ -2132,7 +2138,28 @@ class PdfView(QAbstractScrollArea):
         if self._drafting is not None:
             self._drafting.append(order)
             return True
-        # Seen at once, before the engine answers (a second click must know it).
+        self._show_filled(field, value)
+        return self._do(order)
+
+    def fill_many(self, wanted: list[tuple[FormField, str]]) -> int:
+        """Fill several fields as one change (undone at once). How many changed."""
+        fills, seen = [], set()
+        for field, value in wanted:
+            if field.read_only or field.name in seen or value == self._field_value(field):
+                continue
+            seen.add(field.name)
+            fills.append(
+                FillField(field.page, field.name, field.kind, self._field_value(field), value)
+            )
+        if not fills or self._document is None:
+            return 0
+        for field, value in wanted:
+            if field.name in seen:
+                self._show_filled(field, value)
+        return len(fills) if self._do(FillFields(tuple(fills))) else 0
+
+    def _show_filled(self, field: FormField, value: str) -> None:
+        """Seen at once, before the engine answers (a second click must know it)."""
         for page, fields in self._fields.items():
             self._fields[page] = [
                 replace(
@@ -2146,7 +2173,6 @@ class PdfView(QAbstractScrollArea):
                 for other in fields
             ]
         self.viewport().update()
-        return self._do(order)
 
     def use_field(self, field: FormField, near: QPoint | None = None) -> bool:
         """What a click on a field does: write in it, tick it, or choose."""
@@ -2565,14 +2591,21 @@ class PdfView(QAbstractScrollArea):
 
     def start_note(
         self, kind: str, page: int, x: float, y: float, near: QPoint
-    ) -> NotePanel | TextEditor:
-        """Start a new note or text at a point of a page.
+    ) -> NotePanel | TextEditor | None:
+        """Start a new note or text at a point of a page (None: a datum was put).
 
         A note is written in a small panel. A text is written on the page
         itself, its first line at the height of the click. (With the pages
         turned, the text is written in the panel too.)
         """
         self.close_note_panel(keep=True)
+        if kind == TEXT_BOX and self.text_to_put:
+            # A datum chosen to put: it goes there at once, the middle of its
+            # line at the click; the tool is left.
+            text, self.text_to_put = self.text_to_put, ""
+            self.set_markup_tool("")
+            self.put_text_box(page, x, y - 0.55 * self.text_size, text)
+            return None
         if kind == TEXT_BOX and self._rotation == 0:
             # The click is where the middle of the first line goes.
             x, y = self._text_origin(page, x, y - 0.55 * self.text_size, self.text_size)
@@ -3618,6 +3651,20 @@ class PdfView(QAbstractScrollArea):
     def context_menu(self, where: QPoint) -> QMenu:
         """What the right button offers at a place of the window."""
         menu = QMenu(self)
+        field = self.field_under(where) if not self._markup_tool else None
+        if field is not None and not field.read_only and field.kind in (TEXT, COMBO):
+            data = self.my_data_items()
+            mine = menu.addMenu(self.tr("Poner mis datos"))
+            mine.setEnabled(bool(data))
+            for name, value in data:
+                if field.kind == COMBO and not field.editable:
+                    value = choice_for(value, field.choices)
+                    if value is None:
+                        continue
+                mine.addAction(f"{name}: {value}").triggered.connect(
+                    lambda _checked=False, v=value: self.fill(field, v)
+                )
+            menu.addSeparator()
         note = self.note_under(where)
         if note is not None:
             is_note = note.kind == NOTE

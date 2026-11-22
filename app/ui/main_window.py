@@ -43,7 +43,7 @@ from PySide6.QtWidgets import (
 )
 
 from app import APP_NAME, BUILD_LABEL, __version__
-from app.core import ocr, pen, save_checks, save_settings, saving, sheets, symbols
+from app.core import my_data, ocr, pen, save_checks, save_settings, saving, sheets, symbols
 from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
 from app.core.doc_links import DocLink, relative_file, resolve
 from app.core.document import PdfDocument, PdfOpenError, engine_version
@@ -64,6 +64,8 @@ from app.core.drawing import (
 )
 from app.core.error_log import running_from_source_or_test_build
 from app.core.favourites import MAX_FAVOURITES, Favourites, apply_to, favourite_of
+from app.core.forms import COMBO
+from app.core.forms import TEXT as FORM_TEXT
 from app.core.history import History, file_key
 from app.core.interface_size import NORMAL_SIZE
 from app.core.journal import FOLDER_NAME as JOURNAL_FOLDER
@@ -77,6 +79,7 @@ from app.core.marker_styles import (
     TEXT_SIZES,
     MarkerStyles,
 )
+from app.core.my_data import MyData, choice_for, datum_for
 from app.core.notes import MONO, NOTE, SANS, SERIF, TEXT_BOX
 from app.core.ocr import OcrError
 from app.core.ocr_cache import FOLDER_NAME as OCR_CACHE_FOLDER
@@ -112,6 +115,7 @@ from app.ui.link_dialog import LinkDialog
 from app.ui.margin_dialog import MarginChoice, MarginDialog
 from app.ui.margin_dialog import remember as remember_margin
 from app.ui.margin_dialog import remembered as remembered_margin
+from app.ui.my_data_dialog import MyDataDialog, datum_names
 from app.ui.page_box import PageBox
 from app.ui.password_dialog import PasswordDialog
 from app.ui.pdf_view import PdfView
@@ -325,6 +329,9 @@ class MainWindow(QMainWindow):
         # and where a document that is not found is now ("" = not known).
         self.link_answer: tuple[Path, str] | None = None
         self.where_is_answer: Path | str | None = None
+        # For the tests: «Mis datos» as written in the dialog, without showing it.
+        self.my_data_answer: MyData | None = None
+        self.my_data_menu: QMenu | None = None
         self._saving_to_close: list[DocumentPage] = []  # being saved before closing
         self._after_saving = None  # what to do once they are all saved
         self.statusBar().addPermanentWidget(self.speed_label)
@@ -373,6 +380,8 @@ class MainWindow(QMainWindow):
             "library": self.show_library,
             "link": self.link_selection,
             "fill_form": self.fill_form,
+            "my_data": self.show_my_data,
+            "my_data_edit": self.edit_my_data,
             "margins": self.add_margin,
             "undo": self.undo,
             "redo": self.redo,
@@ -2695,6 +2704,7 @@ class MainWindow(QMainWindow):
         )
         view.edit_failed.connect(self._edit_failed)
         view.form_found.connect(lambda p=page: self._form_found(p))
+        view.my_data_items = self._my_data_items
         view.field_refused.connect(lambda why: self.statusBar().showMessage(why, STATUS_MESSAGE_MS))
         view.link_wanted.connect(lambda area, words, p=page: self._link_asked(p, area, words))
         view.doc_link_clicked.connect(lambda link, p=page: self.follow_doc_link(p, link))
@@ -3238,6 +3248,108 @@ class MainWindow(QMainWindow):
             STATUS_MESSAGE_MS,
         )
         return True
+
+    @property
+    def my_data(self) -> MyData:
+        return MyData.from_setting(self.settings.get(my_data.SETTING))
+
+    def _my_data_items(self) -> list[tuple[str, str]]:
+        names = datum_names(self)
+        return [(names[key], value) for key, value in self.my_data.filled()]
+
+    def edit_my_data(self) -> bool:
+        """Write or change «Mis datos» (kept only on this computer)."""
+        answer = self.my_data_answer
+        if answer is None:
+            dialog = MyDataDialog(self.my_data, self)
+            if not dialog.exec():
+                return False
+            answer = dialog.data
+        self.settings.set(my_data.SETTING, answer.to_setting())
+        return True
+
+    def _my_data_fills(self, data: MyData) -> list:
+        """The empty fields of the form that ask for one of the data, with it."""
+        view = self.pdf_view
+        wanted = []
+        for page in range(view.page_count):
+            for field in view.fields_of(page) if page in view._fields else ():
+                if field.read_only or field.value or field.kind not in (FORM_TEXT, COMBO):
+                    continue
+                key = datum_for(field.label, field.name)
+                value = data.value(key) if key else ""
+                if value and field.kind == COMBO and not field.editable:
+                    value = choice_for(value, field.choices) or ""
+                if value:
+                    wanted.append((field, value))
+        return wanted
+
+    def show_my_data(self) -> QMenu | None:
+        """«Mis datos»: put them all in the form at once, or one where it is clicked."""
+        view = self.pdf_view
+        if view.page_count == 0:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return None
+        data = self.my_data
+        if data.empty and not self.edit_my_data():
+            return None
+        data = self.my_data
+        if data.empty:
+            return None
+        menu = QMenu(self)
+        fills = self._my_data_fills(data)
+        if fills:
+            every = menu.addAction(
+                self.tr("Rellenar el formulario con mis datos ({0} campos)").format(len(fills))
+            )
+            every.triggered.connect(lambda _checked=False: self.fill_with_my_data())
+            menu.addSeparator()
+        names = datum_names(self)
+        for key, value in data.filled():
+            menu.addAction(f"{names[key]}: {value}").triggered.connect(
+                lambda _checked=False, v=value: self.put_datum(v)
+            )
+        menu.addSeparator()
+        menu.addAction(self.tr("Editar mis datos…")).triggered.connect(
+            lambda _checked=False: self.edit_my_data()
+        )
+        self.my_data_menu = menu  # the tests pick from it
+        menu.popup(QCursor.pos())
+        return menu
+
+    def fill_with_my_data(self) -> int:
+        """Every empty field that asks for one of «Mis datos» gets it (one change)."""
+        filled = self.pdf_view.fill_many(self._my_data_fills(self.my_data))
+        if filled:
+            self.statusBar().showMessage(
+                self.tr("Tus datos se han puesto en {0} campos. Ctrl+Z lo deshace.").format(filled),
+                STATUS_MESSAGE_MS,
+            )
+        else:
+            self.statusBar().showMessage(
+                self.tr("No hay campos vacíos que pidan tus datos."), STATUS_MESSAGE_MS
+            )
+        return filled
+
+    def put_datum(self, value: str) -> None:
+        """One datum, to put with a click where it goes (in a field: at once)."""
+        view = self.pdf_view
+        editor = view.field_editor
+        if editor is not None:  # a field being written: the datum goes in it
+            editor.box.setFocus()
+            if hasattr(editor.box, "insert"):
+                editor.box.insert(value)
+            else:
+                editor.box.insertPlainText(value)
+            return
+        view.clear_selection()
+        view.set_markup_tool(TEXT_BOX)
+        view.text_to_put = value
+        self.statusBar().showMessage(
+            self.tr("Haz clic donde quieras poner «{0}» (Esc: dejarlo).").format(value),
+            STATUS_MESSAGE_MS,
+        )
+        self._refresh_edit_actions()
 
     def _form_found(self, page: DocumentPage) -> None:
         if page is self.current_document:

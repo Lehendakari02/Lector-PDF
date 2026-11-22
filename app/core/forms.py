@@ -230,3 +230,35 @@ class FillField:
 
 
 register_reader("fill_field", FillField.from_dict)
+
+
+@dataclass(frozen=True)
+class FillFields:
+    """Several fields filled at once (with «Mis datos»): one change, undone at once."""
+
+    fills: tuple[FillField, ...]
+
+    def pages(self) -> list[int]:
+        return sorted({fill.page for fill in self.fills})
+
+    def apply(self, doc) -> list[int]:
+        changed: set[int] = set()
+        for fill in self.fills:
+            changed.update(fill.apply(doc))
+        return sorted(changed)
+
+    def undo(self, doc) -> list[int]:
+        changed: set[int] = set()
+        for fill in reversed(self.fills):
+            changed.update(fill.undo(doc))
+        return sorted(changed)
+
+    def to_dict(self) -> dict:
+        return {"what": "fill_fields", "fills": [fill.to_dict() for fill in self.fills]}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> FillFields:
+        return cls(tuple(FillField.from_dict(fill) for fill in data["fills"]))
+
+
+register_reader("fill_fields", FillFields.from_dict)
