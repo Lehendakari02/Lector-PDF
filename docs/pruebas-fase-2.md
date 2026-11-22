@@ -601,3 +601,13 @@ Con un documento abierto, en el modo Estudiar.
    marcadores sale "Mis marcadores" con los tuyos, y el índice de la ley
    sigue igual.
 
+## Fase 2C – Tarea 2.23 – Modo repaso
+
+1. En un tema con varias frases resaltadas y subrayadas, pulsa **Modo
+   repaso** (modo Estudiar): cada una queda tapada con un bloque de su color.
+2. Intenta recordar una y haz clic en ella: se destapa. Otro clic la tapa.
+3. Lo tachado, las notas y los dibujos siguen a la vista.
+4. Pulsa **Esc** (o el botón otra vez): se acaba el repaso. Al empezar de
+   nuevo, todo vuelve a estar tapado.
+5. Cierra el documento: no pregunta si guardar por el repaso (no cambia nada).
+

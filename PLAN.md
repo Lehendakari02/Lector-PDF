@@ -1041,8 +1041,8 @@ Ordenadas por uso diario.
 |---|-------|-------------------|--------|
 | 2.20 | Panel de anotaciones filtrable por color | Veo todos mis subrayados de un color y salto a cada uno | ✅ |
 | 2.21 | Saltar a artículo, apartado o sección por su número | Escribo "art. 14" o "3.2" en cualquier documento y me lleva allí | ✅ |
-| 2.22 | Marcadores propios | Marco artículos clave y vuelvo a ellos con un clic | 🔶 |
-| 2.23 | Modo repaso | Lo subrayado se tapa y lo descubro al hacer clic | ⬜ |
+| 2.22 | Marcadores propios | Marco artículos clave y vuelvo a ellos con un clic | ✅ |
+| 2.23 | Modo repaso | Lo subrayado se tapa y lo descubro al hacer clic | 🔶 |
 | 2.24 | Márgenes ampliables | Añado margen a una página y escribo en él; se ve igual en Edge y Adobe | ⬜ |
 | 2.25 | Insertar hojas en blanco, de rayas o cuadriculadas | Meto una hoja cuadriculada para un esquema | ✅ (hecha en la 2.13d) |
 | 2.26 | Código de colores propio (opcional, nada predefinido) | Si quiero, pongo nombre a mis colores; si no, no aparece nada | ⬜ |
@@ -1098,6 +1098,15 @@ Notas de la Fase 2C:
     Adobe y Edge los enseñan en su lista de marcadores. Una clave propia en
     cada uno (que los demás lectores no usan) permite cambiarlos después.
   - Se ordenan por su sitio en el documento, no por cuándo se pusieron.
+- **2.23: modo repaso (22/11/2026).**
+  - Botón **Modo repaso** del modo Estudiar (o Ctrl+K → "repaso"): todo lo
+    resaltado y subrayado queda tapado con un bloque de su color. Un clic en
+    un trozo lo destapa; otro clic lo vuelve a tapar. Esc o el mismo botón
+    terminan, y al volver a empezar está todo tapado otra vez.
+  - Lo tachado, las notas, los textos y los dibujos no se tapan.
+  - No cambia nada del documento ni hace falta guardar: los bloques solo se
+    pintan en la pantalla. Ocultar las anotaciones termina el repaso.
+  - Posible mejora si Julen la echa en falta: repasar solo un color.
 
 ## Fase 3 – Rellenar y firma manuscrita
 | # | Tarea | Terminado cuando… | Estado |
