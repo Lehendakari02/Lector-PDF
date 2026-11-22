@@ -91,3 +91,14 @@ un modelo de la Agencia Tributaria), no documentos con datos de nadie.
    blanco encima del texto.
 7. Prueba con el lápiz de la Surface y con una página girada.
 
+## Tarea 3.7 – Iniciales en todas las páginas
+
+1. Abre un contrato de varias páginas y pulsa **Firmar → Poner mis
+   iniciales en todas las páginas**.
+2. Haz clic en la esquina de abajo a la derecha de la primera página: salen
+   en todas, en la misma esquina. Pasa las páginas para verlo.
+3. Prueba con un PDF que tenga alguna página apaisada: también quedan en su
+   esquina.
+4. Ctrl+Z las quita de todas a la vez.
+5. Mueve las de una página: las demás no se mueven.
+

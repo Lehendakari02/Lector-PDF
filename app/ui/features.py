@@ -258,6 +258,14 @@ FEATURES: list[Feature] = [
     _f("stamps", FILL, "Sellos", "Marcas rápidas: ✓, ✗, fecha, sellos propios", "marca casilla"),
     _f("sign_drawn", FILL, "Firmar", "Poner tu firma manuscrita guardada", "firma rúbrica"),
     _f(
+        "initials_everywhere",
+        FILL,
+        "Iniciales en todas las páginas",
+        "Poner tus iniciales en el mismo sitio de todas las páginas, con un clic",
+        "iniciales rubricar todas hojas páginas firma contrato",
+        toolbar=False,
+    ),
+    _f(
         "my_signature",
         FILL,
         "Mi firma e iniciales",

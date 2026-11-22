@@ -211,6 +211,19 @@ def _arrow_head(start: QPointF, end: QPointF, width: float) -> list[QPointF]:
     ]
 
 
+def _same_place(rect, size, other) -> tuple[float, float, float, float]:
+    """Where ``rect`` of a page of ``size`` goes on a page of size ``other``:
+    as far from the same sides (the nearer ones), so initials in the corner
+    stay in the corner of a page of any size. Always inside the page."""
+    x0, y0, x1, y1 = rect
+    width, height = x1 - x0, y1 - y0
+    left = x0 if (x0 + x1) / 2 <= size.width / 2 else other.width - (size.width - x0)
+    top = y0 if (y0 + y1) / 2 <= size.height / 2 else other.height - (size.height - y0)
+    left = max(0.0, min(other.width - width, left))
+    top = max(0.0, min(other.height - height, top))
+    return (left, top, left + width, top + height)
+
+
 def _sketch_of(order) -> tuple | None:
     """What an order draws, to paint it before the engine does: page, kind,
     strokes, colour, thickness, opacity, for a stroke made with a pen that
@@ -533,6 +546,7 @@ class PdfView(QAbstractScrollArea):
         self.picture_in_hand: tuple[bytes, str, float] | None = None
         self.date_under = ""
         self.signed_by_hand = False  # a signature was put since it was opened
+        self.on_every_page = False  # the picture in hand goes on every page
         self.stamp_size = 12.0
         self._asked_notes: set[int] = set()
         # Where one is being written: a panel, or the page itself for a text.
@@ -2843,12 +2857,19 @@ class PdfView(QAbstractScrollArea):
         self.set_markup_tool(STAMP_TOOL if stamp is not None else "")
 
     def use_picture(
-        self, png: bytes | None, description: str = "", width: float = 140.0, date: str = ""
+        self,
+        png: bytes | None,
+        description: str = "",
+        width: float = 140.0,
+        date: str = "",
+        every_page: bool = False,
     ) -> None:
         """Take one's signature or initials in hand (None: leave it): the next
-        click puts it, with ``date`` written under it."""
+        click puts it, with ``date`` written under it. With ``every_page`` it
+        goes on every page, in the same place (see ``put_picture``)."""
         self.picture_in_hand = (png, description, width) if png else None
         self.date_under = date if png else ""
+        self.on_every_page = bool(png) and every_page
         self.clear_selection()
         self.set_markup_tool(SIGN_TOOL if png else "")
 
@@ -2867,6 +2888,19 @@ class PdfView(QAbstractScrollArea):
         dx = max(-x0, min(size.width - x1, 0.0))
         dy = max(-y0, min(size.height - y1, 0.0))
         rect = (x0 + dx, y0 + dy, x1 + dx, y1 + dy)
+        if self.on_every_page:
+            order = Together(
+                tuple(
+                    pictures.AddPicture(
+                        number, _same_place(rect, size, other), png, new_name(), description
+                    )
+                    for number, other in enumerate(self._sizes)
+                )
+            )
+            if not self._do(order):
+                return False
+            self.signed_by_hand = True
+            return True
         order = pictures.AddPicture(page, rect, png, new_name(), description)
         if self.date_under:
             top = min(rect[3] + 2, size.height - DATE_SIZE * 1.4)

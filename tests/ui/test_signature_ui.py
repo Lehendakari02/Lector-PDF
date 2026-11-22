@@ -240,3 +240,50 @@ def test_initials_go_without_the_date_and_the_date_can_be_left_out(
     QTest.mouseClick(view.viewport(), LEFT, NO_KEYS, place(view, 0, 200, 300))
     wait_until(lambda: len(view.drawings_of(0)) == 2)
     assert not view.notes_of(0)
+
+
+def test_initials_go_on_every_page_in_the_same_corner(window, tmp_path, wait_until):
+    window.show_problem_dialogs = False
+    path = tmp_path / "contrato.pdf"
+    with pymupdf.open() as doc:
+        doc.new_page(width=595, height=842)
+        doc.new_page(width=595, height=842)
+        doc.new_page(width=842, height=595)  # a page lying down
+        doc.save(path)
+    assert window.open_document(path)
+    view = window.pdf_view
+    wait_until(lambda: 0 in view.cached_pages() and 0 in view._notes)
+    png = my_signature.clean(Path(photo(tmp_path)).read_bytes())
+    window.signature_answer = png  # no initials yet: they are made first
+    assert window.feature_actions["initials_everywhere"].isEnabled()
+    window.feature_actions["initials_everywhere"].trigger()
+    assert window.saved_signature(INITIALS) == png
+    assert view.markup_tool == SIGN_TOOL and view.on_every_page
+    QTest.mouseClick(view.viewport(), LEFT, NO_KEYS, place(view, 0, 540, 800))
+    wait_until(lambda: view.markup_tool == "")
+    wait_until(lambda: all(view.drawings_of(page) for page in range(3)) and view.modified)
+    assert view.signed_by_hand
+    window.save_as_answer = None
+    window.signed_save_answer = "same"
+    assert window.save_document()
+    wait_until(lambda: not view.saving and not view.modified)
+    with pymupdf.open(path) as doc:
+        places = []
+        for page in doc:
+            (initials,) = page.annots()
+            assert initials.type[1] == "Stamp"
+            places.append((page.rect.width - initials.rect.x1, page.rect.height - initials.rect.y1))
+        assert all(abs(a - places[0][0]) < 1 and abs(b - places[0][1]) < 1 for a, b in places)
+        assert next(doc[0].annots()).info["content"] == "Iniciales"
+    view.undo()
+    wait_until(lambda: view.modified)
+
+
+def test_the_same_place_on_pages_of_other_sizes():
+    from app.core.document import PageSize
+    from app.ui.pdf_view import _same_place
+
+    a4, lying = PageSize(595, 842), PageSize(842, 595)
+    assert _same_place((500, 780, 548, 800), a4, lying) == (747, 533, 795, 553)
+    assert _same_place((40, 30, 88, 50), a4, lying) == (40, 30, 88, 50)
+    assert _same_place((500, 780, 548, 800), a4, PageSize(30, 30)) == (0, 0, 48, 20)

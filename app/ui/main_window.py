@@ -419,6 +419,7 @@ class MainWindow(QMainWindow):
             "stamps": self.show_stamps,
             "sign_drawn": self.show_signature,
             "my_signature": lambda: self.make_signature(my_signature.SIGNATURE),
+            "initials_everywhere": self.initials_everywhere,
             "margins": self.add_margin,
             "undo": self.undo,
             "redo": self.redo,
@@ -3605,8 +3606,9 @@ class MainWindow(QMainWindow):
         """Whether today's date is written under the signature (yes, unless said)."""
         return self.settings.get(DATE_SETTING) is not False
 
-    def put_signature(self, kind: str = my_signature.SIGNATURE) -> bool:
-        """Take the signature (or the initials) in hand: a click puts it."""
+    def put_signature(self, kind: str = my_signature.SIGNATURE, every_page: bool = False) -> bool:
+        """Take the signature (or the initials) in hand: a click puts it (with
+        ``every_page``, on every page in the same place)."""
         view = self.pdf_view
         png = self.saved_signature(kind)
         if view.page_count == 0 or png is None:
@@ -3618,15 +3620,32 @@ class MainWindow(QMainWindow):
             self.tr("Iniciales") if initials else self.tr("Firma"),
             pictures.INITIALS_WIDTH if initials else pictures.SIGNATURE_WIDTH,
             date,
+            every_page,
         )
         self.statusBar().showMessage(
             self.tr(
+                "Haz clic donde van en esta página: se ponen en el mismo sitio de todas "
+                "(Ctrl+Z las quita todas; Esc: dejarlo)."
+            )
+            if every_page
+            else self.tr(
                 "Haz clic donde va. Después puedes moverla y cambiar su tamaño (Esc: dejarlo)."
             ),
             STATUS_MESSAGE_MS,
         )
         self._refresh_edit_actions()
         return True
+
+    def initials_everywhere(self) -> bool:
+        """«Iniciales en todas las páginas»: made first if there are none yet."""
+        if self.pdf_view.page_count == 0:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return False
+        if self.saved_signature(my_signature.INITIALS) is None and not self.make_signature(
+            my_signature.INITIALS
+        ):
+            return False
+        return self.put_signature(my_signature.INITIALS, every_page=True)
 
     def show_signature(self) -> QMenu | None:
         """«Firmar»: the first time, make the signature; then put it with a click."""
@@ -3654,6 +3673,10 @@ class MainWindow(QMainWindow):
             action.setIcon(QIcon(picture))
             action.setEnabled(opened)
             action.triggered.connect(lambda _checked=False, k=kind: self.put_signature(k))
+            if kind == my_signature.INITIALS:
+                everywhere = menu.addAction(self.tr("Poner mis iniciales en todas las páginas"))
+                everywhere.setEnabled(opened)
+                everywhere.triggered.connect(lambda _checked=False: self.initials_everywhere())
         dated = menu.addAction(self.tr("Poner la fecha de hoy debajo de la firma"))
         dated.setCheckable(True)
         dated.setChecked(self.date_with_signature)
