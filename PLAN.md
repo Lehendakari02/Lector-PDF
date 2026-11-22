@@ -1265,8 +1265,8 @@ Notas de la Fase 2C:
 | 3.1 | Rellenar formularios PDF | Relleno un formulario oficial y se ve bien en otros lectores | ✅ |
 | 3.2 | Escribir en PDFs sin campos | Escribo mis datos encima de un documento escaneado | ✅ |
 | 3.3 | Mis datos (nombre, DNI, dirección…) | Pongo mi DNI en un formulario con un clic | ✅ |
-| 3.4 | Sellos y marcas rápidas (✓, ✗, fecha, sellos propios) | Marco casillas de un documento sin campos | 🔶 |
-| 3.5 | Crear y guardar firma e iniciales (dibujar, escribir, importar imagen sin fondo) | Tengo mi firma guardada | ⬜ |
+| 3.4 | Sellos y marcas rápidas (✓, ✗, fecha, sellos propios) | Marco casillas de un documento sin campos | ✅ |
+| 3.5 | Crear y guardar firma e iniciales (dibujar, escribir, importar imagen sin fondo) | Tengo mi firma guardada | 🔶 |
 | 3.6 | Firmar con un clic: colocar, mover, redimensionar, fecha automática | Firmo un contrato en segundos | ⬜ |
 | 3.7 | Iniciales en todas las páginas | Con un clic pongo iniciales en todas las hojas | ⬜ |
 | 3.8 | Versión 0.5 | — | ⬜ |
@@ -1329,6 +1329,23 @@ Notas de la Fase 3:
     en los ajustes `sellos/propios`); "Quitar un sello" lo olvida.
     "Tamaño" elige entre cuatro (12 puntos por defecto, el de una casilla) y
     se recuerda.
+- **3.5: Crear y guardar la firma y las iniciales (22/11/2026).**
+  - El botón **Firmar** la primera vez abre "Mi firma"; desde entonces da un
+    menú para cambiarla, crear o cambiar las iniciales y quitarlas (en la 3.6
+    se añade ponerla en el documento). También "Mi firma e iniciales" con
+    Ctrl+K.
+  - Tres formas, en pestañas: **Dibujar** (ratón, dedo o lápiz; con lápiz el
+    trazo es más grueso donde se aprieta), **Escribir** (el nombre de Mis
+    datos con una letra manuscrita de las que trae Windows: Segoe Script, Ink
+    Free, Lucida Handwriting…; las iniciales salen solas, "A. E. G.") y
+    **Desde una imagen** (una foto o un escaneado de la firma en papel).
+    Tinta negra o azul.
+  - De la foto se quita el papel: el tono más común de la parte clara se
+    vuelve transparente y la tinta conserva su color, con bordes suaves. Todo
+    se recorta a la tinta (`core/my_signature.py`, sin dependencias nuevas).
+  - Se guarda como imagen PNG con fondo transparente en la carpeta de datos
+    del programa (`firma/firma.png`, `firma/iniciales.png`), solo en este
+    ordenador. Quitarla pregunta antes; lo ya firmado no cambia.
 
 ## Fase 4 – Firma con certificado digital
 | # | Tarea | Terminado cuando… | Estado |

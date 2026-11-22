@@ -58,3 +58,21 @@ un modelo de la Agencia Tributaria), no documentos con datos de nadie.
    programa: sigue en el menú. Quítalo con "Quitar un sello".
 5. En **Tamaño** elige otro y comprueba que las marcas caben en las casillas.
 6. Guarda y abre el PDF en Edge y en Adobe: las marcas y sellos se ven igual.
+
+## Tarea 3.5 – Crear y guardar la firma y las iniciales
+
+1. En el modo Rellenar y firmar pulsa **Firmar**. La primera vez se abre
+   "Mi firma".
+2. **Dibujar**: firma con el ratón; si tienes pantalla táctil, con el dedo, y
+   con el lápiz de la Surface (aprieta más en un trazo: sale más grueso).
+   Prueba "Deshacer el último trazo" y "Borrar". Guarda.
+3. Pulsa Firmar otra vez → **Cambiar mi firma…** → **Escribir**: sale tu
+   nombre de Mis datos. Cambia la letra y prueba la tinta azul.
+4. **Desde una imagen**: firma en un papel blanco, hazle una foto con el
+   móvil, pásala al ordenador y elígela. Mira que desaparece el papel y queda
+   solo la firma. Prueba también con una foto con sombras o papel un poco
+   gris, y dime si queda algún resto.
+5. **Crear mis iniciales…** desde el mismo menú.
+6. Cierra y abre el programa: la firma y las iniciales siguen ahí.
+   **Quitar mi firma** pregunta antes de quitarla.
+

@@ -13,8 +13,10 @@ from PySide6.QtGui import (
     QCursor,
     QDesktopServices,
     QGuiApplication,
+    QIcon,
     QKeyEvent,
     QKeySequence,
+    QPixmap,
 )
 from PySide6.QtPrintSupport import QPrinter, QPrinterInfo
 from PySide6.QtWidgets import (
@@ -43,7 +45,18 @@ from PySide6.QtWidgets import (
 )
 
 from app import APP_NAME, BUILD_LABEL, __version__
-from app.core import my_data, ocr, pen, save_checks, save_settings, saving, sheets, stamps, symbols
+from app.core import (
+    my_data,
+    my_signature,
+    ocr,
+    pen,
+    save_checks,
+    save_settings,
+    saving,
+    sheets,
+    stamps,
+    symbols,
+)
 from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
 from app.core.doc_links import DocLink, relative_file, resolve
 from app.core.document import PdfDocument, PdfOpenError, engine_version
@@ -130,6 +143,7 @@ from app.ui.shape_icons import shape_icon
 from app.ui.side_by_side import BesideArea
 from app.ui.side_panel import SidePanel, Tab
 from app.ui.sign_dialog import CertificateDialog
+from app.ui.signature_dialog import SignatureDialog
 from app.ui.text_recognition import TextRecognition
 from app.ui.theme import PAPER_SETTING, THEME_SETTING, Paper, Theme, apply_theme
 from app.ui.unsaved_dialog import CANCEL, DISCARD, SAVE, UnsavedDialog
@@ -334,6 +348,11 @@ class MainWindow(QMainWindow):
         self.my_data_answer: MyData | None = None
         self.my_data_menu: QMenu | None = None
         self.stamps_menu: QMenu | None = None
+        # For the tests: the picture made (b"" to cancel), and the answer to
+        # "¿Quitar tu firma?".
+        self.signature_answer: bytes | None = None
+        self.forget_signature_answer: bool | None = None
+        self.signature_menu: QMenu | None = None
         self.new_stamp_answer: str | None = None  # the tests answer without asking
         self._saving_to_close: list[DocumentPage] = []  # being saved before closing
         self._after_saving = None  # what to do once they are all saved
@@ -386,6 +405,8 @@ class MainWindow(QMainWindow):
             "my_data": self.show_my_data,
             "my_data_edit": self.edit_my_data,
             "stamps": self.show_stamps,
+            "sign_drawn": self.show_signature,
+            "my_signature": lambda: self.make_signature(my_signature.SIGNATURE),
             "margins": self.add_margin,
             "undo": self.undo,
             "redo": self.redo,
@@ -3455,6 +3476,107 @@ class MainWindow(QMainWindow):
     def forget_stamp(self, words: str) -> None:
         own = stamps.own_stamps(self.settings.get(stamps.OWN_SETTING))
         self.settings.set(stamps.OWN_SETTING, [kept for kept in own if kept != words])
+
+    # ---- the saved signature and initials ---------------------------------------
+
+    @property
+    def signature_folder(self) -> Path:
+        return self.settings.path.parent / my_signature.FOLDER
+
+    def saved_signature(self, kind: str) -> bytes | None:
+        return my_signature.load(self.signature_folder, kind)
+
+    def _suggested_words(self, kind: str) -> str:
+        """What a written signature says at first: one's name, or its initials."""
+        name = self.my_data.value(my_data.FULL_NAME)
+        if kind == my_signature.SIGNATURE:
+            return name
+        return " ".join(f"{word[0].upper()}." for word in name.split() if word[0].isalpha())
+
+    def make_signature(self, kind: str) -> bool:
+        """Make (or make again) one's signature or initials and keep it."""
+        png = self.signature_answer
+        if png is None:
+            dialog = SignatureDialog(kind, self._suggested_words(kind), self)
+            if not dialog.exec():
+                return False
+            png = dialog.png
+        if not png:
+            return False
+        try:
+            my_signature.save(self.signature_folder, kind, png)
+        except OSError:
+            QMessageBox.warning(
+                self,
+                self.tr("Mi firma"),
+                self.tr("No se ha podido guardar. Comprueba que queda sitio en el disco."),
+            )
+            return False
+        self.statusBar().showMessage(
+            self.tr("Iniciales guardadas.")
+            if kind == my_signature.INITIALS
+            else self.tr("Firma guardada."),
+            STATUS_MESSAGE_MS,
+        )
+        return True
+
+    def forget_signature(self, kind: str) -> bool:
+        initials = kind == my_signature.INITIALS
+        sure = self.forget_signature_answer
+        if sure is None:
+            sure = (
+                QMessageBox.question(
+                    self,
+                    self.tr("Quitar mis iniciales") if initials else self.tr("Quitar mi firma"),
+                    self.tr(
+                        "¿Quitar tus iniciales guardadas? Los documentos ya firmados no cambian."
+                    )
+                    if initials
+                    else self.tr(
+                        "¿Quitar tu firma guardada? Los documentos ya firmados no cambian."
+                    ),
+                )
+                == QMessageBox.StandardButton.Yes
+            )
+        if sure:
+            my_signature.forget(self.signature_folder, kind)
+        return bool(sure)
+
+    def show_signature(self) -> QMenu | None:
+        """«Firmar»: the first time, make the signature; then a menu with it."""
+        if self.saved_signature(my_signature.SIGNATURE) is None:
+            self.make_signature(my_signature.SIGNATURE)
+            return None
+        menu = QMenu(self)
+        for kind, change, make, forget in (
+            (
+                my_signature.SIGNATURE,
+                self.tr("Cambiar mi firma…"),
+                self.tr("Crear mi firma…"),
+                self.tr("Quitar mi firma"),
+            ),
+            (
+                my_signature.INITIALS,
+                self.tr("Cambiar mis iniciales…"),
+                self.tr("Crear mis iniciales…"),
+                self.tr("Quitar mis iniciales"),
+            ),
+        ):
+            saved = self.saved_signature(kind)
+            action = menu.addAction(change if saved else make)
+            if saved:
+                picture = QPixmap()
+                picture.loadFromData(saved, "PNG")
+                action.setIcon(QIcon(picture))
+            action.triggered.connect(lambda _checked=False, k=kind: self.make_signature(k))
+            if saved:
+                menu.addAction(forget).triggered.connect(
+                    lambda _checked=False, k=kind: self.forget_signature(k)
+                )
+            menu.addSeparator()
+        self.signature_menu = menu  # the tests pick from it
+        menu.popup(QCursor.pos())
+        return menu
 
     def _form_found(self, page: DocumentPage) -> None:
         if page is self.current_document:
