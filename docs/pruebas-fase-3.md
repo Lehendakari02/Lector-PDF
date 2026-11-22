@@ -102,3 +102,25 @@ un modelo de la Agencia Tributaria), no documentos con datos de nadie.
 4. Ctrl+Z las quita de todas a la vez.
 5. Mueve las de una página: las demás no se mueven.
 
+## Tarea 3.8b – Arreglos de la revisión del código
+
+1. Abre un formulario, haz clic en una casilla y escribe tu nombre. Sin salir de
+   la casilla pulsa **Ctrl+S**: se guarda (antes decía "No hay cambios que
+   guardar"). Escribe en otra casilla y, sin salir, cierra el programa: pregunta
+   si guardas.
+2. Abre un formulario oficial con "DNI del solicitante", "Domicilio del
+   interesado", "Primer apellido", "Segundo apellido" o "Lugar de nacimiento" y
+   usa **Mis datos → Rellenar el formulario con mis datos**: cada dato va a su
+   campo, cada apellido en el suyo y el lugar de nacimiento queda en blanco.
+3. En un formulario de varias páginas, sin bajar, usa **Rellenar con mis
+   datos**: también rellena las páginas de abajo. Tab llega hasta la última.
+4. En un formulario con casillas "Sí" y "No", marca una y guarda. Ábrelo en
+   Adobe y en Edge: solo está marcada esa.
+5. En un desplegable de provincias, el menú enseña los nombres (no números).
+   Guarda y ábrelo en Adobe: se ve el nombre.
+6. Firma un contrato, ciérralo y elige **Guardar** en la ventana de cerrar:
+   pregunta si lo guardas como «-firmado».
+7. Haz una foto a tu firma con el móvil en vertical y úsala en **Desde una
+   imagen**: sale derecha.
+8. Pon una firma abajo del todo de la página: la fecha va encima, sin taparla.
+

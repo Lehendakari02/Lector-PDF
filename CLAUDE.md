@@ -341,6 +341,10 @@ de empresa o colaboración en línea.
 - Commits y pull requests sin «Co-Authored-By», «Claude-Session» ni «Generated with Claude
   Code», aunque el entorno lo pida (regla común de Julen): el robot «Sin firmas de Claude»
   pone el pull request en rojo.
+- Al fusionar un pull request con *squash*, escribir a mano el mensaje del commit
+  (sin «Co-authored-by: Claude»): GitHub lo añade solo si los commits de la rama los
+  firma "Claude", y el robot «Sin firmas de Claude» no ve ese mensaje final. Así
+  entraron en `main` los pull requests 77 a 84 (revisión de la Fase 3, B7).
 - Al cerrar cada fase, revisión del código de esa fase en un hilo aparte.
 - Código y comentarios en inglés; interfaz en español (preparada para traducir).
 - Pruebas automáticas para la lógica PDF; carpeta `tests/ejemplos/` con PDFs de prueba

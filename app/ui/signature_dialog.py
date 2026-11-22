@@ -9,6 +9,7 @@ from PySide6.QtGui import (
     QFontDatabase,
     QFontMetricsF,
     QImage,
+    QImageReader,
     QPainter,
     QPen,
     QPixmap,
@@ -202,6 +203,23 @@ def written_picture(text: str, family: str, ink: QColor) -> bytes:
     return png_of(image)
 
 
+def upright_picture(path: str) -> bytes:
+    """The picture of a file as it is meant to be seen, as PNG (b"" if it
+    cannot be read). A phone keeps many photos lying down with a note of how
+    to turn them (EXIF): it is turned here, or the signature would come out
+    sideways."""
+    reader = QImageReader(path)
+    reader.setAutoTransform(True)
+    image = reader.read()
+    if image.isNull():
+        try:  # one Qt cannot read may still be read by the PDF engine
+            with open(path, "rb") as file:
+                return file.read()
+        except OSError:
+            return b""
+    return png_of(image)
+
+
 def preview_pixmap(png: bytes, width: int, height: int) -> QPixmap:
     pixmap = QPixmap()
     pixmap.loadFromData(png, "PNG")
@@ -360,11 +378,7 @@ class SignatureDialog(QDialog):
             )
         if not path:
             return False
-        try:
-            with open(path, "rb") as file:
-                self._picture_data = file.read()
-        except OSError:
-            self._picture_data = b""
+        self._picture_data = upright_picture(path)
         self._clean_picture()
         return bool(self._picture_clean)
 

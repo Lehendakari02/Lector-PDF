@@ -41,6 +41,8 @@ class FieldEditor(QFrame):
             self.box.setFrame(False)
             if field.max_length:
                 self.box.setMaxLength(field.max_length)
+            if field.password:
+                self.box.setEchoMode(QLineEdit.EchoMode.Password)
             if field.kind == COMBO and field.choices:
                 completer = QCompleter(list(field.choices), self.box)
                 completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)

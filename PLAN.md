@@ -1270,6 +1270,7 @@ Notas de la Fase 2C:
 | 3.6 | Firmar con un clic: colocar, mover, redimensionar, fecha automática | Firmo un contrato en segundos | ✅ |
 | 3.7 | Iniciales en todas las páginas | Con un clic pongo iniciales en todas las hojas | ✅ |
 | 3.8 | Versión 0.5 | — | 🔶 número 0.5.0 puesto (22/11/2026); falta que Julen cree la Release v0.5.0 |
+| 3.8b | Arreglos de la revisión del código de la Fase 3 (todos los hallazgos) | Lo escrito en una casilla se guarda al pulsar Guardar; «Mis datos» pone cada dato en su campo | ✅ |
 
 Notas de la Fase 3:
 - **3.1: rellenar formularios PDF (22/11/2026).**
@@ -1379,6 +1380,44 @@ Notas de la Fase 3:
     página.
   - Es un solo cambio: Ctrl+Z las quita de todas. Cada una se puede mover o
     borrar después por separado.
+- **3.8b: arreglos de la revisión del código de la Fase 3 (22/11/2026).**
+  Revisión completa en los archivos del proyecto (`revision-codigo-fase-3.md`).
+  - **A1:** lo que se está escribiendo en una casilla del formulario cuenta al
+    guardar, cerrar, imprimir o actualizar (`finish_writing` también cierra la
+    casilla). Antes, Ctrl+S decía "No hay cambios" y cerrar lo perdía.
+  - **A2:** «Mis datos» aparta primero los campos de otra persona o de otra
+    cosa (representante, empresa, padre, madre, cónyuge…, "lugar/provincia/país
+    de nacimiento", "tipo de…") y deja "solicitante, interesado, titular…" para
+    el final: "DNI del solicitante" es el DNI. "Primer apellido" y "Segundo
+    apellido" se reparten los apellidos (con "de la", "del"… unidos al que
+    sigue); "Apellidos y nombre" se escribe "García López, Ana".
+  - **A3:** casillas con un mismo nombre y un valor cada una (Sí / No) son una
+    sola respuesta: se marca solo la elegida y el valor se escribe como nombre
+    PDF (`/No`), como las opciones redondas.
+  - **M1:** en los desplegables con código y nombre (`[(28) (Madrid)]`) se ve y
+    se elige el nombre; se escribe el código (lo que pide el estándar) y la
+    casilla se dibuja con el nombre.
+  - **M2:** al abrir un documento, el ayudante lee los campos de todas las
+    páginas de una vez (`RenderService.want_fields`, solo páginas con
+    anotaciones): «Mis datos», Tab y "Rellenar campos" llegan a todo el
+    formulario, no solo a las páginas vistas.
+  - **M3:** la propuesta de guardar como "-firmado" sale en cualquier
+    guardado pedido (también "Guardar" al cerrar, "Guardar todos" y "Al cerrar:
+    Guardar siempre"), no solo con Ctrl+S. Si se cancela la ventana de elegir
+    archivo, se vuelve a preguntar. Deshacer la firma quita la pregunta
+    (`signed_by_hand` mira si queda alguna firma puesta sin deshacer).
+  - **M4:** una foto del móvil se gira según su nota EXIF antes de quitarle el
+    fondo (`upright_picture`); antes salía de lado.
+  - **B1:** iniciales en todas las páginas es una orden `AddPictures` que
+    guarda la imagen una vez (antes, una vez por página: 2 MB en el diario con
+    100 páginas). **B2:** si la fecha no cabe bajo la firma, va encima.
+    **B3:** un sello se coloca entero dentro de la página. **B4:** los campos
+    de contraseña enseñan puntos. **B5:** los campos ocultos no se leen ni se
+    tiñen. **B6:** una lista con varias opciones elegidas no se cambia (PyMuPDF
+    solo sabe escribir una): lo explica en lugar de perder las otras.
+  - **B7 (forma de trabajar):** GitHub añade «Co-authored-by: Claude» al
+    fusionar con *squash* cuando los commits de la rama los firma "Claude"; el
+    robot "Sin firmas" no lo ve. Regla nueva en CLAUDE.md, sección 8.
 
 ## Fase 4 – Firma con certificado digital
 | # | Tarea | Terminado cuando… | Estado |

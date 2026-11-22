@@ -75,3 +75,114 @@ def test_on_a_page_kept_turned_the_field_is_where_it_is_seen(full_form):
         turned = fields_by_name(doc)["nombre"][0].rect
     width = turned[2] - turned[0]
     assert width == pytest.approx(straight[3] - straight[1], abs=0.1), "now it is upright"
+
+
+def _boxes_with_one_name(doc, page, name="sexo", states=("H", "M")):
+    """Two check boxes with one name and an "on" of their own each (Sí / No)."""
+    parent, kids = doc.get_new_xref(), []
+    height = page.rect.height
+    for index, state in enumerate(states):
+        shown, empty = doc.get_new_xref(), doc.get_new_xref()
+        for xref, stream in ((shown, b"0 0 1 rg 4 4 8 8 re f"), (empty, b"")):
+            doc.update_object(xref, "<< /Type /XObject /Subtype /Form /BBox [0 0 16 16] >>")
+            doc.update_stream(xref, stream)
+        kid = doc.get_new_xref()
+        top = 100 + 30 * index
+        doc.update_object(
+            kid,
+            f"<< /Type /Annot /Subtype /Widget /Rect [100 {height - top - 16} 116 {height - top}]"
+            f" /Parent {parent} 0 R /P {page.xref} 0 R /AS /Off"
+            f" /AP << /N << /{state} {shown} 0 R /Off {empty} 0 R >> >> >>",
+        )
+        kids.append(kid)
+    refs = " ".join(f"{kid} 0 R" for kid in kids)
+    doc.update_object(parent, f"<< /FT /Btn /T ({name}) /V /Off /Kids [{refs}] >>")
+    doc.xref_set_key(page.xref, "Annots", f"[{refs}]")
+    doc.xref_set_key(doc.pdf_catalog(), "AcroForm", f"<< /Fields [{parent} 0 R] >>")
+    return parent, kids
+
+
+def test_boxes_with_one_name_are_one_answer():
+    doc = pymupdf.open()
+    parent, kids = _boxes_with_one_name(doc, doc.new_page())
+    FillField(0, "sexo", CHECK, "", "M").apply(doc)
+    assert [(f.on, f.checked) for f in page_fields(doc, 0)] == [("H", False), ("M", True)]
+    assert doc.xref_get_key(parent, "V") == ("name", "/M"), "a name, not a text"
+    assert [doc.xref_get_key(kid, "AS")[1] for kid in kids] == ["/Off", "/M"]
+    FillField(0, "sexo", CHECK, "M", "H").apply(doc)
+    assert [f.checked for f in page_fields(doc, 0)] == [True, False]
+    FillField(0, "sexo", CHECK, "M", "H").undo(doc)
+    assert [f.checked for f in page_fields(doc, 0)] == [False, True]
+    FillField(0, "sexo", CHECK, "", "M").undo(doc)
+    assert [f.checked for f in page_fields(doc, 0)] == [False, False]
+    assert doc.xref_get_key(parent, "V") == ("name", "/Off")
+
+
+def _list_with_codes(doc, page):
+    from app.core.forms import _field_object
+
+    widget = pymupdf.Widget()
+    widget.field_type = pymupdf.PDF_WIDGET_TYPE_COMBOBOX
+    widget.field_name = "prov"
+    widget.choice_values = ["x"]
+    widget.rect = pymupdf.Rect(50, 50, 200, 70)
+    page.add_widget(widget)
+    field = _field_object(doc, next(page.widgets()).xref)
+    doc.xref_set_key(field, "Opt", "[[(28) (Madrid)] [(48) (Bizkaia)]]")
+    doc.xref_set_key(field, "V", "(28)")
+    return field
+
+
+def test_a_list_with_codes_shows_the_names_and_writes_the_codes():
+    doc = pymupdf.open()
+    page = doc.new_page()
+    field = _list_with_codes(doc, page)
+    found = page_fields(doc, 0)[0]
+    assert found.choices == ("Madrid", "Bizkaia")
+    assert found.value == "Madrid"
+    FillField(0, "prov", COMBO, "Madrid", "Bizkaia").apply(doc)
+    assert doc.xref_get_key(field, "V") == ("string", "48"), "the code, as the standard says"
+    assert page_fields(doc, 0)[0].value == "Bizkaia"
+    assert "Bizkaia" in doc[0].get_text("text", clip=pymupdf.Rect(40, 40, 210, 80))
+    FillField(0, "prov", COMBO, "Madrid", "Bizkaia").undo(doc)
+    assert doc.xref_get_key(field, "V") == ("string", "28")
+
+
+def test_hidden_fields_are_left_out():
+    doc = pymupdf.open()
+    page = doc.new_page()
+    for name, top in (("visto", 50), ("oculto", 100)):
+        widget = pymupdf.Widget()
+        widget.field_type = pymupdf.PDF_WIDGET_TYPE_TEXT
+        widget.field_name = name
+        widget.rect = pymupdf.Rect(50, top, 200, top + 20)
+        page.add_widget(widget)
+    hidden = next(w for w in page.widgets() if w.field_name == "oculto")
+    doc.xref_set_key(hidden.xref, "F", "2")
+    assert [field.name for field in page_fields(doc, 0)] == ["visto"]
+
+
+def test_password_fields_and_lists_with_several_taken_are_known():
+    doc = pymupdf.open()
+    page = doc.new_page()
+    widget = pymupdf.Widget()
+    widget.field_type = pymupdf.PDF_WIDGET_TYPE_TEXT
+    widget.field_name = "clave"
+    widget.field_flags = 1 << 13
+    widget.rect = pymupdf.Rect(50, 50, 200, 70)
+    page.add_widget(widget)
+    widget = pymupdf.Widget()
+    widget.field_type = pymupdf.PDF_WIDGET_TYPE_LISTBOX
+    widget.field_name = "dias"
+    widget.choice_values = ["lunes", "martes", "jueves"]
+    widget.field_flags = 1 << 21
+    widget.rect = pymupdf.Rect(50, 100, 200, 160)
+    page.add_widget(widget)
+    from app.core.forms import _field_object
+
+    days = _field_object(doc, next(w for w in page.widgets() if w.field_name == "dias").xref)
+    doc.xref_set_key(days, "V", "[(lunes) (jueves)]")
+    doc.reload_page(page)
+    found = {field.name: field for field in page_fields(doc, 0)}
+    assert found["clave"].password and not found["dias"].password
+    assert found["dias"].several
