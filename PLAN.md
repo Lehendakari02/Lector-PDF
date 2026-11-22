@@ -928,7 +928,7 @@ Notas de la Fase 2A:
 | 2.19 | Versión 0.3 | Estudio un tema escaneado con el programa | 🔶 número 0.3.0 puesto (16/11/2026); falta que Julen cree la Release v0.3.0 y lo use con un tema escaneado |
 | 2.19a | Textos tras la prueba del 16/11: moverlos después de ponerlos, A+ a la izquierda y A− a la derecha, sin fondo blanco al cambiarlos | Encajo un texto entre líneas del temario, lo muevo a su sitio y no tapa nada | ✅ |
 | 2.19b | Elegir cualquier cosa con un clic (también con una herramienta en la mano) y borrarla con Supr | Hago clic en un subrayado, un dibujo o un texto y Supr lo borra | ✅ |
-| 2.19c | Cambiar el color de lo ya puesto (subrayados, dibujos, formas, textos, notas) | Cambio un resaltado amarillo a verde sin borrarlo y hacerlo otra vez | 🔶 |
+| 2.19c | Cambiar el color de lo ya puesto (subrayados, dibujos, formas, textos, notas) | Cambio un resaltado amarillo a verde sin borrarlo y hacerlo otra vez | ✅ |
 
 Notas de la Fase 2B:
 - **2.15: detectar escaneados y ofrecer "Reconocer texto" (16/11/2026).**
@@ -1025,7 +1025,7 @@ Ordenadas por uso diario.
 
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
-| 2.20 | Panel de anotaciones filtrable por color | Veo todos mis subrayados de un color y salto a cada uno | ⬜ |
+| 2.20 | Panel de anotaciones filtrable por color | Veo todos mis subrayados de un color y salto a cada uno | 🔶 |
 | 2.21 | Saltar a artículo, apartado o sección por su número | Escribo "art. 14" o "3.2" en cualquier documento y me lleva allí | ⬜ |
 | 2.22 | Marcadores propios | Marco artículos clave y vuelvo a ellos con un clic | ⬜ |
 | 2.23 | Modo repaso | Lo subrayado se tapa y lo descubro al hacer clic | ⬜ |
@@ -1037,6 +1037,23 @@ Ordenadas por uso diario.
 | 2.29 | Biblioteca del temario | Elijo mi carpeta de temas, busco en todos y veo mi progreso | ⬜ |
 | 2.30 | Enlaces entre documentos (ver `CLAUDE.md`) | Desde el tema 5, un clic abre la Constitución al lado en el artículo 14; si muevo el archivo, el programa lo encuentra o me deja corregirlo | ⬜ |
 | 2.31 | Versión 0.4 | — | ⬜ |
+
+Notas de la Fase 2C:
+- **2.20: panel de anotaciones (22/11/2026).**
+  - Tercera pestaña del panel lateral (F4): **Anotaciones**, junto a
+    Miniaturas e Índice. También con Ctrl+K → "Anotaciones" (modo Estudiar).
+  - Lista todo lo puesto en el documento, en orden de lectura (página y de
+    arriba abajo): resaltados, subrayados y tachados con las palabras que
+    marcan, notas y textos con lo que dicen, dibujos y formas. También lo
+    hecho con otros programas.
+  - Arriba, un botón por cada color usado y "Todos"; debajo, qué ver: todo,
+    subrayados y resaltados, notas y textos, o dibujos y formas.
+  - Un clic lleva a su sitio y lo deja elegido, con su barra de color y
+    Borrar. La lista se actualiza sola tras cada cambio.
+  - El panel lateral es un poco más ancho (320 en vez de 222) para que quepan
+    las tres pestañas; se puede estrechar arrastrando su borde.
+  - Lo lee el ayudante de una vez (`core/annotation_list.py`); en un PDF de
+    cientos de páginas solo se abren las que tienen anotaciones.
 
 ## Fase 3 – Rellenar y firma manuscrita
 | # | Tarea | Terminado cuando… | Estado |

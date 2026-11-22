@@ -1,4 +1,5 @@
-"""The side panel: small pictures of every page and the outline of the document."""
+"""The side panel: small pictures of every page, the outline of the document
+and the list of what was put on it."""
 
 from enum import Enum
 
@@ -22,6 +23,7 @@ from PySide6.QtWidgets import (
 from app.core.outline import OutlineEntry
 from app.core.render_service import RenderedPage
 from app.ui import icons
+from app.ui.annotation_panel import AnnotationPanel
 from app.ui.pdf_view import PdfView
 
 THUMBNAIL_WIDTH = 132  # the box every small picture fits in
@@ -36,6 +38,7 @@ REQUEST_PAUSE_MS = 60  # while scrolling fast, do not ask for every row passed
 class Tab(Enum):
     THUMBNAILS = "miniaturas"
     OUTLINE = "indice"
+    ANNOTATIONS = "anotaciones"
 
     @classmethod
     def from_setting(cls, value: object) -> "Tab | None":
@@ -279,6 +282,7 @@ class SidePanel(QWidget):
 
         self.thumbnails = ThumbnailList(view)
         self.outline = OutlineTree(view)
+        self.annotations = AnnotationPanel(view)
         self.no_outline = QLabel(
             self.tr(
                 "Este documento no trae índice.\n\n"
@@ -293,7 +297,11 @@ class SidePanel(QWidget):
         group = QButtonGroup(self)
         header = QHBoxLayout()
         header.setSpacing(4)
-        names = {Tab.THUMBNAILS: self.tr("Miniaturas"), Tab.OUTLINE: self.tr("Índice")}
+        names = {
+            Tab.THUMBNAILS: self.tr("Miniaturas"),
+            Tab.OUTLINE: self.tr("Índice"),
+            Tab.ANNOTATIONS: self.tr("Anotaciones"),
+        }
         for tab, name in names.items():
             button = QToolButton()
             button.setObjectName("panelTab")
@@ -301,6 +309,7 @@ class SidePanel(QWidget):
             button.setCheckable(True)
             button.setMinimumHeight(36)
             button.clicked.connect(lambda _checked=False, t=tab: self.set_tab(t))
+            button.setMinimumWidth(button.sizeHint().width())  # never cut short
             group.addButton(button)
             header.addWidget(button)
             self.tab_buttons[tab] = button
@@ -318,6 +327,7 @@ class SidePanel(QWidget):
         self.stack.addWidget(self.thumbnails)
         self.stack.addWidget(self.outline)
         self.stack.addWidget(self.no_outline)
+        self.stack.addWidget(self.annotations)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 10, 8, 0)
@@ -339,6 +349,8 @@ class SidePanel(QWidget):
         self.tab_buttons[tab].setChecked(True)
         if tab is Tab.THUMBNAILS:
             self.stack.setCurrentWidget(self.thumbnails)
+        elif tab is Tab.ANNOTATIONS:
+            self.stack.setCurrentWidget(self.annotations)
         else:
             has_outline = self.outline.topLevelItemCount() > 0
             self.stack.setCurrentWidget(self.outline if has_outline else self.no_outline)
@@ -349,6 +361,7 @@ class SidePanel(QWidget):
         """The view shows another document: start again."""
         self.thumbnails.rebuild()
         self._outline_changed()
+        self.annotations.document_changed()
 
     def _outline_changed(self) -> None:
         self.outline.rebuild(self.view.outline)

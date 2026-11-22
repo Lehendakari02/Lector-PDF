@@ -389,7 +389,7 @@ QTreeWidget#outlineTree::item {{ padding: 7px 4px; border-radius: 6px; }}
 QTreeWidget#outlineTree::item:hover {{ background: {c.hover}; }}
 QTreeWidget#outlineTree::item:selected {{ background: {c.accent_soft}; color: {c.text}; }}
 QToolButton#panelTab {{
-    border: none; border-radius: 8px; padding: 4px 10px;
+    border: none; border-radius: 8px; padding: 4px 7px;
     color: {c.muted}; font-weight: 600; background: transparent;
 }}
 QToolButton#panelTab:hover {{ background: {c.hover}; color: {c.text}; }}
