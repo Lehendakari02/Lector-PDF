@@ -1042,8 +1042,8 @@ Ordenadas por uso diario.
 | 2.20 | Panel de anotaciones filtrable por color | Veo todos mis subrayados de un color y salto a cada uno | ✅ |
 | 2.21 | Saltar a artículo, apartado o sección por su número | Escribo "art. 14" o "3.2" en cualquier documento y me lleva allí | ✅ |
 | 2.22 | Marcadores propios | Marco artículos clave y vuelvo a ellos con un clic | ✅ |
-| 2.23 | Modo repaso | Lo subrayado se tapa y lo descubro al hacer clic | 🔶 |
-| 2.24 | Márgenes ampliables | Añado margen a una página y escribo en él; se ve igual en Edge y Adobe | ⬜ |
+| 2.23 | Modo repaso | Lo subrayado se tapa y lo descubro al hacer clic | ✅ |
+| 2.24 | Márgenes ampliables | Añado margen a una página y escribo en él; se ve igual en Edge y Adobe | 🔶 |
 | 2.25 | Insertar hojas en blanco, de rayas o cuadriculadas | Meto una hoja cuadriculada para un esquema | ✅ (hecha en la 2.13d) |
 | 2.26 | Código de colores propio (opcional, nada predefinido) | Si quiero, pongo nombre a mis colores; si no, no aparece nada | ⬜ |
 | 2.27 | Exportar resumen (formato por decidir) | Saco un documento con todo lo subrayado, ordenado por página | ⬜ |
@@ -1107,6 +1107,19 @@ Notas de la Fase 2C:
   - No cambia nada del documento ni hace falta guardar: los bloques solo se
     pintan en la pantalla. Ocultar las anotaciones termina el repaso.
   - Posible mejora si Julen la echa en falta: repasar solo un color.
+- **2.24: márgenes para apuntes (22/11/2026).**
+  - Botón **Añadir margen** del modo Estudiar (o Ctrl+K → "margen"): dónde
+    (a la derecha, a la izquierda, a los dos lados o abajo), cuánto
+    (estrecho 3 cm, normal 5 cm o ancho 8 cm) y en qué páginas (la que se
+    lee o todas). Recuerda la última elección; la primera vez, 5 cm a la
+    derecha de esta página.
+  - La página crece (se agrandan sus cajas estándar /MediaBox y /CropBox):
+    el contenido no se mueve y el espacio nuevo queda en blanco. Notas,
+    subrayados y enlaces siguen sobre su texto. En una página guardada de
+    lado, "derecha" es la derecha tal como se ve.
+  - Deshacer lo quita. Una página no puede pasar de 14 400 puntos (5 m), el
+    máximo que aceptan los lectores.
+  - Pendiente de comprobar en Edge y Adobe (prueba manual).
 
 ## Fase 3 – Rellenar y firma manuscrita
 | # | Tarea | Terminado cuando… | Estado |

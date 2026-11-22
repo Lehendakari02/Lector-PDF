@@ -178,6 +178,7 @@ def command_from_dict(data: dict) -> Command:
     import app.core.bookmarks  # noqa: F401
     import app.core.drawing  # noqa: F401  (their orders register themselves)
     import app.core.foreign  # noqa: F401
+    import app.core.margins  # noqa: F401
     import app.core.notes  # noqa: F401
     import app.core.sheets  # noqa: F401
     import app.core.text_layer  # noqa: F401

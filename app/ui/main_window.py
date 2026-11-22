@@ -99,6 +99,9 @@ from app.ui.features import (
     features_of,
     translate,
 )
+from app.ui.margin_dialog import MarginChoice, MarginDialog
+from app.ui.margin_dialog import remember as remember_margin
+from app.ui.margin_dialog import remembered as remembered_margin
 from app.ui.page_box import PageBox
 from app.ui.password_dialog import PasswordDialog
 from app.ui.pdf_view import PdfView
@@ -279,6 +282,7 @@ class MainWindow(QMainWindow):
         self.unsaved_answer: str | None = None
         # For the tests: the pages to recognise again, without asking.
         self.recognize_again_answer: list[int] | None = None
+        self.margin_answer: MarginChoice | None = None  # the tests answer without asking
         self._saving_to_close: list[DocumentPage] = []  # being saved before closing
         self._after_saving = None  # what to do once they are all saved
         self.statusBar().addPermanentWidget(self.speed_label)
@@ -319,6 +323,7 @@ class MainWindow(QMainWindow):
             "eraser": lambda: self.use_writing_tool(ERASER),
             "hide_annotations": self.toggle_annotations,
             "review": self.toggle_review,
+            "margins": self.add_margin,
             "undo": self.undo,
             "redo": self.redo,
             "save": self.save_document,
@@ -1665,6 +1670,26 @@ class MainWindow(QMainWindow):
         review = self.feature_actions["review"]
         review.setCheckable(True)
         review.setChecked(view.review)
+
+    def add_margin(self) -> bool:
+        """Ask where and how much blank room to add for notes, and add it."""
+        view = self.pdf_view
+        if view.page_count == 0:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return False
+        choice = self.margin_answer
+        if choice is None:
+            dialog = MarginDialog(remembered_margin(self.settings), max(view.current_page, 0), self)
+            if dialog.exec() != QDialog.DialogCode.Accepted or dialog.choice is None:
+                return False
+            choice = dialog.choice
+        remember_margin(self.settings, choice)
+        if not view.add_margin(*choice.room(), every_page=choice.every_page):
+            self.statusBar().showMessage(
+                self.tr("No cabe más margen: la página sería demasiado grande."), STATUS_MESSAGE_MS
+            )
+            return False
+        return True
 
     def toggle_review(self) -> None:
         """Cover what is highlighted and underlined, to try to remember it, or stop."""

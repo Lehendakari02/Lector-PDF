@@ -611,3 +611,17 @@ Con un documento abierto, en el modo Estudiar.
    nuevo, todo vuelve a estar tapado.
 5. Cierra el documento: no pregunta si guardar por el repaso (no cambia nada).
 
+## Fase 2C – Tarea 2.24 – Márgenes para apuntes
+
+1. En un tema con algo subrayado y una nota, ve a una página y pulsa
+   **Añadir margen** (modo Estudiar). Deja "A la derecha", "Normal (5 cm)"
+   y "Solo esta página" y pulsa **Añadir margen**: la página se ensancha con
+   espacio en blanco a la derecha.
+2. Escribe un texto o dibuja en el margen nuevo.
+3. Prueba "A la izquierda": el texto se desplaza a la derecha, y el subrayado
+   y la nota se van con él.
+4. Prueba "Todas las páginas" y "Abajo".
+5. Deshacer quita el margen.
+6. Guarda y abre el PDF en **Edge** y en **Adobe**: las páginas tienen el
+   margen, con lo escrito en él, y el subrayado sigue en su sitio.
+
