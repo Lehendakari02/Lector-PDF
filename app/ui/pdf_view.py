@@ -60,6 +60,7 @@ from app.core.selection import caret_at, is_on_text, selection_rects, word_at
 from app.core.text_layer import AddTextLayer, PageLayer
 from app.ui import theme
 from app.ui.note_panel import NotePanel
+from app.ui.picked_bar import PickedBar
 from app.ui.text_editor import TextEditor
 
 PAGE_GAP = 12  # space between pages, in Qt units
@@ -382,6 +383,11 @@ class PdfView(QAbstractScrollArea):
         # While it is dragged: what it was, from where, by which handle, and
         # the order that would leave it where the pointer is now.
         self._grab: dict | None = None
+        # Over what is picked: its colour and Borrar, at hand.
+        self.picked_bar = PickedBar(self.viewport())
+        self.picked_bar.color_chosen.connect(self.recolor_picked)
+        self.picked_bar.remove_wanted.connect(self.remove_picked)
+        self.picked_changed.connect(self._place_picked_bar)
         # Orders just sent that leave an annotation somewhere else, by its name:
         # where it is now, until its page is read again.
         self._latest: dict[str, object] = {}
@@ -1144,6 +1150,7 @@ class PdfView(QAbstractScrollArea):
             self.page_changed.emit(current + 1, self.page_count)
         self._request_pages()
         self._place_editor()
+        self._place_picked_bar()
         self.viewport().update()
 
     def _request_pages(self) -> None:
@@ -1571,6 +1578,7 @@ class PdfView(QAbstractScrollArea):
         if self._document is None:
             return
         self._asked_notes.discard(page)
+        QTimer.singleShot(0, self._place_picked_bar)  # what is picked may have changed
         self._notes[page] = list(found)
         self.notes_changed.emit(page)
         if not self._changing:
@@ -1624,7 +1632,10 @@ class PdfView(QAbstractScrollArea):
         # A drawing put or moved is painted on top until its page is drawn again.
         new = getattr(order, "new", None)
         if new is not None:
-            self._latest[new.name] = new
+            # A mark on the text is known by the name of each of its pieces.
+            names = [mark.name for mark in new.marks] if hasattr(new, "marks") else [new.name]
+            for name in names:
+                self._latest[name] = new
         sketch = _sketch_of(new or order)
         if sketch is not None:
             self._sent_sketches[number] = sketch
@@ -1731,6 +1742,7 @@ class PdfView(QAbstractScrollArea):
     def _panel_closed(self) -> None:
         self.note_panel = None
         self._editor_place = None
+        QTimer.singleShot(0, self._place_picked_bar)
         if self._hiding is not None:
             page, self._hiding = self._hiding[0], None
             self._stale.add(page)  # drawn again with the text in its place
@@ -2107,6 +2119,7 @@ class PdfView(QAbstractScrollArea):
             if math.hypot(x - from_x, y - from_y) * self._zoom < DRAG_START:
                 return
             grab["moved"] = True
+            self.picked_bar.hide()  # back once it is let go
         size = self._page_size(item.page)
         if grab["handle"] is None:
             change = arrange.moved(grab["order"], x - from_x, y - from_y, size)
@@ -2121,6 +2134,7 @@ class PdfView(QAbstractScrollArea):
             self._do(grab["change"])
         elif not grab["moved"] and (grab["item"].kind == NOTE or grab.get("open")):
             self.open_note(grab["item"], position)  # a plain click on a note opens it
+        self._place_picked_bar()
         self.viewport().update()
 
     def move_picked(self, dx: float, dy: float) -> bool:
@@ -2138,6 +2152,46 @@ class PdfView(QAbstractScrollArea):
             return False
         change = arrange.resized(self._order_of(item), handle, (x, y), self._page_size(item.page))
         return change is not None and self._do(change)
+
+    def recolor_picked(self, color) -> bool:
+        """Give what is picked another colour. It stays picked."""
+        item = self.picked_item()
+        if item is None:
+            return False
+        change = arrange.recolored(self._order_of(item), color)
+        if change is None or not self._do(change):
+            return False
+        self._place_picked_bar()
+        return True
+
+    def _place_picked_bar(self) -> None:
+        """Put the bar just over what is picked (under it, when there is no room)."""
+        bar = self.picked_bar
+        item = self.picked_item()
+        order = self._picked_order() if item is not None else None
+        busy = self.note_panel is not None or (self._grab is not None and self._grab["moved"])
+        if order is None or busy or not self._annotations_shown:
+            bar.hide()
+            return
+        page = item.page
+        zoom = self._render_zoom()
+        x0, y0, x1, y1 = arrange.bounds(order, self._sizes[page].width)
+        corners = [self._shown_point(page, p) for p in ((x0, y0), (x1, y1))]
+        left = self._page_left(page) + min(c[0] for c in corners) * zoom
+        top = self._tops[page] - self._scroll_y() + min(c[1] for c in corners) * zoom
+        bottom = self._tops[page] - self._scroll_y() + max(c[1] for c in corners) * zoom
+        bar.show_for(getattr(order, "color", None), arrange.can_recolor(order))
+        gap = 8
+        x = max(4, min(self._to_units(left), self.viewport().width() - bar.width() - 4))
+        y = self._to_units(top) - bar.height() - gap - 4
+        if y < 4:
+            y = self._to_units(bottom) + gap + 4
+        if y > self.viewport().height() - bar.height() - 4 or self._to_units(bottom) < 0:
+            bar.hide()  # what is picked is out of sight
+            return
+        bar.move(x, y)
+        bar.show()
+        bar.raise_()
 
     def remove_picked(self) -> bool:
         """Take away what is picked."""

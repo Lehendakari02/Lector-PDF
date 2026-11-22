@@ -438,3 +438,77 @@ def test_moves_are_saved_in_the_file(window, with_box, wait_until):
         (annotation,) = page.annots()
         assert annotation.type[1] == "Square"
         assert near(annotation.rect, (149, 149, 251, 211))
+
+
+# ---- the bar over what is picked: colour and Borrar (16/11 test) -------------------
+
+GREEN = (0.56, 0.88, 0.42)
+
+
+def test_the_bar_over_a_picked_mark_changes_its_colour(window, opened, wait_until, capsys):
+    view, _ = opened()
+    wait_until(lambda: 0 in view._texts)
+    view.select((0, 0), (0, 12))
+    view.mark_selection(HIGHLIGHT)
+    settle(view, wait_until)
+    (mark,) = view.drawings_of(0)
+    x0, y0, x1, y1 = mark.rects[0]
+    assert not view.picked_bar.isVisible()
+    click(view, 0, (x0 + x1) / 2, (y0 + y1) / 2)
+    bar = view.picked_bar
+    assert bar.isVisible() and all(s.isVisible() for s in bar.swatches)
+    assert bar.geometry().bottom() < place(view, 0, x0, y0).y(), "just over the mark"
+    green = next(s for s in bar.swatches if s.color == GREEN)
+    green.click()
+    settle(view, wait_until)
+    (mark,) = view.drawings_of(0)
+    assert mark.color == pytest.approx(GREEN, abs=0.01) and mark.kind == HIGHLIGHT
+    assert view.picked_item() is not None and bar.isVisible(), "still picked"
+    view.viewport().grab()
+    assert "Traceback" not in capsys.readouterr().err
+    window.undo()
+    settle(view, wait_until)
+    assert view.drawings_of(0)[0].color != pytest.approx(GREEN, abs=0.01)
+
+
+def test_any_colour_and_borrar_from_the_bar(window, with_box, wait_until):
+    view, _ = with_box
+    click(view, 0, 100, 130)
+    bar = view.picked_bar
+    bar.ask_color = lambda _current: (0.2, 0.3, 0.4)
+    bar.more_button.click()
+    settle(view, wait_until)
+    (box,) = view.drawings_of(0)
+    assert box.color == pytest.approx((0.2, 0.3, 0.4), abs=0.01) and box.kind == BOX
+    bar.remove_button.click()
+    settle(view, wait_until)
+    assert view.drawings_of(0) == [] and not bar.isVisible()
+
+
+def test_the_bar_hides_while_dragging_and_for_other_programs_only_borrar(
+    window, sample, tmp_path, wait_until
+):
+    path = tmp_path / "ajeno.pdf"
+    with pymupdf.open(sample("boe.pdf")) as doc:
+        doc[0].add_rect_annot(pymupdf.Rect(100, 300, 200, 360))
+        doc.save(path)
+    window.show_problem_dialogs = False
+    assert window.open_document(path)
+    view = window.pdf_view
+    wait_until(lambda: 0 in view.cached_pages() and 0 in view._notes)
+    click(view, 0, 100, 330)
+    bar = view.picked_bar
+    assert bar.isVisible() and bar.remove_button.isVisible()
+    assert not any(s.isVisible() for s in bar.swatches) and not bar.more_button.isVisible()
+
+
+def test_the_bar_goes_away_while_a_drawing_is_dragged(window, with_box, wait_until):
+    view, _ = with_box
+    click(view, 0, 100, 130)
+    spots = [place(view, 0, x, y) for x, y in ((100, 130), (120, 150), (140, 170))]
+    QTest.mousePress(view.viewport(), LEFT, NO_KEYS, spots[0])
+    for spot in spots[1:]:
+        QTest.mouseMove(view.viewport(), spot)
+    assert not view.picked_bar.isVisible()
+    QTest.mouseRelease(view.viewport(), LEFT, NO_KEYS, spots[-1])
+    assert view.picked_bar.isVisible()

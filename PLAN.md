@@ -927,8 +927,8 @@ Notas de la Fase 2A:
 | 2.18 | Buscador y subrayado probados con texto de OCR real; búsqueda aproximada opcional | Subrayo y busco en un escaneado igual que en un PDF del BOE | ✅ |
 | 2.19 | Versión 0.3 | Estudio un tema escaneado con el programa | 🔶 número 0.3.0 puesto (16/11/2026); falta que Julen cree la Release v0.3.0 y lo use con un tema escaneado |
 | 2.19a | Textos tras la prueba del 16/11: moverlos después de ponerlos, A+ a la izquierda y A− a la derecha, sin fondo blanco al cambiarlos | Encajo un texto entre líneas del temario, lo muevo a su sitio y no tapa nada | ✅ |
-| 2.19b | Elegir cualquier cosa con un clic (también con una herramienta en la mano) y borrarla con Supr | Hago clic en un subrayado, un dibujo o un texto y Supr lo borra | 🔶 |
-| 2.19c | Cambiar el color de lo ya puesto (subrayados, dibujos, formas, textos, notas) | Cambio un resaltado amarillo a verde sin borrarlo y hacerlo otra vez | ⬜ |
+| 2.19b | Elegir cualquier cosa con un clic (también con una herramienta en la mano) y borrarla con Supr | Hago clic en un subrayado, un dibujo o un texto y Supr lo borra | ✅ |
+| 2.19c | Cambiar el color de lo ya puesto (subrayados, dibujos, formas, textos, notas) | Cambio un resaltado amarillo a verde sin borrarlo y hacerlo otra vez | 🔶 |
 
 Notas de la Fase 2B:
 - **2.15: detectar escaneados y ofrecer "Reconocer texto" (16/11/2026).**
@@ -1014,6 +1014,11 @@ Notas de la Fase 2B:
     un sitio vacío hace lo de siempre. Con un rotulador (resaltar, subrayar,
     tachar) en la mano, un clic sobre una marca la elige; arrastrar sigue
     marcando texto. Antes solo se podía elegir con las manos vacías.
+  - 2.19c: sobre lo elegido sale una barra pequeña con los diez colores
+    rápidos, "Más…" (cualquier color) y "Borrar". Un color cambia el de un
+    resaltado, subrayado, tachado, dibujo, forma, nota o texto sin moverlo;
+    Deshacer devuelve el de antes. Lo de otros programas solo ofrece Borrar.
+    La barra se aparta mientras se arrastra y vuelve al soltar.
 
 ## Fase 2C – Herramientas de estudio
 Ordenadas por uso diario.

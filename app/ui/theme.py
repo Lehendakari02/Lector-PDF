@@ -453,6 +453,9 @@ QFrame#notePanel {{
     background: {c.surface}; border: 1px solid {c.border}; border-radius: 10px;
 }}
 QLabel#notePanelTitle {{ font-weight: 600; }}
+QFrame#pickedBar {{
+    background: {c.surface}; border: 1px solid {c.border}; border-radius: 8px;
+}}
 QFrame#textEditorBar {{
     background: {c.surface}; border: 1px solid {c.border}; border-radius: 8px;
 }}
