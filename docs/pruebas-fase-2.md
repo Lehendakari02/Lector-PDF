@@ -533,3 +533,15 @@ Con un documento abierto, en el modo Estudiar.
 3. Con el bolígrafo, un toque en un sitio vacío y un trazo siguen dibujando
    como siempre.
 4. Haz lo mismo con la herramienta **Formas** en la mano.
+
+## Arreglos 2.19c – Cambiar el color de lo ya puesto
+
+1. Resalta una frase en amarillo. Haz clic sobre el resaltado: encima sale una
+   barra con colores, **Más…** y **Borrar**.
+2. Pulsa el verde: el resaltado pasa a verde, en el mismo sitio. Deshacer lo
+   vuelve a poner amarillo.
+3. Haz lo mismo con un dibujo, una forma, una nota y un texto.
+4. **Más…** abre el selector de cualquier color. **Borrar** lo quita (igual
+   que Supr).
+5. Guarda y abre el PDF en **Edge** y en **Adobe**: los colores nuevos se ven
+   igual.

@@ -7,7 +7,7 @@ exactly where it was. Everything here works on the orders that put things
 ``PageNote.order()`` and ``PageDrawing.order()`` give for what is on a page.
 
 A mark on the text (highlight, underline, strike-out) belongs to its words: it
-can be picked and removed, not moved.
+can be picked, given another colour and removed, not moved.
 """
 
 from dataclasses import replace
@@ -143,6 +143,25 @@ def moved(order: Command, dx: float, dy: float, page: Size) -> Replace | None:
     if abs(dx) < 0.01 and abs(dy) < 0.01:
         return None
     return Replace(order, _shifted(order, dx, dy))
+
+
+def can_recolor(order: Command) -> bool:
+    """Everything made here has a colour that can change; what another
+    program made is only taken away."""
+    return isinstance(order, AddMarkup | AddNote | AddTextBox | AddInk | AddShape)
+
+
+def recolored(order: Command, color) -> Replace | None:
+    """The order that gives something another colour, in the same place.
+
+    None if it cannot change colour or already has that one.
+    """
+    if not can_recolor(order):
+        return None
+    color = tuple(max(0.0, min(1.0, float(part))) for part in color)
+    if all(abs(a - b) < 0.004 for a, b in zip(order.color, color, strict=True)):
+        return None
+    return Replace(order, replace(order, color=color))
 
 
 def _inside(point: Point, page: Size) -> Point:
