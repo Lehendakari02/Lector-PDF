@@ -176,7 +176,13 @@ FEATURES: list[Feature] = [
         "Lista de todos tus subrayados, notas y dibujos; por colores, y salta a cada uno",
         "panel resumen lista subrayados notas colores filtrar",
     ),
-    _f("review", STUDY, "Modo repaso", "Tapar lo subrayado para intentar recordarlo", "repasar"),
+    _f(
+        "review",
+        STUDY,
+        "Modo repaso",
+        "Tapar lo resaltado y subrayado para intentar recordarlo; un clic lo destapa",
+        "repasar estudiar memorizar tapar ocultar recordar examen",
+    ),
     _f(
         "margins",
         STUDY,

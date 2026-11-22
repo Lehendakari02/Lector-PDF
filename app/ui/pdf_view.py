@@ -79,6 +79,8 @@ SIDE_MARGIN = 16
 MIN_ZOOM = 0.2  # screen pixels per point, before the screen scale
 MAX_ZOOM = 8.0
 ZOOM_STEP = 1.2
+REVIEW_KINDS = (HIGHLIGHT, UNDERLINE)  # what the review mode covers
+COVER_MARGIN = 1.5  # points around a cover that a click still takes
 PLACE_MARGIN = 24  # space left above a heading gone to, in Qt units
 WRITING_WAIT_S = 3.0  # longest wait for the text being written to become a change
 WHEEL_NOTCH = 120  # what one notch of a mouse wheel sends
@@ -305,6 +307,7 @@ class PdfView(QAbstractScrollArea):
     place_answered = Signal(bool)
     _place_ready = Signal(int, object)
     annotations_shown_changed = Signal(bool)  # what was put on the pages is seen, or hidden
+    review_changed = Signal(bool)  # the review mode (what is marked, covered) on or off
     # The annotation copied last, for every document: the order that puts it.
     copied = None
     text_style_chosen = Signal(dict)  # the look given to a text while writing it
@@ -427,6 +430,11 @@ class PdfView(QAbstractScrollArea):
         self._settling: dict[int, list[tuple]] = {}
         # False: the pages are seen clean, without marks, notes or drawings.
         self._annotations_shown = True
+        # The review mode: what is highlighted or underlined is covered, and a
+        # click uncovers one (by its name) until the mode is left.
+        self._review = False
+        self._uncovered: set[str] = set()
+        self._review_click = False  # the press uncovered something: its release does nothing
         # A text being changed in its editor: (page, its name). Its page is
         # drawn without it, so that only the editor shows it.
         self._hiding: tuple[int, str] | None = None
@@ -578,6 +586,7 @@ class PdfView(QAbstractScrollArea):
             self.close_note_panel(keep=True)
             self._let_go()
             self.pick(None)
+            self.set_review(False)  # nothing to cover on a clean page
         # Every picture is of the other kind: they stay until the new ones come.
         self._stale.update(range(self.page_count))
         self._settling.clear()
@@ -793,6 +802,7 @@ class PdfView(QAbstractScrollArea):
         if not self._annotations_shown:  # the next document opens with everything in sight
             self._annotations_shown = True
             self.annotations_shown_changed.emit(True)
+        self.set_review(False)
         self._changes = self._saved_changes = 0
         self._place_asked = self._place_shown = None
         self._saves.clear()
@@ -1452,7 +1462,88 @@ class PdfView(QAbstractScrollArea):
                 x0, y0, x1, y1 = self._shown_rect(page, rect)
                 mark = QRectF(x0 * zoom, y0 * zoom, (x1 - x0) * zoom, (y1 - y0) * zoom)
                 painter.fillRect(mark.translated(target.left(), target.top()), SELECTION_COLOR)
+            if self._review:
+                self._paint_covers(painter, page, target, zoom)
             self._paint_sketches(painter, page, target, zoom)
+
+    # ---- review mode ------------------------------------------------------
+
+    @property
+    def review(self) -> bool:
+        return self._review
+
+    def set_review(self, on: bool) -> None:
+        """Cover what is highlighted or underlined, to try to remember it.
+
+        Nothing changes in the document: the covers are only painted on the
+        window. A click on one uncovers it; another click covers it again.
+        """
+        on = bool(on) and self._document is not None
+        if on == self._review:
+            return
+        self._review = on
+        self._uncovered.clear()
+        if on:
+            self.set_annotations_shown(True)  # the covers go where the marks are
+            self.clear_selection()
+            self.pick(None)
+        self.viewport().update()
+        self.review_changed.emit(on)
+
+    def cover_all(self) -> None:
+        """Cover again everything uncovered."""
+        if self._uncovered:
+            self._uncovered.clear()
+            self.viewport().update()
+
+    def covers_of(self, page: int) -> list[PageDrawing]:
+        """The marks that are covered in the review mode on a page (all of
+        them, uncovered or not), in reading order."""
+        return [item for item in self._drawings.get(page, ()) if item.kind in REVIEW_KINDS]
+
+    def uncovered(self, name: str) -> bool:
+        return name in self._uncovered
+
+    def _cover_under(self, position: QPoint) -> PageDrawing | None:
+        point = self._point_on_page(position)
+        if point is None:
+            return None
+        page, x, y = point
+        for item in self.covers_of(page):
+            for x0, y0, x1, y1 in item.rects:
+                if x0 - COVER_MARGIN <= x <= x1 + COVER_MARGIN and (
+                    y0 - COVER_MARGIN <= y <= y1 + COVER_MARGIN
+                ):
+                    return item
+        return None
+
+    def toggle_cover(self, name: str) -> None:
+        if name in self._uncovered:
+            self._uncovered.discard(name)
+        else:
+            self._uncovered.add(name)
+        self.viewport().update()
+
+    def _paint_covers(self, painter: QPainter, page: int, target: QRect, zoom: float) -> None:
+        """A block over every covered mark, in its colour, with no text seen."""
+        scale = self._scale()
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        for item in self.covers_of(page):
+            if item.name in self._uncovered:
+                continue
+            color = QColor.fromRgbF(*item.color)
+            fill = QColor(color).darker(115) if color.lightnessF() > 0.85 else color
+            painter.setPen(QPen(fill.darker(130), max(1.0, scale)))
+            painter.setBrush(fill)
+            for rect in item.rects:
+                x0, y0, x1, y1 = self._shown_rect(page, rect)
+                block = QRectF(x0 * zoom, y0 * zoom, (x1 - x0) * zoom, (y1 - y0) * zoom)
+                block = block.adjusted(-scale, -scale, scale, scale)
+                painter.drawRoundedRect(
+                    block.translated(target.left(), target.top()), 2 * scale, 2 * scale
+                )
+        painter.restore()
 
     def _paint_sketches(self, painter: QPainter, page: int, target: QRect, zoom: float) -> None:
         """What is being drawn or dragged on a page, and what was just put and
@@ -2489,6 +2580,13 @@ class PdfView(QAbstractScrollArea):
         """The mouse button, the pen or a finger goes down on a place of the window."""
         self.setFocus()
         self._fling.stop()
+        self._review_click = False
+        if self._review and self.note_panel is None:
+            covered = self._cover_under(position)
+            if covered is not None:
+                self._review_click = True  # uncovered or covered again: nothing else
+                self.toggle_cover(covered.name)
+                return
         if self.note_panel is not None:
             # A click outside keeps what was written. After a text written on
             # the page, the same click goes on: the next text starts there.
@@ -2593,6 +2691,9 @@ class PdfView(QAbstractScrollArea):
     def _release(self, position: QPoint, modifiers=Qt.KeyboardModifier.NoModifier) -> None:
         """The mouse button, the pen or a finger is lifted."""
         self._erasing = False
+        if self._review_click:
+            self._review_click = False
+            return
         if self._sketch is not None:
             self._extend_sketch(position, modifiers)
             self._finish_sketch()
@@ -3043,6 +3144,8 @@ class PdfView(QAbstractScrollArea):
             self.clear_selection()
         elif key == Qt.Key.Key_Escape and self._markup_tool:
             self.set_markup_tool("")  # put the marker down
+        elif key == Qt.Key.Key_Escape and self._review:
+            self.set_review(False)
         else:
             super().keyPressEvent(event)
 

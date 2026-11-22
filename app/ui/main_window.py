@@ -318,6 +318,7 @@ class MainWindow(QMainWindow):
             "shapes": lambda: self.use_writing_tool(SHAPE_TOOL),
             "eraser": lambda: self.use_writing_tool(ERASER),
             "hide_annotations": self.toggle_annotations,
+            "review": self.toggle_review,
             "undo": self.undo,
             "redo": self.redo,
             "save": self.save_document,
@@ -1661,6 +1662,27 @@ class MainWindow(QMainWindow):
         hide = self.feature_actions["hide_annotations"]
         hide.setCheckable(True)
         hide.setChecked(not view.annotations_shown)
+        review = self.feature_actions["review"]
+        review.setCheckable(True)
+        review.setChecked(view.review)
+
+    def toggle_review(self) -> None:
+        """Cover what is highlighted and underlined, to try to remember it, or stop."""
+        view = self.pdf_view
+        if view.page_count == 0:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            self._refresh_edit_actions()
+            return
+        view.set_review(not view.review)
+        self.statusBar().showMessage(
+            self.tr(
+                "Modo repaso: lo resaltado y subrayado está tapado. Haz clic en un trozo "
+                "para verlo y otra vez para taparlo. Esc para salir."
+            )
+            if view.review
+            else self.tr("Modo repaso terminado."),
+            STATUS_MESSAGE_MS,
+        )
 
     def toggle_annotations(self) -> None:
         """See the document clean, or with what was put on it again."""
@@ -2424,6 +2446,7 @@ class MainWindow(QMainWindow):
         view.selection_changed.connect(lambda _has, p=page: self._edit_state_changed(p))
         view.picked_changed.connect(lambda p=page: self._edit_state_changed(p))
         view.annotations_shown_changed.connect(lambda _on, p=page: self._edit_state_changed(p))
+        view.review_changed.connect(lambda _on, p=page: self._edit_state_changed(p))
         view.item_copied.connect(self._refresh_edit_actions)
         view.item_copied.connect(
             lambda: self.statusBar().showMessage(
