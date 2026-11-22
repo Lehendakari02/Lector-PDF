@@ -105,3 +105,26 @@ def test_an_empty_document_says_how_it_fills(window, sample, wait_until):
 def test_the_feature_finder_opens_it(window, marked, wait_until):
     window.feature_actions["annotations"].trigger()
     assert window.side_panel.isVisible() and window.side_panel.tab is Tab.ANNOTATIONS
+
+
+def test_a_colour_of_ones_own_names_its_marks(window, marked, wait_until, monkeypatch):
+    from app.ui import color_menu, color_naming
+
+    panel = panel_of(window, wait_until)
+    green = next(b for b in panel.color_buttons if b.color == pytest.approx(GREEN, abs=0.01))
+    monkeypatch.setattr(color_menu, "ask_color_name", lambda _parent, _current: "Definiciones")
+    green.ask_name()
+    assert color_naming.name_of(GREEN) == "Definiciones"
+    rows = [row.split("\n")[0] for row in texts(panel)]
+    assert rows[:2] == ["Pág. 1 · Resaltado", "Pág. 1 · Resaltado · Definiciones"]
+    assert any("Definiciones" in b.accessibleName() for b in panel.color_buttons)
+    # Kept for the next time the program starts.
+    color_naming.install(window.settings)
+    assert color_naming.name_of(GREEN) == "Definiciones"
+    # Cancelling changes nothing; an empty name takes it away.
+    monkeypatch.setattr(color_menu, "ask_color_name", lambda _parent, _current: None)
+    green = next(b for b in panel.color_buttons if b.color == pytest.approx(GREEN, abs=0.01))
+    green.ask_name()
+    assert color_naming.name_of(GREEN) == "Definiciones"
+    color_naming.set_name(GREEN, "")
+    assert all("Definiciones" not in row for row in texts(panel))
