@@ -387,6 +387,7 @@ class PdfView(QAbstractScrollArea):
         self._latest: dict[str, object] = {}
         # What is being drawn right now: (page, tool, points), all as the page is shown.
         self._sketch: tuple[int, str, list[tuple[float, float]]] | None = None
+        self._sketch_from = QPoint()  # where the stroke being drawn started, in the window
         # Drawn and sent, still to appear in the picture of its page: by change
         # number while the helper puts it, then by page until it is drawn again.
         self._sent_sketches: dict[int, tuple] = {}
@@ -1920,11 +1921,25 @@ class PdfView(QAbstractScrollArea):
         page, tool, points = self._sketch
         self._sketch = None
         pressures, self._sketch_pressures = self._sketch_pressures, None
+        if self._is_tap(page, points):
+            # A tap, not a stroke: on something already drawn or written, it
+            # picks it (to move it, change it or take it away with Supr).
+            item = self.item_under(self._sketch_from, marks=False)
+            if item is not None:
+                self.pick(item)
+                self.viewport().update()
+                return
         if tool == DRAW:
             self.draw_ink(page, [points], [pressures] if pressures else ())
         elif len(points) == 2:
             self.draw_shape(self.shape_kind, page, points[0], points[1])
         self.viewport().update()
+
+    def _is_tap(self, page: int, points) -> bool:
+        """Whether a stroke never went farther than a click goes."""
+        first_x, first_y = points[0]
+        reach = DRAG_START / self._zoom
+        return all(math.hypot(x - first_x, y - first_y) <= reach for x, y in points)
 
     def draw_ink(self, page: int, strokes, pressures=()) -> bool:
         """Draw by hand on a page: each stroke, the points it goes through.
@@ -2259,8 +2274,9 @@ class PdfView(QAbstractScrollArea):
             self.close_note_panel(keep=True)
             if not (on_page and self._markup_tool == TEXT_BOX):
                 return
-        if self._markup_tool == SHAPE_TOOL and self._picked is not None:
-            # The shape just drawn can be adjusted by its handles or dragged.
+        if self._markup_tool in (DRAW, SHAPE_TOOL) and self._picked is not None:
+            # What is picked (the shape just drawn, or one tapped) can be
+            # adjusted by its handles or dragged.
             handle = self._handle_under(position)
             item = self.picked_item()
             if item is not None and (handle is not None or self.item_under(position) == item):
@@ -2272,6 +2288,7 @@ class PdfView(QAbstractScrollArea):
             if point is not None:
                 self.clear_selection()
                 self._sketch = (point[0], self._markup_tool, [point[1:]])
+                self._sketch_from = position
                 feels = self._markup_tool == DRAW and self.pen_pressure
                 feels = feels and self._pen_pressure is not None
                 self._sketch_pressures = [self._pen_pressure] if feels else None
@@ -2305,6 +2322,8 @@ class PdfView(QAbstractScrollArea):
             if point is not None:
                 self.start_note(self._markup_tool, *point, position)
             return
+        if self._markup_tool in MARKUP_KINDS:
+            self.pick(None)  # a click on a mark picks it again when the button is let go
         place = self._caret_at(position)
         if place is None:
             self.clear_selection()
@@ -2362,8 +2381,13 @@ class PdfView(QAbstractScrollArea):
         self._autoscroll.stop()
         if was_selecting and self._markup_tool in MARKUP_KINDS and self.has_selection:
             self.mark_selection(self._markup_tool)  # the marker in hand marks it
-        elif was_selecting and not self._markup_tool and not self.has_selection:
-            # A plain click on a mark of the text picks it.
+        elif (
+            was_selecting
+            and not self.has_selection
+            and (not self._markup_tool or self._markup_tool in MARKUP_KINDS)
+        ):
+            # A plain click on a mark of the text picks it, with a marker in
+            # hand too.
             self.pick(self.item_under(position))
 
     def _let_go(self) -> None:
