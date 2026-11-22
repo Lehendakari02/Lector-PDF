@@ -2177,6 +2177,12 @@ class MainWindow(QMainWindow):
                 ).format(document.name),
             )
             return False
+        if reopened and index >= 0:
+            # Back to its place among the tabs, not at the end.
+            now = self.index_of_document(document)
+            if 0 <= now != index and index < len(self.documents):
+                self.document_tabs.moveTab(now, index)
+                self.document_tabs.setCurrentIndex(index)
         if reopened and index >= 0 and 0 < place < self.pdf_view.page_count:
             self.pdf_view.scroll_to_page(place)
         self.statusBar().showMessage(

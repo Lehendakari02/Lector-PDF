@@ -229,3 +229,16 @@ def test_a_version_that_cannot_be_kept_does_not_stop_saving(window, opened, wait
     mark(window, wait_until, first=20)
     save(window, wait_until)  # tried again: it works now
     assert len(window.versions.of(path)) == 1
+
+
+def test_restoring_keeps_its_place_among_the_tabs(window, opened, wait_until):
+    first = opened()
+    mark(window, wait_until)
+    save(window, wait_until)
+    second = opened("boe.pdf")
+    (morning,) = window.versions.of(first)
+    window.restore_answer = True
+    assert window.restore_version(morning)
+    assert [page.path for page in window.documents] == [first, second]
+    assert window.document_tabs.currentIndex() == 0
+    assert window.current_document.path == first
