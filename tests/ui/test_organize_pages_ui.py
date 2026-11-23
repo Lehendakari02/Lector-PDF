@@ -109,13 +109,26 @@ def test_where_a_dragged_page_lands(window, opened, wait_until):
 def test_undo_puts_moved_pages_back(window, opened, wait_until):
     view, path = opened()
     before = page_texts(path)
+    failed = []
+    view.edit_failed.connect(failed.append)
     assert view.move_pages([0], view.page_count)
     settle(view, wait_until)
     assert view.undo()
     settle(view, wait_until)
+    assert not failed, "taking the move back did not work"
+    assert view.redo()
+    settle(view, wait_until)
+    assert view.undo()
+    settle(view, wait_until)
+    assert view.move_pages([1], 0)
+    settle(view, wait_until)
     window.save_document()
     settle(view, wait_until)
-    assert page_texts(path) == before
+    assert not failed
+    after = page_texts(path)
+    assert after[:2] == [before[1], before[0]] and after[2:] == before[2:], (
+        f"restarts of the helper: {view.service.restarts}"
+    )
 
 
 def test_rotar_turns_the_page_being_read(window, opened, wait_until):

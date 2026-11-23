@@ -3885,10 +3885,14 @@ class PdfView(QAbstractScrollArea):
                 self.viewport().update()
         note = self.note_under(position)
         writing = self._markup_tool in (NOTE, TEXT_BOX)
-        if writing and note is not None and note.ours and note.kind == TEXT_BOX:
-            # Dragged, the text moves; a plain click opens it to write.
-            self._start_grab(note, None, position)
-            self._grab["open"] = True
+        marking = self._markup_tool in MARKUP_KINDS
+        if (writing or marking) and note is not None and note.ours and note.kind == TEXT_BOX:
+            # One's own text, as in PowerPoint: a click picks it (then the
+            # arrows, Supr or its bar work on it) and dragged it moves; a
+            # second click on it, a double click or Intro opens it to write.
+            picked = self.picked_item() == note
+            self._start_grab(note, self._handle_under(position) if picked else None, position)
+            self._grab["open"] = picked
             return
         if note is not None and (note.kind == NOTE or writing):
             self.open_note(note, position)
