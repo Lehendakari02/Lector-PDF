@@ -41,3 +41,19 @@ las lleve. Cada paso: lo que haces → lo que debe pasar.
 3. Con ese zoom, subraya una palabra → el subrayado aparece sin parpadeos.
 4. En el **Administrador de tareas**, la memoria de «Lector PDF» no se dispara
    (antes una sola página a este zoom gastaba unos 170 MB).
+
+## P.4 Elegir las teclas
+
+1. **Ajustes** (Ctrl+,) → pestaña **Teclado** → sale la lista de todas las
+   funciones con su tecla.
+2. Escribe «subrayar» en el buscador → solo queda «Subrayar», con la S.
+3. Doble clic en «Subrayar» y pulsa **U** → la ventana dice «Libre…»;
+   pulsa **Poner esta** → en la lista sale U y «Subrayar» en cursiva.
+4. Cierra Ajustes, selecciona texto en un PDF y pulsa **U** → se subraya.
+5. Vuelve a **Teclado**, doble clic en «Dibujar» y pulsa **R** → la ventana
+   avisa «Ahora es de «Resaltar»…»; pulsa **Poner esta** → abajo dice que se
+   ha quitado de «Resaltar». Con el documento delante, R coge el lápiz.
+6. Doble clic en «Resumen» (o cualquier función sin tecla) y pulsa
+   **Ctrl+Mayús+R** → funciona aunque estés escribiendo en el buscador.
+7. Prueba **Ctrl++** y **Ctrl+-** → acercan y alejan.
+8. Pulsa **Restablecer todas** → vuelven las de siempre (R resalta, S subraya).

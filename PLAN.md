@@ -1570,7 +1570,7 @@ malo y trae sus ajustes con valores por defecto que sirven sin tocar nada.
 | P.1 | Letras de cualquier idioma europeo en los cuadros de texto (griego antiguo, cirílico, vietnamita, subíndices como H₂O), también en negrita, con la fuente metida en el PDF | Escribo «Ἀθῆναι, Москва, H₂O» en la página, guardo y se ve igual en Edge y Adobe | 🔶 hecho; falta tu prueba en Edge y Adobe |
 | P.2 | "Dormir" las pestañas que llevan rato sin verse, como Edge, con un tope de memoria; ajuste para apagarlo | Con 20 temas abiertos el programa gasta mucho menos; al volver a una pestaña dormida aparece en su página en un momento | 🔶 hecho; falta tu prueba con muchos temas abiertos |
 | P.3 | Zoom alto dibujado por trozos (solo lo que se ve), como Adobe y los mapas | Al 800 % una letra pequeña se ve nítida, sin esperas ni gastar cientos de MB | 🔶 hecho; falta tu prueba en tu Windows |
-| P.4 | Elegir la tecla de cada herramienta y función, como los controles de un videojuego | En Ajustes → Teclado cambio la tecla de Subrayar, me avisa si choca con otra y "Restablecer" vuelve a las de siempre | ⬜ |
+| P.4 | Elegir la tecla de cada herramienta y función, como los controles de un videojuego | En Ajustes → Teclado cambio la tecla de Subrayar, me avisa si choca con otra y "Restablecer" vuelve a las de siempre | 🔶 hecho; falta tu prueba |
 | P.5 | El lector de pantalla (NVDA) lee el texto de las páginas, como en Adobe, Edge y Chrome | Con NVDA, entro en el documento y me lee la página; me muevo por líneas con las flechas | ⬜ |
 
 Lo que hay que probar en Windows está en
@@ -1630,6 +1630,31 @@ Notas de las mejoras:
   - Comprobado punto por punto: cada trozo es igual que la misma zona de la
     página dibujada entera (sin costuras ni desplazamientos), también con la
     vista girada y en páginas giradas.
+- **P.4: Elegir la tecla de cada función (23/11/2026).**
+  - Pestaña nueva **Ajustes → Teclado**, como los controles de un videojuego
+    o el teclado de Visual Studio Code: la lista de **todas** las funciones
+    (herramientas, Archivo, Editar, Ver, Ayuda y cada botón de cada modo),
+    agrupadas, con su tecla y **otra tecla**. Doble clic (o "Cambiar
+    tecla…") y se pulsa la nueva. Un buscador encuentra por nombre o por tecla
+    ("subrayar", "ctrl+s"). Lo cambiado sale en cursiva; "Restablecer" vuelve
+    a la de siempre de una función y "Restablecer todas", a todas.
+  - Lo que mejora sobre otros: Adobe no deja cambiar teclas; Foxit sí, pero
+    deja poner la misma tecla en dos funciones y entonces no va ninguna. Aquí,
+    al pulsar una tecla, la ventana dice al momento si está libre o de quién
+    es; si se pone, se le quita a la otra y lo dice ("Se ha quitado de
+    «Resaltar»"). Nunca quedan dos funciones con la misma tecla.
+  - Las teclas sin Ctrl ni Alt (una letra, un número) valen solo con el
+    documento delante, como las de las herramientas: en el buscador una letra
+    sigue siendo una letra. Las combinaciones (Ctrl+…, Alt+…, F1…F12) valen en
+    toda la ventana. Las de moverse por el documento (flechas, Espacio, Av Pág,
+    Inicio, Fin, Esc, Intro, Tab) no se pueden dar.
+  - Funciones con tecla nueva por defecto: **Acercar Ctrl++** (también Ctrl+=)
+    y **Alejar Ctrl+-**, como en Adobe y los navegadores; antes no tenían.
+  - Se guarda solo lo que se cambia (`teclas` en los ajustes), así una versión
+    nueva puede traer teclas nuevas sin pisar las de cada uno.
+  - La casilla "Una tecla para cada herramienta" pasa a esta pestaña como
+    "Teclas sueltas en el documento" (el mismo ajuste), junto con la de las
+    flechas al escribir.
 
 ## Fase 5 – Organizar y convertir
 | # | Tarea | Terminado cuando… | Estado |
