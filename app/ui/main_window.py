@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 
 from PySide6.QtCore import QEvent, QSize, Qt, QTimer, QUrl, Signal, qVersion
 from PySide6.QtGui import (
+    QAccessible,
     QAction,
     QActionGroup,
     QCursor,
@@ -55,6 +56,7 @@ from app.core import (
     ocr,
     pen,
     pictures,
+    reading,
     save_checks,
     save_settings,
     saving,
@@ -577,6 +579,7 @@ class MainWindow(QMainWindow):
             ("search", self.search_action, view_group),
             ("fit_comfortable", self.initial_size_action, view_group),
             ("fullscreen", self.full_screen_action, view_group),
+            ("reading_cursor", self.reading_cursor_action, view_group),
             ("go_to_page", self.go_to_page_action, view_group),
             ("bookmark", self.bookmark_action, view_group),
             ("rotate_view", self.rotate_view_action, view_group),
@@ -1437,8 +1440,24 @@ class MainWindow(QMainWindow):
         self.side_panel_action.setCheckable(True)
         self.side_panel_action.setShortcut(QKeySequence("F4"))
         self.side_panel_action.triggered.connect(lambda _checked=False: self.toggle_side_panel())
+        self.reading_cursor_action = QAction(self.tr("Cursor de &lectura"), self)
+        self.reading_cursor_action.setCheckable(True)
+        self.reading_cursor_action.setShortcut(QKeySequence("F7"))
+        self.reading_cursor_action.setToolTip(
+            self.tr(
+                "Como en Edge y Chrome (F7): moverse por el texto de la página con las "
+                "flechas y seleccionar con Mayús. Lo usan NVDA y los demás lectores "
+                "de pantalla para leer el documento."
+            )
+        )
+        self.reading_cursor_action.triggered.connect(self.choose_reading_cursor)
+        self._screen_reader_seen = QAccessible.isActive()
+        self.reading_cursor_action.setChecked(
+            reading.cursor_wanted(self.settings, self._screen_reader_seen)
+        )
         for action in (
             self.side_panel_action,
+            self.reading_cursor_action,
             self.full_screen_action,
             self.go_to_page_action,
             self.bookmark_action,
@@ -2448,6 +2467,24 @@ class MainWindow(QMainWindow):
         view.finger_mode = pen.finger_mode(self.settings)
         view.pen_seen = pen.pen_seen(self.settings)
         view.typed_arrows = symbols.typed_wanted(self.settings)  # the keyboard, while at it
+        on = reading.cursor_wanted(self.settings, QAccessible.isActive())
+        view.set_reading_cursor(on)
+        if hasattr(self, "reading_cursor_action"):
+            self.reading_cursor_action.setChecked(on)
+
+    def choose_reading_cursor(self, on: bool) -> None:
+        """F7: the reading cursor on or off, in every document, and remembered.
+        Off with a screen reader running also stops it coming on by itself."""
+        self.settings.set(reading.CURSOR_SETTING, on)
+        if not on and QAccessible.isActive():
+            self.settings.set(reading.WITH_SCREEN_READER_SETTING, False)
+        self.apply_pen_settings()
+        self.statusBar().showMessage(
+            self.tr("Cursor de lectura activado: flechas para moverse, Mayús para seleccionar")
+            if on
+            else self.tr("Cursor de lectura desactivado"),
+            4000,
+        )
 
     def _pen_was_seen(self) -> None:
         """A pen has been used: from now on the fingers leave the drawing to it
@@ -5059,6 +5096,15 @@ class MainWindow(QMainWindow):
         if event.type() == QEvent.Type.DevicePixelRatioChange and hasattr(self, "welcome_logo"):
             # Moved to a screen with another scale: draw the logo sharp again.
             self.welcome_logo.setPixmap(icons.logo_pixmap(84, self.devicePixelRatioF()))
+        if (
+            event.type() == QEvent.Type.ActivationChange
+            and self.isActiveWindow()
+            and hasattr(self, "reading_cursor_action")
+            and QAccessible.isActive() != self._screen_reader_seen
+        ):
+            # A screen reader was started (or closed) while the program was open.
+            self._screen_reader_seen = QAccessible.isActive()
+            self.apply_pen_settings()
 
     def closeEvent(self, event) -> None:  # noqa: N802 (Qt naming)
         for page in self.documents:

@@ -57,3 +57,29 @@ las lleve. Cada paso: lo que haces → lo que debe pasar.
    **Ctrl+Mayús+R** → funciona aunque estés escribiendo en el buscador.
 7. Prueba **Ctrl++** y **Ctrl+-** → acercan y alejan.
 8. Pulsa **Restablecer todas** → vuelven las de siempre (R resalta, S subraya).
+
+## P.5 El lector de pantalla lee las páginas (cursor de lectura)
+
+Sin lector de pantalla:
+
+1. Abre el BOE de prueba y pulsa **F7** → abajo dice «Cursor de lectura
+   activado» y sale una barra roja fina al principio del texto.
+2. Flechas → la barra se mueve letra a letra y línea a línea; **Mayús+flechas**
+   selecciona (se ve azul en la página) y **R** lo resalta.
+3. Baja con la flecha hasta el final de la página → sigue en la siguiente.
+   **Av Pág** / **Re Pág** cambian de página.
+4. Un clic en otra parte → la barra va allí. **F7** otra vez → se quita.
+
+Con NVDA (gratis en nvaccess.org):
+
+5. Arranca NVDA y abre el programa → el cursor de lectura se activa solo.
+   Entra en el documento (clic en la página) → NVDA dice «Página 1 de 39» y
+   la primera línea.
+6. Flechas arriba y abajo → lee línea a línea; **Ctrl+flechas** palabra a
+   palabra; **NVDA+flecha abajo** lee todo seguido. Al pasar de página dice
+   «Página 2 de 39».
+7. Abre un PDF escaneado → dice que la página no tiene texto y que se puede
+   reconocer.
+8. Ajustes → General → Accesibilidad: quita «Activarlo solo si uso un lector
+   de pantalla», cierra y vuelve a abrir el programa con NVDA → no se activa
+   (F7 lo activa).

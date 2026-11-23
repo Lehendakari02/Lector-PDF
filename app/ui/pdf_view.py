@@ -96,6 +96,7 @@ from app.core.text_layer import AddTextLayer, PageLayer
 from app.ui import theme
 from app.ui.field_editor import FieldEditor
 from app.ui.note_panel import NotePanel
+from app.ui.page_reader import PageReader
 from app.ui.picked_bar import PickedBar
 from app.ui.text_editor import TextEditor
 
@@ -149,6 +150,7 @@ WAITING_TEXT_COLOR = QColor("#767676")  # "Página 7" on a sheet not drawn yet
 MARK_COLOR = QColor(255, 213, 0, 110)
 CURRENT_MARK_COLOR = QColor(255, 120, 0, 150)
 SELECTION_COLOR = QColor(61, 79, 208, 80)
+READING_CARET_COLOR = QColor(200, 30, 30)  # where the reading cursor is
 PAGE_TEXTS_KEPT = 40  # pages whose letters are kept ready for selecting
 END_OF_PAGE = 10**9  # a caret after the last letter, whatever the page has
 AUTOSCROLL_MS = 40  # while dragging a selection past the edge of the window
@@ -507,6 +509,15 @@ class PdfView(QAbstractScrollArea):
         self._grab: dict | None = None
         # Over what is picked: its colour and Borrar, at hand.
         self.picked_bar = PickedBar(self.viewport())
+        # The reading cursor (F7): the text of the page for screen readers and
+        # the keyboard, unseen over the page.
+        self.reader = PageReader(self.viewport())
+        self.reader.text_of = self._texts.get
+        self.reader.text_wanted.connect(self._want_text)
+        self.reader.moved.connect(self._reader_moved)
+        self.reader.page_changed.connect(self._reader_page_changed)
+        self.reader.key_first = self._reader_key
+        self._reading_caret: tuple[int, int] | None = None  # (page, letter)
         self.picked_bar.color_chosen.connect(self.recolor_picked)
         self.picked_bar.remove_wanted.connect(self.remove_picked)
         self.picked_changed.connect(self._place_picked_bar)
@@ -794,6 +805,8 @@ class PdfView(QAbstractScrollArea):
             for page in pages:  # their letters are read again when needed
                 self._texts.pop(page, None)
                 self._asked_texts.discard(page)
+            if self.reading_cursor and self.reader.page in pages:
+                self._want_text(self.reader.page)
         if _too_big_to_undo_after_saving(order):
             self._lost_on_save += -1 if undone else 1
         self.mark_modified(breaking=_breaks_signatures(order))
@@ -867,12 +880,16 @@ class PdfView(QAbstractScrollArea):
         self.clear_selection()
         page, inside = place
         moved_page = moved(page)
+        reading = moved(self.reader.page) if self.reader.page >= 0 else None
         self._layout()
         self._return_to(
             (min(at, self.page_count - 1) if moved_page is None else moved_page, inside)
         )
         self._current_page = -1  # told again, with the new count
         self._scrolled()
+        if self.reading_cursor and self.page_count:
+            page = min(at, self.page_count - 1) if reading is None else reading
+            self.reader.show_page(page, self.page_count, None)
         self.pages_moved.emit(at, by)
         self.pages_reshaped.emit()
 
@@ -892,6 +909,8 @@ class PdfView(QAbstractScrollArea):
         for page in grown:
             self._texts.pop(page, None)
             self._asked_texts.discard(page)
+        if self.reading_cursor and self.reader.page in grown:
+            self._want_text(self.reader.page)
         self._layout()
         self._return_to(place)
         self._scrolled()
@@ -1005,6 +1024,8 @@ class PdfView(QAbstractScrollArea):
             self.modified_changed.emit(False)
         self._document = None
         self._sizes = []
+        self.reader.page = -1
+        self._reading_caret = None
         self._cache.clear()
         self._cache_bytes = 0
         self._forget_tiles()
@@ -1842,6 +1863,8 @@ class PdfView(QAbstractScrollArea):
                 x0, y0, x1, y1 = self._shown_rect(page, rect)
                 mark = QRectF(x0 * zoom, y0 * zoom, (x1 - x0) * zoom, (y1 - y0) * zoom)
                 painter.fillRect(mark.translated(target.left(), target.top()), SELECTION_COLOR)
+            if self._reading_caret is not None and self._reading_caret[0] == page:
+                self._paint_reading_caret(painter, page, target, zoom, scale)
             if self._annotations_shown and self._doc_links.get(page):
                 self._paint_doc_links(painter, page, target, zoom)
             if self._fields.get(page):
@@ -2160,6 +2183,7 @@ class PdfView(QAbstractScrollArea):
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
+        self.reader.setGeometry(self.viewport().rect())
         # With "fit to width" the pages change size with the window (for example
         # when a side panel opens): keep reading where we were.
         place = self._place()
@@ -2266,6 +2290,85 @@ class PdfView(QAbstractScrollArea):
         if text:
             QGuiApplication.clipboard().setText(text)
         self.text_copied.emit(len(text))
+
+    # ---- the reading cursor -----------------------------------------------
+
+    @property
+    def reading_cursor(self) -> bool:
+        """Whether the page is read with the keyboard (F7), as in Edge and Chrome."""
+        return self.reader.wanted
+
+    def set_reading_cursor(self, on: bool) -> None:
+        """Turn the reading cursor on (it starts at the page in sight) or off."""
+        if on == self.reading_cursor:
+            return
+        reading_now = self.reader.hasFocus()
+        self.reader.wanted = on
+        self.reader.setVisible(on)
+        if not on:
+            self._reading_caret = None
+            if reading_now:
+                self.setFocus()
+            self.viewport().update()
+            return
+        self.reader.setGeometry(self.viewport().rect())
+        if self._document is not None and self.page_count:
+            page = max(0, self.current_page)
+            self.reader.show_page(page, self.page_count, self._texts.get(page))
+        if self.hasFocus():
+            self.reader.setFocus()
+
+    def _reader_moved(self, page: int, start: int, end: int) -> None:
+        """The reading cursor moved: the page follows, and so does the selection."""
+        self._reading_caret = (page, start if end == start else end)
+        if start != end:
+            self.select((page, start), (page, end))
+        elif self.has_selection:
+            self.clear_selection()
+        text = self._texts.get(page)
+        if text is not None and len(text) and 0 <= page < self.page_count:
+            letter = min(self._reading_caret[1], len(text) - 1)
+            rects = selection_rects(text, letter, letter + 1)
+            if rects:
+                shown = self._shown_rect(page, rects[0])
+                self._bring_into_view(page, shown, shown)
+        self.viewport().update()
+
+    def _reader_page_changed(self, page: int) -> None:
+        if not 0 <= page < self.page_count:
+            return
+        self._reading_caret = None
+        if page not in self._visible_pages():
+            self.scroll_to_page(page)
+
+    def _paint_reading_caret(self, painter, page: int, target, zoom: float, scale) -> None:
+        """A thin bar where the reading cursor is, like the caret of a text."""
+        text = self._texts.get(page)
+        if text is None or not len(text):
+            return
+        letter = self._reading_caret[1]
+        after = letter >= len(text)  # after the last letter: on its right
+        rects = selection_rects(text, min(letter, len(text) - 1), min(letter, len(text) - 1) + 1)
+        if not rects:
+            return
+        x0, y0, x1, y1 = self._shown_rect(page, rects[0])
+        x = (x1 if after else x0) * zoom + target.left()
+        width = max(2.0, 2 * scale)
+        bar = QRectF(x - width / 2, y0 * zoom + target.top(), width, (y1 - y0) * zoom)
+        painter.fillRect(bar, READING_CARET_COLOR)
+
+    def place_reader(self, position: QPoint) -> None:
+        """A click with the reading cursor on: it goes where the click was."""
+        caret = self._caret_at(position)
+        if caret is None:
+            return
+        page, letter = caret
+        if page != self.reader.page:
+            self.reader.show_page(page, self.page_count, self._texts.get(page))
+        selection = self.selection()
+        self.reader.go_to_letter(letter)
+        if selection is not None:  # what the mouse selected stays selected
+            self.select(*selection)
 
     # ---- notes and text boxes ----------------------------------------------
 
@@ -3583,6 +3686,8 @@ class PdfView(QAbstractScrollArea):
         self._texts[page] = text
         while len(self._texts) > PAGE_TEXTS_KEPT:
             self._texts.popitem(last=False)
+        if self.reading_cursor:
+            self.reader.text_came(page, text)
         if self.has_selection:
             self.viewport().update()
 
@@ -3647,6 +3752,8 @@ class PdfView(QAbstractScrollArea):
             super().mousePressEvent(event)
             return
         self._press(event.position().toPoint(), event.modifiers())
+        if self.reading_cursor:
+            self.place_reader(event.position().toPoint())
 
     def _press(self, position: QPoint, modifiers=Qt.KeyboardModifier.NoModifier) -> None:
         """The mouse button, the pen or a finger goes down on a place of the window."""
@@ -4283,6 +4390,29 @@ class PdfView(QAbstractScrollArea):
             event.accept()
             return
         super().wheelEvent(event)
+
+    def actionEvent(self, event) -> None:  # noqa: N802
+        """The keys of the document also answer while the reading cursor has
+        the keyboard (R highlights what was selected with Mayús+arrows)."""
+        super().actionEvent(event)
+        if not hasattr(self, "reader"):
+            return
+        if event.type() == QEvent.Type.ActionAdded:
+            self.reader.addAction(event.action())
+        elif event.type() == QEvent.Type.ActionRemoved:
+            self.reader.removeAction(event.action())
+
+    def _reader_key(self, event) -> bool:
+        """Keys that belong to the page before the reading cursor: those of
+        a picked annotation or of a form field."""
+        if self._field_focus is not None and self._field_key(event):
+            return True
+        return self.picked_item() is not None and self._picked_key(event)
+
+    def focusInEvent(self, event) -> None:  # noqa: N802
+        super().focusInEvent(event)
+        if self.reading_cursor and self.field_editor is None:
+            self.reader.setFocus()  # the keys move through the text
 
     def keyPressEvent(self, event) -> None:  # noqa: N802
         bar = self.verticalScrollBar()
