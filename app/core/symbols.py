@@ -6,21 +6,33 @@ and no ticks. For those, the program carries a small font with only symbols
 one is used, so that every reader shows them. Normal letters keep their font.
 
 The same font also carries the letters of other languages that those built-in
-letters lack (Polish, Czech, Romanian, Turkish, Greek…: «Łódź», «Ştefan»,
-«Ελλάδα»), so that a name written in a text looks the same everywhere.
+letters lack: every European language (Polish, Czech, Romanian, Turkish, Greek
+old and new, Russian and the other Cyrillic ones…: «Łódź», «Ştefan», «Ἀθῆναι»,
+«Москва»), Vietnamese, Armenian, Georgian, and small signs such as H₂O, x², ½
+or ₽, so that a name written in a text looks the same everywhere. It comes in a
+normal and a bold weight, for bold texts.
+
+Scripts that are written from right to left or that join their letters
+(Hebrew, Arabic) and the ones with thousands of signs (Chinese, Japanese,
+Korean) are not in it: a text with them is written as the engine can (it shows
+here, and in other readers that have a font for them).
 
 Typing "->" gives an arrow, for those who want it (it can be turned off).
 """
 
 import sys
+import unicodedata
 from functools import cache
 from pathlib import Path
 
 from app.core.settings import Settings
 
-FONT_NAME = "LPSim"  # how the pages of the PDF call the font of the symbols
+# How the pages of the PDF call the font of the symbols, normal and bold.
+FONT_NAME = "LPSim2"  # "LPSim" was the smaller font of version 0.6 and earlier
+BOLD_FONT_NAME = "LPSim2B"
 FONT_FAMILY = "Lector PDF Simbolos"
-_FONT_PATH = ("app", "recursos", "letras", "simbolos.ttf")
+_FONT_FOLDER = ("app", "recursos", "letras")
+_FONT_FILES = {False: "simbolos.ttf", True: "simbolos-negrita.ttf"}
 
 # What can be put with a click, by groups. The font holds exactly these.
 GROUPS: tuple[tuple[str, str], ...] = (
@@ -32,9 +44,22 @@ GROUPS: tuple[tuple[str, str], ...] = (
     ("greek", "αβγδεθλμπσφωΔΣΩ"),
 )
 SYMBOLS = frozenset("".join(symbols for _, symbols in GROUPS))
-# Where the letters of other languages are (Unicode), for the font of the symbols:
-# Latin Extended-A, the Romanian ș and ț, and Greek.
-EXTRA_RANGES = ((0x0100, 0x017F), (0x0218, 0x021B), (0x0370, 0x03FF))
+# Where the letters of other languages are (Unicode), for the font of the symbols.
+EXTRA_RANGES = (
+    (0x0100, 0x024F),  # Latin Extended-A and B (Łódź, Ştefan, ǅ…)
+    (0x0250, 0x02FF),  # phonetic letters and accents written apart
+    (0x0300, 0x036F),  # accents that go on the letter before
+    (0x0370, 0x03FF),  # Greek
+    (0x0400, 0x052F),  # Cyrillic
+    (0x0530, 0x058F),  # Armenian
+    (0x10A0, 0x10FF),  # Georgian
+    (0x1E00, 0x1EFF),  # more Latin letters with accents (Vietnamese)
+    (0x1F00, 0x1FFF),  # old Greek (Ἀθῆναι)
+    (0x2000, 0x206F),  # dashes, spaces and other punctuation
+    (0x2070, 0x209F),  # small numbers above and below (x², H₂O)
+    (0x20A0, 0x20CF),  # currency signs (₽, ₹, ₺)
+    (0x2100, 0x218F),  # letter-like signs and fractions (№, ℃, ½, Ⅳ)
+)
 
 # Whether what is typed with plain keys turns into an arrow.
 TYPED_SETTING = "texto_flechas"
@@ -64,10 +89,43 @@ def typed_wanted(settings: Settings) -> bool:
     return settings.get(TYPED_SETTING, True) is not False
 
 
-def font_file() -> Path:
-    """Where the font of the symbols is."""
+def font_file(bold: bool = False) -> Path:
+    """Where the font of the symbols is (its normal or its bold weight)."""
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
-    return base.joinpath(*_FONT_PATH)
+    return base.joinpath(*_FONT_FOLDER, _FONT_FILES[bold])
+
+
+def font_name(bold: bool = False) -> str:
+    return BOLD_FONT_NAME if bold else FONT_NAME
+
+
+def tidy(text: str) -> str:
+    """The text with each accented letter as one letter ("e" + "´" → "é").
+
+    Some keyboards and copied texts bring the accent apart; joined, the letter
+    is found in the fonts and looks as it should.
+    """
+    return unicodedata.normalize("NFC", text)
+
+
+def _built_in(letter: str) -> bool:
+    """Whether the letters every reader has (WinAnsi) bring this one."""
+    try:
+        letter.encode("cp1252")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+@cache
+def is_covered(letter: str) -> bool:
+    """Whether a letter can be written so that every reader shows it: with the
+    built-in letters or with the font of the symbols."""
+    return _built_in(letter) or is_symbol(letter)
+
+
+def all_covered(text: str) -> bool:
+    return all(is_covered(letter) for letter in text if letter not in "\n\r")
 
 
 @cache
@@ -78,11 +136,8 @@ def is_symbol(letter: str) -> bool:
         return True
     if len(letter) != 1 or ord(letter) < 0x100:
         return False
-    try:
-        letter.encode("cp1252")
+    if _built_in(letter):
         return False  # the built-in letters have it (€, Œ, š…)
-    except UnicodeEncodeError:
-        pass
     try:
         return _font().has_glyph(ord(letter)) != 0
     except Exception:  # the font is missing: written as the engine can
@@ -132,18 +187,18 @@ def typed_at(before: str) -> tuple[int, str] | None:
 
 
 @cache
-def _font():
+def _font(bold: bool = False):
     import pymupdf
 
-    return pymupdf.Font(fontfile=str(font_file()))
+    return pymupdf.Font(fontfile=str(font_file(bold)))
 
 
-def width(text: str, size: float) -> float:
+def width(text: str, size: float, bold: bool = False) -> float:
     """How wide a piece written with the symbols is, in points."""
-    return _font().text_length(text, fontsize=size)
+    return _font(bold).text_length(text, fontsize=size)
 
 
-def glyphs(text: str) -> str:
+def glyphs(text: str, bold: bool = False) -> str:
     """A piece of symbols as the PDF writes it: the number of each drawing, in hex."""
-    font = _font()
+    font = _font(bold)
     return "".join(f"{font.has_glyph(ord(letter)):04x}" for letter in text)

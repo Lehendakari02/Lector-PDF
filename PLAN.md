@@ -186,7 +186,8 @@ Notas de la Fase 1:
   - Si el resultado queda fuera por un lado (con mucho zoom), la vista se mueve
     también en horizontal (B7).
   - M4: con mucho zoom ya no se piden una y otra vez páginas que no caben en memoria.
-    Sigue pendiente dibujar por trozos para que el zoom alto sea ligero de verdad.
+    Sigue pendiente dibujar por trozos para que el zoom alto sea ligero de verdad
+    (tarea P.3).
   - B3: los colores que quedan escritos en la vista son los del papel (blanco en
     claro y en oscuro), ahora con nombre; no dependen del aspecto.
 - 1.6: se selecciona arrastrando el ratón sobre el texto (doble clic: una palabra;
@@ -380,9 +381,9 @@ Notas de la Fase 1:
       ni olvidar las de un USB sin enchufar; si `ajustes.json` no se puede leer
       una vez, no pisarlo (**todo hecho el 14/11/2026**, ver notas de la Fase 2A);
     - tarea nueva de memoria: "dormir" las pestañas que llevan rato sin verse y un
-      tope común de memoria (15 o 20 temas abiertos pasan de 1 GB);
-    - **decisión de Julen pendiente:** cuándo hacer que NVDA lea el texto del
-      documento (hoy lee menús y botones, no las páginas);
+      tope común de memoria (15 o 20 temas abiertos pasan de 1 GB): tarea P.2;
+    - **decidido el 23/11/2026:** que NVDA lea el texto del documento (hoy lee
+      menús y botones, no las páginas) es la tarea P.5;
     - detalles menores B1 a B9 de la revisión.
 
 ## Fase 2A – Anotar y guardado
@@ -793,8 +794,8 @@ Notas de la Fase 2A:
     sobre su botón ("tecla R"), para no tener que aprenderse una lista.
   - **Ajuste nuevo** (Ajustes → General → Teclado): "Una tecla para cada
     herramienta", activado. Quien pulse teclas sin querer puede quitarlo.
-  - Las teclas son fijas; elegir cada uno las suyas queda como idea si se echa
-    de menos.
+  - Las teclas son fijas; elegir cada uno las suyas es la tarea P.4
+    (decidido el 23/11/2026).
 - **2.13a: escribir texto directamente sobre la página (15/11/2026).**
   Viene de la prueba de Julen: el cuadro de texto se escribía en un panel
   aparte, "como una nota", y no dejaba ajustar bien dónde, de qué tamaño ni
@@ -1557,6 +1558,43 @@ Notas de la Fase 4:
       firmada (así funciona la firma; Adobe hace lo mismo). Un archivo
       reparado al abrirlo se reescribe entero. (`saving.keeps_signatures`,
       `PdfView.breaks_signatures`, `signature_check._looked_at_by_hand`.)
+
+## Mejoras pendientes de fases anteriores (antes de la Fase 5)
+Decididas por Julen el 23/11/2026: se hacen todas, una tarea por pull request,
+antes de empezar la Fase 5. Cada una se fija en cómo lo hacen los programas
+conocidos (Adobe Reader, Edge, Chrome, Foxit, Word), copia lo bueno, mejora lo
+malo y trae sus ajustes con valores por defecto que sirven sin tocar nada.
+
+| # | Tarea | Terminado cuando… | Estado |
+|---|-------|-------------------|--------|
+| P.1 | Letras de cualquier idioma europeo en los cuadros de texto (griego antiguo, cirílico, vietnamita, subíndices como H₂O), también en negrita, con la fuente metida en el PDF | Escribo «Ἀθῆναι, Москва, H₂O» en la página, guardo y se ve igual en Edge y Adobe | 🔶 hecho; falta tu prueba en Edge y Adobe |
+| P.2 | "Dormir" las pestañas que llevan rato sin verse, como Edge, con un tope de memoria; ajuste para apagarlo | Con 20 temas abiertos el programa gasta mucho menos; al volver a una pestaña dormida aparece en su página en un momento | ⬜ |
+| P.3 | Zoom alto dibujado por trozos (solo lo que se ve), como Adobe y los mapas | Al 800 % una letra pequeña se ve nítida, sin esperas ni gastar cientos de MB | ⬜ |
+| P.4 | Elegir la tecla de cada herramienta y función, como los controles de un videojuego | En Ajustes → Teclado cambio la tecla de Subrayar, me avisa si choca con otra y "Restablecer" vuelve a las de siempre | ⬜ |
+| P.5 | El lector de pantalla (NVDA) lee el texto de las páginas, como en Adobe, Edge y Chrome | Con NVDA, entro en el documento y me lee la página; me muevo por líneas con las flechas | ⬜ |
+
+Lo que hay que probar en Windows está en
+[`docs/pruebas-mejoras.md`](docs/pruebas-mejoras.md).
+
+Notas de las mejoras:
+- **P.1: Letras de cualquier idioma europeo en los cuadros de texto (23/11/2026).**
+  - Antes ya iban el griego moderno, el polaco o el rumano. Faltaban el griego
+    antiguo («Ἀθῆναι»), el cirílico («Москва»), el vietnamita, el armenio, el
+    georgiano y signos como H₂O, x², ½, ₽ o №; y mezclar algunos daba «?».
+  - Cómo lo hace Adobe: mete en el PDF la parte de la fuente que hace falta.
+    Aquí, igual: la fuente de los símbolos (sacada de DejaVu Sans, libre) lleva
+    ahora todas esas letras y tiene **negrita** (antes un texto en negrita con
+    estas letras salía en normal). Ocupa unos 95 KB dentro de cada PDF que la
+    usa (antes 20 KB); los PDF sin estas letras no cambian.
+  - Un acento escrito aparte (algunos teclados y textos copiados traen «e» +
+    «´») se une a su letra, así se encuentra en las fuentes y se busca bien.
+  - Lo que no lleva: hebreo y árabe (se escriben de derecha a izquierda y unen
+    sus letras) ni chino, japonés o coreano (miles de signos). Un texto con
+    ellos se escribe como sabe el motor: se ve en este programa y en los que
+    tengan esa fuente. Antes, junto a una flecha, salían como «?»; ya no. Si
+    lleva una flecha, el PDF crece bastante (el motor mete la fuente entera).
+  - Los PDF escritos con la fuente anterior siguen igual: sus textos guardan
+    la suya y los nuevos llevan la nueva.
 
 ## Fase 5 – Organizar y convertir
 | # | Tarea | Terminado cuando… | Estado |

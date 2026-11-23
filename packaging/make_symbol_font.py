@@ -1,12 +1,14 @@
 """Make the small font of symbols the program carries (run by hand, rarely).
 
-It takes DejaVu Sans (free: Bitstream Vera licence, changes in the public
-domain) and keeps only the symbols of ``app.core.symbols`` and the letters of other
-languages in its ``EXTRA_RANGES`` (those the built-in letters lack). The result is
-``app/recursos/letras/simbolos.ttf``, with another name, as its licence asks.
+It takes DejaVu Sans and DejaVu Sans Bold (free: Bitstream Vera licence, changes
+in the public domain), version 2.37, and keeps only the symbols of
+``app.core.symbols`` and the letters of other languages in its ``EXTRA_RANGES``
+(those the built-in letters lack). The results are
+``app/recursos/letras/simbolos.ttf`` and ``simbolos-negrita.ttf``, with another
+name, as the licence asks. Both carry exactly the same letters.
 
     pip install fonttools
-    python packaging/make_symbol_font.py /path/to/DejaVuSans.ttf
+    python packaging/make_symbol_font.py /path/to/DejaVuSans.ttf /path/to/DejaVuSans-Bold.ttf
 
 fontTools is only needed here: the program itself does not use it.
 """
@@ -20,7 +22,7 @@ sys.path.insert(0, str(ROOT))
 from app.core.symbols import EXTRA_RANGES, FONT_FAMILY, SYMBOLS, font_file  # noqa: E402
 
 
-def main(source: str) -> None:
+def make(source: str, bold: bool) -> set[int]:
     from fontTools import subset
     from fontTools.ttLib import TTFont
 
@@ -38,24 +40,34 @@ def main(source: str) -> None:
     chooser.populate(unicodes=[ord(symbol) for symbol in SYMBOLS] + letters)
     chooser.subset(font)
     compact = FONT_FAMILY.replace(" ", "")
+    style = "Bold" if bold else "Book"
     for record in font["name"].names:
-        if record.nameID in (1, 4, 16):
+        if record.nameID in (1, 16):
             record.string = FONT_FAMILY
+        elif record.nameID == 4:
+            record.string = f"{FONT_FAMILY} {style}" if bold else FONT_FAMILY
         elif record.nameID == 6:
-            record.string = compact
+            record.string = f"{compact}-{style}" if bold else compact
         elif record.nameID == 3:
-            record.string = f"{compact}; from DejaVu Sans"
-    missing = SYMBOLS - {chr(code) for code in font.getBestCmap()}
+            record.string = f"{compact}-{style}; from DejaVu Sans"
+    covered = set(font.getBestCmap())
+    missing = SYMBOLS - {chr(code) for code in covered}
     if missing:
         raise SystemExit(f"the source font lacks: {''.join(sorted(missing))}")
-    target = font_file()
+    target = font_file(bold)
     target.parent.mkdir(parents=True, exist_ok=True)
     font.save(target)
     print(
         f"{target}: {target.stat().st_size} bytes, {len(SYMBOLS)} symbols, "
         f"{len(letters)} letters of other languages"
     )
+    return covered
+
+
+def main(normal: str, bold: str) -> None:
+    if make(normal, False) != make(bold, True):
+        raise SystemExit("the normal and the bold font do not carry the same letters")
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    main(sys.argv[1], sys.argv[2])
