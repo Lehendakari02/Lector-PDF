@@ -791,8 +791,10 @@ class PdfView(QAbstractScrollArea):
             self._depth -= 1
         else:
             self._undo.append(order)
-            if how in ("do", RECOVER) and self._saved_depth is not None and (
-                self._saved_depth > self._depth
+            if (
+                how in ("do", RECOVER)
+                and self._saved_depth is not None
+                and (self._saved_depth > self._depth)
             ):
                 self._saved_depth = None  # what is in the file is not in the history any more
             self._depth += 1
