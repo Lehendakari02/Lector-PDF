@@ -168,6 +168,7 @@ from app.ui.signature_dialog import SignatureDialog
 from app.ui.signatures_dialog import SignaturesDialog
 from app.ui.text_recognition import TextRecognition
 from app.ui.theme import PAPER_SETTING, THEME_SETTING, Paper, Theme, apply_theme
+from app.ui.tool_strip import ToolStrip
 from app.ui.unsaved_dialog import CANCEL, DISCARD, SAVE, UnsavedDialog
 from app.ui.updater import UpdateBanner, Updater
 from app.ui.versions_dialog import RESTORE, VIEW, VersionsDialog
@@ -312,6 +313,10 @@ class MainWindow(QMainWindow):
         # Set when the program must start again after this window closes.
         self.restart_wanted = False
 
+        # Made before the actions it will show, so that when the window goes
+        # the tools go first and never hear about actions already gone.
+        self.tools_bar = QToolBar(self.tr("Herramientas"), self)
+        self.tool_strip = ToolStrip(self.tools_bar)
         self._build_feature_actions()
         self._build_tool_keys()
         self._build_mode_bar()
@@ -782,6 +787,15 @@ class MainWindow(QMainWindow):
         self.addToolBarBreak(Qt.ToolBarArea.TopToolBarArea)
 
     def _build_tool_bars(self) -> None:
+        # The tools of every mode share one row that slides sideways when the
+        # window is too narrow for them (instead of a hidden second row).
+        holder = self.tools_bar
+        holder.setObjectName("toolsBar")
+        holder.setMovable(False)
+        holder.setFloatable(False)
+        holder.toggleViewAction().setEnabled(False)
+        holder.addWidget(self.tool_strip)
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, holder)
         for mode in MODES:
             toolbar = QToolBar(self.tr("Herramientas de {0}").format(translate(mode.value)))
             toolbar.setObjectName(f"tools_{mode.name.lower()}")
@@ -790,6 +804,7 @@ class MainWindow(QMainWindow):
             toolbar.toggleViewAction().setEnabled(False)
             toolbar.setProperty("tools", True)  # the style sheet looks for this
             toolbar.setIconSize(QSize(20, 20))
+            self.tool_strip.add_tool_bar(toolbar)
             if mode is not Mode.READ:
                 # Saving is at hand wherever the document can be changed.
                 toolbar.addAction(self.feature_actions["save"])
@@ -802,12 +817,6 @@ class MainWindow(QMainWindow):
                 action = self.feature_actions[feature.id]
                 toolbar.addAction(action)
                 toolbar.widgetForAction(action).setMinimumHeight(MIN_BUTTON_HEIGHT)
-            # The button that appears when the window is too narrow for every tool.
-            more = toolbar.findChild(QToolButton, "qt_toolbar_ext_button")
-            if more is not None:
-                more.setIcon(icons.icon("more"))
-                more.setToolTip(self.tr("Más herramientas"))
-            self.addToolBar(Qt.ToolBarArea.TopToolBarArea, toolbar)
             self.mode_toolbars[mode] = toolbar
         self._build_color_menus()
         self._build_sheet_menu()
@@ -1825,6 +1834,7 @@ class MainWindow(QMainWindow):
             self.current_document.mode = mode
         for other, toolbar in self.mode_toolbars.items():
             toolbar.setVisible(other is mode and not self._full_screen)
+        self.tools_bar.setVisible(not self._full_screen)
         self._place_favourites_bar()
         self.mode_actions[mode].setChecked(True)
         index = MODES.index(mode)

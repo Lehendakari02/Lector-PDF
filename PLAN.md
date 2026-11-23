@@ -1597,6 +1597,12 @@ PDF protegido). Resultados y fallos se apuntan aquí.
     caiga sobre texto (`signing.appearance`);
   - el programa recuerda el tamaño y el sitio de la ventana, también si
     estaba maximizada (ajuste `ventana`).
+- **Barra de herramientas que se desliza (23/11/2026, pedido por Julen):**
+  cuando las herramientas de un modo no caben, ya no se esconden tras una
+  flechita que abre una segunda fila: siguen en una sola fila que se desliza
+  hacia los lados, con una flecha clara a cada lado (mantenerla pulsada sigue
+  deslizando), la rueda del ratón y el dedo. Con Tab, la herramienta a la que
+  se llega se pone a la vista (`app/ui/tool_strip.py`).
 - **Documentos de pruebas:** las listas de las fases 0 a 4 y de las mejoras
   se juntan en `docs/pruebas-pendientes.md`, solo con lo que falta. La de la
   Fase 5 sigue aparte.

@@ -89,9 +89,13 @@ tiempo, varias a la vez, PDF protegido, anotar un PDF firmado).
     → vuelve maximizado. Con otro tamaño, vuelve con ese tamaño y en su sitio.
 24. **Imprimir de verdad:** una página, `1-3, 7`, por las dos caras, en blanco
     y negro y con una página apaisada; Cancelar a medias para.
-25. **PDF dañado o que no es PDF:** cambia la extensión de una foto a `.pdf`
+25. **Barra que se desliza:** estrecha la ventana en Estudiar → las
+    herramientas siguen en una fila, con una flecha a cada lado; cada clic
+    desliza, mantenerla pulsada sigue deslizando, la rueda del ratón también;
+    con la ventana ancha no salen flechas.
+26. **PDF dañado o que no es PDF:** cambia la extensión de una foto a `.pdf`
     → avisa y el programa sigue abierto.
-26. **Copiar informe de error** (Ayuda): se pega en el Bloc de notas sin tu
+27. **Copiar informe de error** (Ayuda): se pega en el Bloc de notas sin tu
     nombre de usuario.
 
 ## Formularios y firma a mano (con tus datos)

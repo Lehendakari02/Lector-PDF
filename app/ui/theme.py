@@ -246,6 +246,19 @@ QToolBar[tools="true"] QToolButton::menu-arrow {{ width: 9px; height: 9px; }}
 QWidget#colorPanel {{ background: {c.surface}; }}
 QLabel#colorPanelTitle {{ font-weight: 600; }}
 QToolBar[tools="true"]::separator {{ background: {c.border}; width: 1px; margin: 8px 5px; }}
+/* the row of tools slides sideways; its arrows show when it does not fit */
+QToolBar#toolsBar {{ background: {c.surface}; padding: 0; spacing: 0; }}
+QFrame#toolStrip {{
+    background: {c.surface};
+    border-top: 1px solid {c.border}; border-bottom: 1px solid {c.border};
+}}
+QWidget#toolStripContent, QScrollArea#toolStripArea {{ background: transparent; }}
+QToolBar[tools="true"][inStrip="true"] {{ border: none; background: transparent; }}
+QToolButton#toolStripArrow {{
+    background: {c.surface}; border: none; border-radius: 0;
+}}
+QToolButton#toolStripArrow:hover {{ background: {c.accent_soft}; }}
+QToolButton#toolStripArrow:pressed {{ background: {c.hover}; }}
 
 /* ---- buttons ---- */
 QPushButton {{
