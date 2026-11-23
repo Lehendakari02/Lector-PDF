@@ -62,6 +62,7 @@ from app.core import (
     signature_check,
     stamps,
     symbols,
+    tab_sleep,
 )
 from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
 from app.core.doc_links import DocLink, relative_file, resolve
@@ -195,6 +196,7 @@ FOREIGN_LOST = "foreign_lost"
 RESTORE_TRIES = 6
 RESTORE_PAUSE = 0.25  # seconds
 PLACE_DELAY_MS = 2000  # how long after turning the page it is remembered
+SLEEP_CHECK_MS = 60_000  # how often the documents out of sight are looked at
 MARKERS_SETTING = "rotuladores"  # colour and opacity of each marking tool
 FAVOURITES_SETTING = "favoritas"  # the favourite tools, in the order of their bar
 TOOLBAR_NAMES, TOOLBAR_ICONS = "nombres", "iconos"
@@ -252,6 +254,11 @@ class MainWindow(QMainWindow):
         self._place_timer.setSingleShot(True)
         self._place_timer.setInterval(PLACE_DELAY_MS)
         self._place_timer.timeout.connect(self._remember_current_place)
+        # Documents out of sight for a while give back their memory (sleeping tabs).
+        self._sleep_timer = QTimer(self)
+        self._sleep_timer.setInterval(SLEEP_CHECK_MS)
+        self._sleep_timer.timeout.connect(self.sleep_unseen_tabs)
+        self._sleep_timer.start()
         # How a protected PDF gets its password. Tests put their own answer here.
         self.ask_password = self._ask_password
         self._password_dialogs: bool | None = None  # None: as show_problem_dialogs
@@ -2336,6 +2343,19 @@ class MainWindow(QMainWindow):
         elif any(page.view.modified for page in getattr(self, "documents", [])):
             self._autosave_timer.start()
 
+    def sleep_unseen_tabs(self, now: float | None = None) -> int:
+        """Put to sleep the documents out of sight for longer than the settings say.
+
+        Returns how many went to sleep now."""
+        now = time.monotonic() if now is None else now
+        slept = 0
+        for page in self.documents:
+            if page.isVisible():
+                page.last_seen = now
+            elif not page.asleep and tab_sleep.time_to_sleep(self.settings, now - page.last_seen):
+                slept += page.sleep()
+        return slept
+
     def _schedule_autosave(self) -> None:
         """A change has just been made: count the quiet time again from now."""
         if save_settings.autosave_wanted(self.settings):
@@ -3233,6 +3253,8 @@ class MainWindow(QMainWindow):
         """Another document is in front (or none): show it and follow it."""
         page = self.current_document
         left, self._front_page = self._front_page, page if self.documents else None
+        if left is not None:
+            left.last_seen = time.monotonic()  # out of sight from now
         if left is not None and left is not page:
             self._autosave_page(left)  # "guardar solo" also saves when leaving a tab
         if self.documents:

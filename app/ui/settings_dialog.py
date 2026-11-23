@@ -24,7 +24,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.core import certificate_settings, file_association, ocr, pen, save_settings, symbols
+from app.core import (
+    certificate_settings,
+    file_association,
+    ocr,
+    pen,
+    save_settings,
+    symbols,
+    tab_sleep,
+)
 from app.core.history import RESTORE_SETTING
 from app.core.interface_size import NORMAL_SIZE, SIZE_SETTING, SIZES, wanted_size
 from app.core.paths import is_portable
@@ -186,6 +194,40 @@ class SettingsDialog(QDialog):
         self.restore_box.toggled.connect(lambda on: self.settings.set(RESTORE_SETTING, on))
         layout.addWidget(self.restore_box)
 
+        # ---- memory ----
+        layout.addWidget(self._heading(self.tr("Memoria")))
+        sleep_row = QHBoxLayout()
+        self.sleep_box = QCheckBox(self.tr("&Dormir las pestañas que no miro tras"))
+        self.sleep_box.setToolTip(
+            self.tr(
+                "Como en Edge: un documento que llevas un rato sin mirar deja de "
+                "gastar memoria. La pestaña sigue ahí y al volver aparece en su página "
+                "con todo lo hecho. Sirve si tienes muchos temas abiertos."
+            )
+        )
+        self.sleep_box.setChecked(tab_sleep.sleep_wanted(self.settings))
+        self.sleep_minutes_box = QComboBox()
+        self.sleep_minutes_box.setAccessibleName(self.tr("Tiempo sin mirar una pestaña"))
+        for minutes in tab_sleep.MINUTE_CHOICES:
+            name = (
+                self.tr("{0} minutos").format(minutes)
+                if minutes < 60
+                else self.tr("{0} h").format(minutes // 60)
+            )
+            self.sleep_minutes_box.addItem(name, minutes)
+        self._choose(self.sleep_minutes_box, tab_sleep.sleep_minutes(self.settings))
+        self.sleep_minutes_box.setEnabled(self.sleep_box.isChecked())
+        self.sleep_box.toggled.connect(self._sleep_chosen)
+        self.sleep_minutes_box.activated.connect(
+            lambda _index: self.settings.set(
+                tab_sleep.MINUTES_SETTING, self.sleep_minutes_box.currentData()
+            )
+        )
+        sleep_row.addWidget(self.sleep_box)
+        sleep_row.addWidget(self.sleep_minutes_box)
+        sleep_row.addStretch(1)
+        layout.addLayout(sleep_row)
+
         # ---- new versions ----
         layout.addWidget(self._heading(self.tr("Versiones nuevas")))
         self.updates_box = QCheckBox(self.tr("&Avisarme cuando haya una versión nueva"))
@@ -230,6 +272,10 @@ class SettingsDialog(QDialog):
             + self.tabs.tabBar().sizeHint().height()
             + 8
         )
+
+    def _sleep_chosen(self, on: bool) -> None:
+        self.settings.set(tab_sleep.SLEEP_SETTING, on)
+        self.sleep_minutes_box.setEnabled(on)
 
     def _typed_arrows_chosen(self, on: bool) -> None:
         self.settings.set(symbols.TYPED_SETTING, on)

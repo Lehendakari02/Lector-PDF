@@ -1568,8 +1568,8 @@ malo y trae sus ajustes con valores por defecto que sirven sin tocar nada.
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
 | P.1 | Letras de cualquier idioma europeo en los cuadros de texto (griego antiguo, cirílico, vietnamita, subíndices como H₂O), también en negrita, con la fuente metida en el PDF | Escribo «Ἀθῆναι, Москва, H₂O» en la página, guardo y se ve igual en Edge y Adobe | 🔶 hecho; falta tu prueba en Edge y Adobe |
-| P.2 | "Dormir" las pestañas que llevan rato sin verse, como Edge, con un tope de memoria; ajuste para apagarlo | Con 20 temas abiertos el programa gasta mucho menos; al volver a una pestaña dormida aparece en su página en un momento | ⬜ |
-| P.3 | Zoom alto dibujado por trozos (solo lo que se ve), como Adobe y los mapas | Al 800 % una letra pequeña se ve nítida, sin esperas ni gastar cientos de MB | ⬜ |
+| P.2 | "Dormir" las pestañas que llevan rato sin verse, como Edge, con un tope de memoria; ajuste para apagarlo | Con 20 temas abiertos el programa gasta mucho menos; al volver a una pestaña dormida aparece en su página en un momento | 🔶 hecho; falta tu prueba con muchos temas abiertos |
+| P.3 | Zoom alto dibujado por trozos (solo lo que se ve), como Adobe y los mapas | Al 800 % una letra pequeña se ve nítida, sin esperas ni gastar cientos de MB | 🔶 hecho; falta tu prueba en tu Windows |
 | P.4 | Elegir la tecla de cada herramienta y función, como los controles de un videojuego | En Ajustes → Teclado cambio la tecla de Subrayar, me avisa si choca con otra y "Restablecer" vuelve a las de siempre | ⬜ |
 | P.5 | El lector de pantalla (NVDA) lee el texto de las páginas, como en Adobe, Edge y Chrome | Con NVDA, entro en el documento y me lee la página; me muevo por líneas con las flechas | ⬜ |
 
@@ -1595,6 +1595,41 @@ Notas de las mejoras:
     lleva una flecha, el PDF crece bastante (el motor mete la fuente entera).
   - Los PDF escritos con la fuente anterior siguen igual: sus textos guardan
     la suya y los nuevos llevan la nueva.
+- **P.2: Dormir las pestañas que no se miran (23/11/2026).**
+  - Como Edge: una pestaña que lleva un rato sin mirarse (15 minutos por
+    defecto) para su proceso ayudante, que es lo que más memoria gasta (unos
+    60 MB cada uno, más las páginas dibujadas). La pestaña sigue ahí, con su
+    página, su zoom, su búsqueda, deshacer y los cambios sin guardar. Al
+    volver a ella se despierta sola: enseña al momento las páginas que tenía
+    en pantalla y en un instante las dibuja de nuevo.
+  - Además, al pasar a otra pestaña la que se deja olvida enseguida las
+    páginas dibujadas que no estaba enseñando (hasta 400 MB cada una). Así el
+    tope de memoria de las páginas vale para lo que se ve, no para cada
+    pestaña abierta.
+  - Nunca se duerme la pestaña que se ve (ni las dos de la vista lado a lado),
+    ni una que está guardando, buscando, imprimiendo o reconociendo texto.
+  - Por dentro es lo mismo que cuando el ayudante se cae y se reinicia (lo que
+    ya estaba probado): el nuevo abre el documento y repite los cambios sin
+    guardar, sin avisar de nada.
+  - **Ajustes → General → Memoria:** "Dormir las pestañas que no miro tras"
+    5, 15 (por defecto), 30 minutos, 1 o 2 horas; se puede apagar. Edge deja
+    2 horas por defecto, pero en un navegador cada pestaña es más ligera; aquí
+    15 temas abiertos pasaban de 1 GB.
+- **P.3: Zoom alto dibujado por trozos (23/11/2026).**
+  - Antes, con mucho zoom se dibujaba la página entera a ese tamaño aunque se
+    viera un trocito: una página A4 al 800 % eran unos 170 MB y tardaba.
+  - Ahora, como Adobe Reader o un mapa: cuando la página pasaría de unos 12
+    millones de puntos (un A4 a partir del 300-400 %), se dibuja entera solo
+    en ligero (4 millones de puntos, se ve un poco borrosa) y encima, nítidos,
+    solo los trozos de 1024 × 1024 puntos que se ven y uno más alrededor. Al
+    moverse, solo se piden los trozos nuevos.
+  - Los trozos guardados tienen su propio tope (160 MB); se olvidan primero los
+    de otro zoom y los más lejos de lo que se ve.
+  - Al subrayar o escribir con mucho zoom, el trozo viejo sigue en pantalla
+    hasta que llega el nuevo: no parpadea.
+  - Comprobado punto por punto: cada trozo es igual que la misma zona de la
+    página dibujada entera (sin costuras ni desplazamientos), también con la
+    vista girada y en páginas giradas.
 
 ## Fase 5 – Organizar y convertir
 | # | Tarea | Terminado cuando… | Estado |
