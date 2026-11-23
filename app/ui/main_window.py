@@ -210,6 +210,22 @@ SUMMARY_FORMAT_SETTING = "resumen/formato"  # "pdf" or "docx": the last one chos
 SHEET_SETTING = "hoja_nueva"  # the kind of sheet Insertar hoja puts: the last one chosen
 
 
+def pages_text(pages: list[int], tr=lambda text: text) -> str:
+    """«Página 3» or «Páginas 2-4 y 7», counting from 1, for messages."""
+    pages = sorted(set(pages))
+    if len(pages) == 1:
+        return tr("Página {0}").format(pages[0] + 1)
+    runs: list[list[int]] = []
+    for page in pages:
+        if runs and page == runs[-1][-1] + 1:
+            runs[-1].append(page)
+        else:
+            runs.append([page])
+    parts = [str(run[0] + 1) if len(run) == 1 else f"{run[0] + 1}-{run[-1] + 1}" for run in runs]
+    joined = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + tr(" y ") + parts[-1]
+    return tr("Páginas {0}").format(joined)
+
+
 class MainWindow(QMainWindow):
     """Top-level window of the program."""
 
@@ -467,6 +483,9 @@ class MainWindow(QMainWindow):
             "save": self.save_document,
             "save_as": self.save_document_as,
             "insert_sheet": self.insert_sheet,
+            "pages": self.organize_pages,
+            "rotate": lambda: self.rotate_pages(90),
+            "delete_pages": lambda: self.delete_pages(),
         }
         self._mark_pending_features()
         self._build_key_commands()
@@ -791,6 +810,7 @@ class MainWindow(QMainWindow):
         self._build_color_menus()
         self._build_sheet_menu()
         self._build_recognition_menu()
+        self._build_rotate_menu()
         self._build_favourites_bar()
         self.set_toolbar_icons_only(
             self.settings.get(TOOLBAR_SETTING) == TOOLBAR_ICONS, remember=False
@@ -871,6 +891,121 @@ class MainWindow(QMainWindow):
         button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
         button.setProperty("withMenu", True)
 
+    def _build_rotate_menu(self) -> None:
+        """Rotar turns to the right; the arrow next to it offers the other ways."""
+        menu = QMenu(self)
+        menu.setObjectName("rotateMenu")
+        for name, by in (
+            (self.tr("Girar a la derecha"), 90),
+            (self.tr("Girar a la izquierda"), -90),
+            (self.tr("Girar 180°"), 180),
+        ):
+            menu.addAction(name).triggered.connect(
+                lambda _checked=False, b=by: self.rotate_pages(b)
+            )
+        menu.addSeparator()
+        menu.addAction(self.tr("Girar todas las páginas a la derecha")).triggered.connect(
+            lambda _checked=False: self.rotate_pages(90, every=True)
+        )
+        button = self.mode_toolbars[Mode.ORGANIZE].widgetForAction(self.feature_actions["rotate"])
+        button.setMenu(menu)
+        button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        button.setProperty("withMenu", True)
+
+    # ---- organising pages --------------------------------------------------
+
+    def _pages_to_organize(self) -> list[int]:
+        """The pages picked in the miniatures if they are in sight; if not,
+        the page being read."""
+        if self.side_dock.isVisible() and self.side_panel.tab is Tab.THUMBNAILS:
+            picked = self.side_panel.thumbnails.picked_pages()
+            if picked:
+                return picked
+        page = self.pdf_view.current_page
+        return [page] if 0 <= page < self.pdf_view.page_count else []
+
+    def organize_pages(self) -> None:
+        """Ordenar páginas: the miniatures, ready to drag."""
+        if self.pdf_view.page_count == 0:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return
+        self.show_side_panel(Tab.THUMBNAILS)
+        self.side_panel.thumbnails.setFocus()
+        self.statusBar().showMessage(
+            self.tr(
+                "Arrastra las miniaturas para cambiar el orden (Ctrl o Mayús para coger "
+                "varias). Clic derecho para girar o eliminar."
+            ),
+            STATUS_MESSAGE_MS * 2,
+        )
+
+    def rotate_pages(self, by: int, every: bool = False) -> bool:
+        """Turn the pages picked (or the one being read) ``by`` degrees."""
+        if self.pdf_view.page_count == 0:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return False
+        pages = list(range(self.pdf_view.page_count)) if every else self._pages_to_organize()
+        if not self.pdf_view.rotate_pages(pages, by):
+            return False
+        if self.side_dock.isVisible():
+            self.side_panel.thumbnails._picked_after = [] if every else pages
+        self.statusBar().showMessage(
+            (
+                self.tr("{0} girada. Deshacer (Ctrl+Z) la deja como estaba.")
+                if len(pages) == 1
+                else self.tr("{0} giradas. Deshacer (Ctrl+Z) las deja como estaban.")
+            ).format(self.tr("Todas las páginas") if every else pages_text(pages, self.tr)),
+            STATUS_MESSAGE_MS,
+        )
+        return True
+
+    def delete_pages(self, pages: list[int] | None = None) -> bool:
+        """Take away the pages picked (or the one being read), asking first."""
+        if self.pdf_view.page_count == 0:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return False
+        pages = self._pages_to_organize() if pages is None else sorted(pages)
+        if not pages:
+            return False
+        if len(pages) >= self.pdf_view.page_count:
+            self.statusBar().showMessage(
+                self.tr("No se pueden eliminar todas las páginas: el documento se quedaría vacío."),
+                STATUS_MESSAGE_MS,
+            )
+            return False
+        if not self.ask_delete_pages(pages):
+            return False
+        if not self.pdf_view.delete_pages(pages):
+            return False
+        self.statusBar().showMessage(
+            (
+                self.tr("{0} eliminada. Deshacer (Ctrl+Z) la recupera.")
+                if len(pages) == 1
+                else self.tr("{0} eliminadas. Deshacer (Ctrl+Z) las recupera.")
+            ).format(pages_text(pages, self.tr)),
+            STATUS_MESSAGE_MS,
+        )
+        return True
+
+    def _document_title(self) -> str:
+        path = self.pdf_view.document_path
+        return path.name if path is not None else ""
+
+    def _ask_delete_pages(self, pages: list[int]) -> bool:
+        if not self.show_problem_dialogs:
+            return True
+        answer = QMessageBox.question(
+            self,
+            self.tr("Eliminar páginas"),
+            self.tr(
+                "¿Eliminar {0} de «{1}»?\n\nEl archivo no cambia hasta que guardes, y "
+                "Deshacer (Ctrl+Z) lo deja como estaba, incluso después de guardar."
+            ).format(pages_text(pages, self.tr).lower(), self._document_title()),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Yes,
+        )
+        return answer == QMessageBox.StandardButton.Yes
+
     @property
     def sheet_kind(self) -> str:
         """The kind of sheet Insertar hoja puts (the last one chosen)."""
@@ -906,6 +1041,8 @@ class MainWindow(QMainWindow):
         self.favourites = Favourites.from_setting(self.settings.get(FAVOURITES_SETTING))
         # For the tests: what the question for a name answers (None: cancelled).
         self.ask_favourite_name = self._ask_favourite_name
+        # For the tests: whether to take pages away, without showing the question.
+        self.ask_delete_pages = self._ask_delete_pages
         bar = self.favourites_bar = FavouritesBar(self)
         bar.used.connect(self.use_favourite)
         bar.removed.connect(self.remove_favourite)
@@ -2993,6 +3130,7 @@ class MainWindow(QMainWindow):
         page.search_panel.box.textChanged.connect(self._panel_search_typed)
         page.side_panel.closed.connect(self.close_side_panel)
         page.side_panel.tab_changed.connect(self._side_tab_changed)
+        page.side_panel.thumbnails.delete_wanted.connect(lambda pages: self.delete_pages(pages))
         # Ctrl+C and Ctrl+A belong to the document only while it has the keyboard:
         # in the search box they must keep copying and selecting what is typed.
         # The same goes for Ctrl+Z: in a text box it undoes what was typed there.

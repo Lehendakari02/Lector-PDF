@@ -60,6 +60,7 @@ from app.core import (
     drawing,
     margins,
     notes,
+    page_orders,
     pen,
     pictures,
     places,
@@ -353,7 +354,7 @@ class PdfView(QAbstractScrollArea):
     pages_changed = Signal(object)
     # Pages were put in or taken away: every page from there on has another number.
     pages_reshaped = Signal()
-    pages_moved = Signal(int, int)  # a page put in at (1) or taken from (-1) a place
+    pages_renumbered = Signal(object)  # for every page before: its number now, or None
     text_changed = Signal(object)  # the letters of these pages are different (OCR)
     # The place chosen for a signature with a certificate: page and rectangle
     # (as shown), see ``choose_certificate_place``.
@@ -793,6 +794,8 @@ class PdfView(QAbstractScrollArea):
             self._reshape(*order.page_change(undone), getattr(order, "size", None))
             if how in ("do", "redo"):
                 self.scroll_to_page(order.page_change(False)[0])
+        elif hasattr(order, "layout"):
+            self._follow_layout(order, undone)
         grown = margins.size_change(order, undone)
         if grown:
             self._resize(grown)
@@ -825,32 +828,54 @@ class PdfView(QAbstractScrollArea):
         self.scanned_found.emit(list(self.scanned_pages), count)
 
     def _reshape(self, at: int, by: int, size) -> None:
-        """Follow a page put in at ``at`` (``by`` 1) or taken from there (-1).
-
-        The pictures already drawn move with their pages, so nothing blinks;
-        what was read from the pages (letters, notes, drawings) is read again.
-        """
+        """Follow a page put in at ``at`` (``by`` 1) or taken from there (-1)."""
+        count = len(self._sizes)
+        sizes = list(self._sizes)
         if by > 0:
-            width, height = size if size else (self._sizes[min(at, len(self._sizes) - 1)])
-            self._sizes.insert(at, PageSize(float(width), float(height)))
-        elif 0 <= at < len(self._sizes) and len(self._sizes) > 1:
-            del self._sizes[at]
+            width, height = size if size else (self._sizes[min(at, count - 1)])
+            sizes.insert(at, PageSize(float(width), float(height)))
+            mapping = [page if page < at else page + 1 for page in range(count)]
+        elif 0 <= at < count and count > 1:
+            del sizes[at]
+            mapping = [page if page < at else (None if page == at else page - 1)
+                       for page in range(count)]  # fmt: skip
         else:
             return
+        self._relayout(mapping, sizes, at)
+
+    def _follow_layout(self, order, undone: bool) -> None:
+        """Follow an order that turns, moves or takes away pages."""
+        old = [(size.width, size.height) for size in self._sizes]
+        mapping, sizes = order.layout(old, undone)
+        if len(mapping) != len(old) or not sizes:
+            return
+        gone = [page for page, new in enumerate(mapping) if new is None]
+        self._relayout(mapping, [PageSize(float(w), float(h)) for w, h in sizes],
+                       gone[0] if gone else 0)  # fmt: skip
+
+    def _relayout(self, mapping: list, sizes: list, near: int) -> None:
+        """The pages are elsewhere now: ``mapping`` says, for every page before,
+        where it is (None: gone); ``sizes`` are those of the pages after.
+
+        The pictures already drawn move with their pages, so nothing blinks
+        (unless the page changed shape); what was read from the pages
+        (letters, notes, drawings) is read again. ``near``: where to stay if
+        the page being read is gone.
+        """
+        old_sizes = self._sizes
+        self._sizes = list(sizes)
         place = self._place()
 
         def moved(page: int) -> int | None:
-            if page < at:
-                return page
-            if by < 0 and page == at:
-                return None  # that page is gone
-            return page + by
+            if 0 <= page < len(mapping):
+                return mapping[page]
+            return None
 
         cache, self._cache = self._cache, OrderedDict()
         self._cache_bytes = 0
         for page, kept in cache.items():
             new = moved(page)
-            if new is not None:
+            if new is not None and old_sizes[page] == self._sizes[new]:
                 self._cache[new] = kept
                 self._cache_bytes += kept[1].sizeInBytes()
         self._stale = {new for new in map(moved, self._stale) if new is not None}
@@ -881,16 +906,14 @@ class PdfView(QAbstractScrollArea):
         page, inside = place
         moved_page = moved(page)
         reading = moved(self.reader.page) if self.reader.page >= 0 else None
+        nearest = max(0, min(near, self.page_count - 1))
         self._layout()
-        self._return_to(
-            (min(at, self.page_count - 1) if moved_page is None else moved_page, inside)
-        )
+        self._return_to((nearest if moved_page is None else moved_page, inside))
         self._current_page = -1  # told again, with the new count
         self._scrolled()
         if self.reading_cursor and self.page_count:
-            page = min(at, self.page_count - 1) if reading is None else reading
-            self.reader.show_page(page, self.page_count, None)
-        self.pages_moved.emit(at, by)
+            self.reader.show_page(nearest if reading is None else reading, self.page_count, None)
+        self.pages_renumbered.emit(list(mapping))
         self.pages_reshaped.emit()
 
     def _resize(self, grown: dict[int, tuple[float, float]]) -> None:
@@ -2877,6 +2900,33 @@ class PdfView(QAbstractScrollArea):
         size = self._sizes[page]
         return self._do(sheets.new_sheet(page + 1, kind, (size.width, size.height)))
 
+    # ---- organising pages ----------------------------------------------
+
+    def rotate_pages(self, pages, by: int) -> bool:
+        """Turn those pages (counting from 0) ``by`` degrees, clockwise."""
+        pages = [page for page in pages if 0 <= page < self.page_count]
+        if self._document is None or not pages or by % 360 == 0:
+            return False
+        return self._do(page_orders.rotate_pages(pages, by))
+
+    def move_pages(self, pages, to: int) -> bool:
+        """Put those pages together before the page at ``to`` (``page_count``:
+        at the end)."""
+        pages = sorted({page for page in pages if 0 <= page < self.page_count})
+        if self._document is None or not pages:
+            return False
+        to = max(0, min(to, self.page_count))
+        if page_orders.moved_order(self.page_count, pages, to) == list(range(self.page_count)):
+            return False  # they are there already
+        return self._do(page_orders.move_pages(pages, to))
+
+    def delete_pages(self, pages) -> bool:
+        """Take those pages away (never all of them)."""
+        pages = sorted({page for page in pages if 0 <= page < self.page_count})
+        if self._document is None or not pages or len(pages) >= self.page_count:
+            return False
+        return self._do(page_orders.delete_pages(pages))
+
     def put_text_box(
         self, page: int, x: float, y: float, text: str, width: float = 0.0, **look
     ) -> bool:
@@ -3256,10 +3306,10 @@ class PdfView(QAbstractScrollArea):
     @property
     def breaks_signatures(self) -> bool:
         """Whether a change not saved yet touches what a signature with a
-        certificate covers: margins, inserted sheets, recognised text (they
-        change the pages) or bookmarks (the outline), done or taken back.
-        Notes, marks, drawings, stamps and filled fields do not: saved at the
-        end, they are allowed."""
+        certificate covers: margins, inserted sheets, recognised text, pages
+        turned, moved or taken away (they change the pages) or bookmarks (the
+        outline), done or taken back. Notes, marks, drawings, stamps and
+        filled fields do not: saved at the end, they are allowed."""
         return self._breaking_change > self._saved_changes
 
     @signed_by_hand.setter
@@ -4490,7 +4540,16 @@ def _breaks_signatures(order) -> bool:
     if isinstance(order, Together):
         return any(map(_breaks_signatures, order.orders))
     return isinstance(
-        order, (margins.AddMargin, sheets.InsertSheet, AddTextLayer, bookmarks.AddBookmark)
+        order,
+        (
+            margins.AddMargin,
+            sheets.InsertSheet,
+            AddTextLayer,
+            bookmarks.AddBookmark,
+            page_orders.RotatePages,
+            page_orders.MovePages,
+            page_orders.DeletePages,
+        ),
     )
 
 

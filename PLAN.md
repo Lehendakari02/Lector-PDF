@@ -1701,7 +1701,7 @@ Notas de las mejoras:
 ## Fase 5 – Organizar y convertir
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
-| 5.1 | Reordenar, rotar, eliminar arrastrando miniaturas | Reorganizo un documento | ⬜ |
+| 5.1 | Reordenar, rotar, eliminar arrastrando miniaturas | Reorganizo un documento | ✅ |
 | 5.2 | Unir y dividir PDFs, extraer páginas | Uno 3 PDFs en uno | ⬜ |
 | 5.3 | Insertar páginas de otro PDF o imágenes | Añado una imagen como página | ⬜ |
 | 5.4 | De foto a PDF (recortar, enderezar, mejorar) | Hago una foto a un papel y queda como escaneado | ⬜ |
@@ -1710,6 +1710,26 @@ Notas de las mejoras:
 | 5.7 | Comprimir, poner/quitar contraseña | El PDF ocupa menos / pide contraseña | ⬜ |
 | 5.8 | Comparar dos versiones de un documento | Veo qué ha cambiado entre dos versiones de una ley | ⬜ |
 | 5.9 | Versión 1.0 | — | ⬜ |
+
+Notas de la Fase 5:
+- **5.1 Ordenar, girar y eliminar páginas.** En las miniaturas (panel lateral):
+  arrastrar una página o varias (Ctrl o Mayús para coger varias) a otro sitio;
+  Alt+flechas las mueven desde el teclado; Supr las elimina; clic derecho:
+  girar a la derecha / izquierda / 180°, mover al principio o al final,
+  eliminar. En el modo Organizar, «Ordenar páginas» abre las miniaturas,
+  «Rotar» gira las páginas cogidas (o la que se lee; la flecha ofrece las otras
+  direcciones y «todas las páginas») y «Eliminar páginas» las quita.
+  - Eliminar siempre pregunta (como Adobe) y nunca deja el documento sin
+    páginas. Deshacer las recupera incluso después de guardar: la orden guarda
+    antes una copia de las páginas, con lo escrito en ellas, sus campos (con su
+    nombre), los enlaces a ellas y las entradas del índice que las señalaban.
+  - Las tres órdenes (`core/page_orders.py`) dicen con `layout` dónde queda
+    cada página; la vista mueve con ellas los dibujos ya hechos (sin parpadeo) y
+    las miniaturas, la búsqueda y el OCR siguen los números nuevos
+    (`pages_renumbered`). Girar, mover y eliminar invalidan las firmas con
+    certificado (avisa al guardar).
+  - Regla para el resto de la fase: cada orden nueva que cambie páginas se
+    añade a `_breaks_signatures` (`ui/pdf_view.py`) y define `layout`.
 
 ## Fase 6 – Editar el texto original
 | # | Tarea | Terminado cuando… | Estado |
