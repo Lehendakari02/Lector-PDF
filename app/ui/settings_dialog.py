@@ -5,7 +5,7 @@ only exception is the size of the interface, which needs a restart: the window
 says so and offers to do it.
 
 Several tabs, so that the window fits in a small screen: "General",
-"Guardado", "Lápiz y dedo" and "Firma".
+"Guardado", "Lápiz y dedo", "Firma" and "Teclado" (the keys of every function).
 """
 
 from PySide6.QtCore import Qt
@@ -30,14 +30,13 @@ from app.core import (
     ocr,
     pen,
     save_settings,
-    symbols,
     tab_sleep,
 )
 from app.core.history import RESTORE_SETTING
 from app.core.interface_size import NORMAL_SIZE, SIZE_SETTING, SIZES, wanted_size
 from app.core.paths import is_portable
-from app.core.tool_keys import TOOL_KEYS_SETTING, tool_keys_wanted
 from app.core.updates import CHECK_SETTING
+from app.ui.keys_tab import KeysTab
 from app.ui.theme import Paper, Theme
 from app.ui.when import days_text
 
@@ -60,6 +59,11 @@ class SettingsDialog(QDialog):
         self.tabs.addTab(self._build_saving(), self.tr("Guardado"))
         self.tabs.addTab(self._build_pen(), self.tr("Lápiz y dedo"))
         self.tabs.addTab(self._build_signing(), self.tr("Firma"))
+        self.keys_tab = KeysTab(window)
+        self.tabs.addTab(self.keys_tab, self.tr("Teclado"))
+        # The two boxes about the keyboard live in that tab.
+        self.tool_keys_box = self.keys_tab.tool_keys_box
+        self.typed_arrows_box = self.keys_tab.typed_arrows_box
 
         layout = QVBoxLayout(general)
         layout.setContentsMargins(16, 12, 16, 12)
@@ -145,32 +149,6 @@ class SettingsDialog(QDialog):
         restart_layout.addWidget(note, 1)
         restart_layout.addWidget(self.restart_button)
         layout.addWidget(self.restart_row)
-
-        # ---- keys ----
-        layout.addWidget(self._heading(self.tr("Teclado")))
-        self.tool_keys_box = QCheckBox(self.tr("Una &tecla para cada herramienta (R, S, T…)"))
-        self.tool_keys_box.setToolTip(
-            self.tr(
-                "Con el documento delante: R resalta, S subraya, T tacha, N nota, X texto, "
-                "D dibuja, F formas, B borrador, O oculta las anotaciones y los números "
-                "cogen las favoritas. Esc suelta la herramienta."
-            )
-        )
-        self.tool_keys_box.setChecked(tool_keys_wanted(self.settings))
-        self.tool_keys_box.toggled.connect(self._tool_keys_chosen)
-        layout.addWidget(self.tool_keys_box)
-        self.typed_arrows_box = QCheckBox(
-            self.tr("Al escribir un texto, -> se convierte en &flecha")
-        )
-        self.typed_arrows_box.setToolTip(
-            self.tr(
-                "Escribiendo sobre la página: -> o --> da →, <- da ←, <-> da ↔, "
-                "=> da ⇒ y <=> da ⇔. Ctrl+Z justo después lo deja como se tecleó."
-            )
-        )
-        self.typed_arrows_box.setChecked(symbols.typed_wanted(self.settings))
-        self.typed_arrows_box.toggled.connect(self._typed_arrows_chosen)
-        layout.addWidget(self.typed_arrows_box)
 
         # ---- scanned documents ----
         layout.addWidget(self._heading(self.tr("Documentos escaneados")))
@@ -276,14 +254,6 @@ class SettingsDialog(QDialog):
     def _sleep_chosen(self, on: bool) -> None:
         self.settings.set(tab_sleep.SLEEP_SETTING, on)
         self.sleep_minutes_box.setEnabled(on)
-
-    def _typed_arrows_chosen(self, on: bool) -> None:
-        self.settings.set(symbols.TYPED_SETTING, on)
-        self.window_.apply_pen_settings()
-
-    def _tool_keys_chosen(self, on: bool) -> None:
-        self.settings.set(TOOL_KEYS_SETTING, on)
-        self.window_.apply_tool_keys()
 
     # ---- pen and fingers ---------------------------------------------------
 

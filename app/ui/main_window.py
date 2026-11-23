@@ -59,6 +59,7 @@ from app.core import (
     save_settings,
     saving,
     sheets,
+    shortcuts,
     signature_check,
     stamps,
     symbols,
@@ -141,6 +142,7 @@ from app.ui.features import (
     features_of,
     translate,
 )
+from app.ui.key_names import KeyCommand, key_hint
 from app.ui.library_window import LibraryWindow
 from app.ui.link_dialog import LinkDialog
 from app.ui.margin_dialog import MarginChoice, MarginDialog
@@ -465,6 +467,7 @@ class MainWindow(QMainWindow):
             "insert_sheet": self.insert_sheet,
         }
         self._mark_pending_features()
+        self._build_key_commands()
         self._refresh_save_actions()
         self._refresh_edit_actions()
 
@@ -489,7 +492,6 @@ class MainWindow(QMainWindow):
             self.feature_actions[feature.id] = action
         open_action = self.feature_actions["open"]
         open_action.setShortcut(QKeySequence(QKeySequence.StandardKey.Open))
-        open_action.setToolTip(f"{open_action.toolTip()} (Ctrl+O)")
 
     def _build_tool_keys(self) -> None:
         """A key for each tool and a digit for each favourite, while the page
@@ -506,19 +508,140 @@ class MainWindow(QMainWindow):
             action.setShortcutContext(Qt.ShortcutContext.WidgetShortcut)
             action.triggered.connect(lambda _checked=False, i=index: self.use_favourite_key(i))
             self.favourite_key_actions.append(action)
-        self.apply_tool_keys()
 
     def apply_tool_keys(self) -> None:
-        """Follow what the settings say now about the keys of the tools."""
-        wanted = tool_keys_wanted(self.settings)
-        for feature_id, key in TOOL_KEYS.items():
-            self.tool_key_actions[feature_id].setShortcut(QKeySequence(key if wanted else ""))
-            tip = translate(self._feature_named(feature_id).description)
-            # The key is said where the tool is, so nobody has to learn a list.
-            tip = self.tr("{0} (tecla {1})").format(tip, key) if wanted else tip
-            self.feature_actions[feature_id].setToolTip(tip)
-        for action, key in zip(self.favourite_key_actions, FAVOURITE_KEYS, strict=True):
-            action.setShortcut(QKeySequence(key if wanted else ""))
+        """Follow what the settings say now about the keys (kept for callers)."""
+        self.apply_shortcuts()
+
+    # ---- the keys of every function ------------------------------------------
+
+    def _build_key_commands(self) -> None:
+        """Every function that can have a key, in the groups the settings show.
+
+        Each one has the action that answers its keys. The keys without Ctrl
+        or Alt only answer while the document has the keyboard: a function that
+        answers everywhere gets, for those, a twin action on every document.
+        """
+        self.key_commands: dict[str, KeyCommand] = {}
+
+        def add(command_id, name, group, action, page_only=False, twin=None):
+            if not page_only and twin is None:
+                twin = QAction(name, self)
+                twin.setShortcutContext(Qt.ShortcutContext.WidgetShortcut)
+                twin.triggered.connect(lambda _checked=False, a=action: a.trigger())
+            self.key_commands[command_id] = KeyCommand(command_id, name, group, action, twin)
+
+        def everywhere(name, run) -> QAction:
+            action = QAction(name, self)
+            action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+            action.triggered.connect(lambda _checked=False: run())
+            self.addAction(action)
+            return action
+
+        # The tools: their letters on the document, a combination everywhere.
+        tools = self.tr("Herramientas de Estudiar")
+        for feature_id in TOOL_KEYS:
+            name = translate(self._feature_named(feature_id).name)
+            run = everywhere(name, lambda f=feature_id: self.use_tool_key(f))
+            add(feature_id, name, tools, run, twin=self.tool_key_actions[feature_id])
+        for index, letters in enumerate(self.favourite_key_actions, start=1):
+            run = everywhere(letters.text(), lambda i=index - 1: self.use_favourite_key(i))
+            add(f"favourite_{index}", letters.text(), tools, run, twin=letters)
+
+        file_group, edit_group, view_group = self.tr("Archivo"), self.tr("Editar"), self.tr("Ver")
+        menu_commands = [
+            ("open", self.open_menu_action, file_group),
+            ("close_tab", self.close_tab_action, file_group),
+            ("next_tab", self.next_tab_action, file_group),
+            ("previous_tab", self.previous_tab_action, file_group),
+            ("save", self.save_action, file_group),
+            ("save_as", self.save_as_action, file_group),
+            ("revert", self.revert_action, file_group),
+            ("print", self.print_action, file_group),
+            ("sign_many", self.sign_many_action, file_group),
+            ("versions", self.versions_action, file_group),
+            ("recover_discarded", self.recover_discarded_action, file_group),
+            ("settings", self.settings_action, file_group),
+            ("quit", self.quit_action, file_group),
+            ("undo", self.undo_action, edit_group),
+            ("redo", self.redo_action, edit_group),
+            ("copy", self.copy_action, edit_group),
+            ("paste", self.paste_action, edit_group),
+            ("duplicate", self.duplicate_action, edit_group),
+            ("delete", self.delete_action, edit_group),
+            ("select_all", self.select_all_action, edit_group),
+            *(
+                (f"mode_{number}", self.mode_actions[mode], view_group)
+                for number, mode in enumerate(MODES, start=1)
+            ),
+            ("search", self.search_action, view_group),
+            ("fit_comfortable", self.initial_size_action, view_group),
+            ("fullscreen", self.full_screen_action, view_group),
+            ("go_to_page", self.go_to_page_action, view_group),
+            ("bookmark", self.bookmark_action, view_group),
+            ("rotate_view", self.rotate_view_action, view_group),
+            ("side_panel", self.side_panel_action, view_group),
+            ("finder", self.finder_action, self.tr("Ayuda")),
+            ("check_updates", self.check_updates_action, self.tr("Ayuda")),
+            ("copy_report", self.copy_report_action, self.tr("Ayuda")),
+        ]
+        # The actions of editing answer only on the document already (in a box
+        # of text, Ctrl+C copies that text).
+        on_the_page = {"undo", "redo", "copy", "paste", "duplicate", "delete", "select_all"}
+        for command_id, action, group in menu_commands:
+            name = action.text().replace("&", "").rstrip("…").strip()
+            add(command_id, name, group, action, page_only=command_id in on_the_page)
+        # Every other function of the tool bars, by its mode.
+        for feature in FEATURES:
+            if feature.id in self.key_commands or feature.id not in self.feature_handlers:
+                continue
+            action = everywhere(translate(feature.name), lambda f=feature: self.use_key_of(f))
+            add(feature.id, translate(feature.name), translate(feature.mode.value), action)
+        made_here = [
+            command.twin
+            for command in self.key_commands.values()
+            if command.twin is not None
+            and command.twin not in self.tool_key_actions.values()
+            and command.twin not in self.favourite_key_actions
+        ]
+        for page in [*self.documents, self._spare]:
+            page.view.addActions(made_here)
+        self.apply_shortcuts()
+
+    def use_key_of(self, feature: Feature) -> None:
+        """The key of a function of a tool bar: the same as its button."""
+        self.run_feature(feature)
+
+    def apply_shortcuts(self) -> None:
+        """Give every function the keys the settings say now."""
+        plain_wanted = tool_keys_wanted(self.settings)
+        for command in self.key_commands.values():
+            keys = shortcuts.keys_of(self.settings, command.id)
+            plain = [key for key in keys if shortcuts.is_plain(key)] if plain_wanted else []
+            others = [key for key in keys if not shortcuts.is_plain(key)]
+            if command.twin is None:  # it answers only on the document anyway
+                command.action.setShortcuts([QKeySequence(key) for key in plain + others])
+            else:
+                command.action.setShortcuts([QKeySequence(key) for key in others])
+                command.twin.setShortcuts([QKeySequence(key) for key in plain])
+            self._say_key(command.id, plain + others)
+
+    def _say_key(self, command_id: str, keys: list[str]) -> None:
+        """The key of a function is said where its button is, so nobody has to
+        learn a list."""
+        action = self.feature_actions.get(command_id)
+        if action is None:
+            return
+        tip = translate(self._feature_named(command_id).description)
+        if command_id not in self.feature_handlers:
+            tip = self.tr("{0} (todavía no disponible)").format(tip)
+        elif keys:
+            tip = self.tr("{0} ({1})").format(tip, key_hint(keys[0]))
+        action.setToolTip(tip)
+
+    def key_twins(self) -> list[QAction]:
+        """The actions that answer plain keys on every document."""
+        return [command.twin for command in self.key_commands.values() if command.twin]
 
     def use_tool_key(self, feature_id: str) -> None:
         """The key of a tool was pressed on the page: the same as its button,
@@ -2847,7 +2970,10 @@ class MainWindow(QMainWindow):
         ):
             action.setShortcutContext(Qt.ShortcutContext.WidgetShortcut)
             view.addAction(action)
-        view.addActions([*self.tool_key_actions.values(), *self.favourite_key_actions])
+        if hasattr(self, "key_commands"):  # the spare page is made before them
+            view.addActions(self.key_twins())
+        else:
+            view.addActions([*self.tool_key_actions.values(), *self.favourite_key_actions])
         view.history_changed.connect(lambda p=page: self._edit_state_changed(p))
         view.history_changed.connect(self._schedule_autosave)
         view.modified_changed.connect(lambda _modified: self._schedule_autosave())
