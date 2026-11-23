@@ -1425,8 +1425,8 @@ Notas de la Fase 3:
 | 4.1 | Firmar con certificado instalado en Windows (FNMT), partiendo de la prueba 0.8 | El PDF firmado sale válido en VALIDe y en Adobe | 🔶 hecho; falta tu prueba con el certificado FNMT real en VALIDe y Adobe |
 | 4.2 | Firmar con archivo .p12/.pfx | Ídem | 🔶 hecho; falta tu prueba con tu copia .pfx del certificado FNMT |
 | 4.3 | Firma visible o invisible; sello de tiempo opcional; recordar preferencias | Firmar es elegir dónde y poner el PIN | 🔶 hecho (PR 88); falta tu prueba en Adobe, Edge y VALIDe |
-| 4.4 | Firmar varios documentos de una vez | Firmo 10 documentos poniendo el PIN una vez | 🔶 hecho; falta tu prueba con el certificado FNMT (¿pide el PIN una vez?) |
-| 4.5 | Firmar con DNIe y lector de tarjetas | Firmo con el DNIe (cuando tenga lector) | ⬜ |
+| 4.4 | Firmar varios documentos de una vez | Firmo 10 documentos poniendo el PIN una vez | 🔶 hecho (PR 89); falta tu prueba con el certificado FNMT (¿pide el PIN una vez?) |
+| 4.5 | Firmar con DNIe y lector de tarjetas | Firmo con el DNIe (cuando tenga lector) | 🔶 hecho; falta tu prueba con el DNIe y un lector |
 | 4.6 | Ver y verificar firmas existentes | Abro un PDF firmado y me dice quién lo firmó y si es válido | ⬜ |
 | 4.7 | Versión 0.6 | — | ⬜ |
 
@@ -1489,6 +1489,20 @@ Notas de la Fase 4:
     tiempo, pregunta una vez si seguir sin él.
   - Los documentos abiertos con cambios sin guardar se firman como están
     guardados, y la ventana lo avisa.
+- **4.5: Firmar con el DNIe y otras tarjetas (23/11/2026).**
+  - **Sin dependencias nuevas:** en Windows, con el controlador del DNIe
+    instalado (Windows Update lo suele poner solo; si no, el de
+    dnielectronico.es), los certificados de la tarjeta aparecen en el almacén
+    de Windows al meterla en el lector, y Windows pide el PIN en su ventana.
+    Así se usa el mismo camino de la 4.1, en vez de PKCS#11 (que habría
+    necesitado otra biblioteca y el módulo del DNIe aparte).
+  - El DNIe trae dos certificados: «(FIRMA)» y «(AUTENTICACIÓN)». Se elige
+    solo el de FIRMA; el otro sale apagado con la explicación "es el de
+    identificarse". Los dos llevan la marca "DNIe".
+  - Botón **Actualizar** en la ventana del certificado, para volver a mirar
+    después de meter la tarjeta. Si no hay ninguno, la ventana lo sugiere.
+  - Plan B si el DNIe no aparece en Windows: PKCS#11 con pyHanko (se
+    decidiría entonces, porque añade una dependencia).
 
 ## Fase 5 – Organizar y convertir
 | # | Tarea | Terminado cuando… | Estado |

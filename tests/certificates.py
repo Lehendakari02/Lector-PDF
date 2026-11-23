@@ -26,8 +26,12 @@ def make_certificate(
     days_valid: int = 30,
     started_days_ago: int = 1,
     for_signing: bool = True,
+    only: str = "",
 ):
-    """A certificate for ``key``; self-signed unless an issuer is given."""
+    """A certificate for ``key``; self-signed unless an issuer is given.
+
+    ``only``: "firma" (non-repudiation alone) or "autenticacion" (digital
+    signature alone), like the two certificates of the DNIe."""
     subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, name)])
     now = datetime.now(UTC)
     builder = (
@@ -41,8 +45,8 @@ def make_certificate(
         .add_extension(x509.BasicConstraints(ca=authority, path_length=None), critical=True)
         .add_extension(
             x509.KeyUsage(
-                digital_signature=for_signing and not authority,
-                content_commitment=for_signing and not authority,
+                digital_signature=for_signing and not authority and only != "firma",
+                content_commitment=for_signing and not authority and only != "autenticacion",
                 key_encipherment=not for_signing and not authority,
                 data_encipherment=False,
                 key_agreement=False,

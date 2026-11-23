@@ -183,3 +183,31 @@ def test_certificates_without_private_key_are_not_offered():
     with_key = set(windows_store.store_certificates(windows_store.ROOT_STORE, True))
     everything = set(windows_store.store_certificates(windows_store.ROOT_STORE))
     assert len(with_key) < len(everything)
+
+
+def test_the_two_certificates_of_the_dnie_are_told_apart():
+    """The DNIe has one to sign and one to identify oneself on web sites."""
+    authority_key = certificates.new_key()
+    authority = certificates.make_certificate("AC DNIE 006", authority_key, authority=True)
+    key = certificates.new_key()
+    signing, logging_in = (
+        describe(
+            certificates.der(
+                certificates.make_certificate(
+                    f"GARCIA PRUEBA, ANA ({what})",
+                    key,
+                    issuer=authority,
+                    issuer_key=authority_key,
+                    only=only,
+                )
+            )
+        )
+        for what, only in (("FIRMA", "firma"), ("AUTENTICACIÓN", "autenticacion"))
+    )
+    assert signing.dnie and logging_in.dnie
+    assert signing.usable and signing.for_signing
+    assert not logging_in.for_signing and not logging_in.usable
+    other = describe(
+        certificates.der(certificates.make_certificate("OTRA PERSONA", key, only="autenticacion"))
+    )
+    assert not other.dnie and other.for_signing, "only the DNIe is treated this way"

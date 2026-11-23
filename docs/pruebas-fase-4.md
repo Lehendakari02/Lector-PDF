@@ -75,3 +75,18 @@ funcione y dime lo que no.
 6. Repite con tu archivo .pfx: la contraseña se pone una sola vez.
 7. Mete en la lista un PDF con contraseña: dice que ese no se ha podido y
    firma los demás.
+
+## Tarea 4.5 – Firmar con el DNIe
+
+Necesitas un lector de tarjetas y el PIN del DNIe.
+
+1. Conecta el lector y mete el DNIe. Si Windows no lo reconoce, instala el
+   controlador de dnielectronico.es (Descargas → Windows).
+2. Firmar con certificado: si la lista no muestra el DNIe, pulsa
+   **Actualizar**. Deben salir dos con la marca "DNIe": el de FIRMA elegido y
+   el de AUTENTICACIÓN apagado.
+3. Pulsa **Firmar con este**: Windows pide el PIN del DNIe. Sube el firmado a
+   VALIDe.
+4. Prueba "Firmar varios documentos" con el DNIe: dime cuántas veces pide el
+   PIN.
+5. Si el DNIe no aparece en la lista ni con Actualizar, dímelo: hay un plan B.

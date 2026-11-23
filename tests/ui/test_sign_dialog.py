@@ -371,3 +371,47 @@ def test_the_batch_window_lists_documents_once_and_tells_unsaved_ones(qt_app, tm
     assert not dialog.note.isVisibleTo(dialog)
     remembered_invisible = BatchSignDialog(visible=False)
     assert remembered_invisible.placement is None
+
+
+# ---- the DNIe (task 4.5) ----
+
+
+def test_with_the_dnie_the_signing_one_is_chosen_and_the_list_can_be_read_again(qt_app):
+    from app.ui.sign_dialog import describe_certificate
+
+    authority_key = certificates.new_key()
+    authority = certificates.make_certificate("AC DNIE 006", authority_key, authority=True)
+    key = certificates.new_key()
+    dnie = [
+        describe(
+            certificates.der(
+                certificates.make_certificate(
+                    f"GARCIA PRUEBA, ANA ({what})",
+                    key,
+                    issuer=authority,
+                    issuer_key=authority_key,
+                    only=only,
+                )
+            )
+        )
+        for what, only in (("AUTENTICACIÓN", "autenticacion"), ("FIRMA", "firma"))
+    ]
+    inserted = []
+    dialog = CertificateDialog(lister=lambda: list(inserted))
+    assert not dialog.list.isVisibleTo(dialog)
+    assert "Actualizar" in dialog.explanation.text()
+    assert dialog.refresh_button.isVisibleTo(dialog)
+    assert not dialog.sign_button.isEnabled()
+
+    inserted.extend(dnie)  # the card goes into the reader
+    dialog.refresh_button.click()
+    assert dialog.list.count() == 2
+    assert dialog.selected() is dnie[1], "the one for signing, not the one for logging in"
+    assert "DNIe" in dialog.explanation.text()
+    assert "identificarse" in describe_certificate(dnie[0])
+    assert "DNIe" in describe_certificate(dnie[1])
+
+
+def test_with_certificates_given_there_is_nothing_to_read_again(qt_app, store):
+    dialog = CertificateDialog(certificates=[store[1]])
+    assert not dialog.refresh_button.isVisibleTo(dialog)
