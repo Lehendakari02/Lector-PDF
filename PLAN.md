@@ -1559,6 +1559,18 @@ Notas de la Fase 4:
       reparado al abrirlo se reescribe entero. (`saving.keeps_signatures`,
       `PdfView.breaks_signatures`, `signature_check._looked_at_by_hand`.)
 
+## Pruebas con Adobe (23/11/2026)
+Julen quiere desinstalar Adobe Reader: antes se hacen de una vez todas las
+pruebas que necesitan Adobe, con PDF de muestra creados con el propio código
+del programa (anotaciones, formulario, enlace a otro PDF, hueco de firma,
+PDF protegido). Resultados y fallos se apuntan aquí.
+- **Arreglado:** un trazo hecho con presión del lápiz y sin transparencia
+  guardaba en su aspecto la orden «/H gs» sin el estado gráfico «H» al que
+  se refiere (MuPDF avisa «cannot find ExtGState resource 'H'»; Adobe puede
+  marcarlo como error de la página). Ahora solo se nombra si existe
+  (`drawing._draw_pressed`). Los PDF ya guardados se siguen viendo bien en
+  este programa y en Edge.
+
 ## Mejoras pendientes de fases anteriores (antes de la Fase 5)
 Decididas por Julen el 23/11/2026: se hacen todas, una tarea por pull request,
 antes de empezar la Fase 5. Cada una se fija en cómo lo hacen los programas
