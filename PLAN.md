@@ -1269,7 +1269,7 @@ Notas de la Fase 2C:
 | 3.5 | Crear y guardar firma e iniciales (dibujar, escribir, importar imagen sin fondo) | Tengo mi firma guardada | ✅ |
 | 3.6 | Firmar con un clic: colocar, mover, redimensionar, fecha automática | Firmo un contrato en segundos | ✅ |
 | 3.7 | Iniciales en todas las páginas | Con un clic pongo iniciales en todas las hojas | ✅ |
-| 3.8 | Versión 0.5 | — | 🔶 número 0.5.0 puesto (22/11/2026); falta que Julen cree la Release v0.5.0 |
+| 3.8 | Versión 0.5 | — | ✅ Release v0.5.0 publicada (22/11/2026) |
 | 3.8b | Arreglos de la revisión del código de la Fase 3 (todos los hallazgos) | Lo escrito en una casilla se guarda al pulsar Guardar; «Mis datos» pone cada dato en su campo | ✅ |
 
 Notas de la Fase 3:
@@ -1427,8 +1427,8 @@ Notas de la Fase 3:
 | 4.3 | Firma visible o invisible; sello de tiempo opcional; recordar preferencias | Firmar es elegir dónde y poner el PIN | 🔶 hecho (PR 88); falta tu prueba en Adobe, Edge y VALIDe |
 | 4.4 | Firmar varios documentos de una vez | Firmo 10 documentos poniendo el PIN una vez | 🔶 hecho (PR 89); falta tu prueba con el certificado FNMT (¿pide el PIN una vez?) |
 | 4.5 | Firmar con DNIe y lector de tarjetas | Firmo con el DNIe (cuando tenga lector) | 🔶 hecho (PR 90); falta tu prueba con el DNIe y un lector |
-| 4.6 | Ver y verificar firmas existentes | Abro un PDF firmado y me dice quién lo firmó y si es válido | 🔶 hecho; falta tu prueba con PDFs firmados de verdad |
-| 4.7 | Versión 0.6 | — | ⬜ |
+| 4.6 | Ver y verificar firmas existentes | Abro un PDF firmado y me dice quién lo firmó y si es válido | 🔶 hecho (PR 91); falta tu prueba con PDFs firmados de verdad |
+| 4.7 | Versión 0.6 | — | 🔶 número 0.6.0 puesto (23/11/2026); falta que Julen cree la Release v0.6.0 |
 
 Notas de la Fase 4:
 - **4.1: Firmar con el certificado instalado en Windows (22/11/2026).**
