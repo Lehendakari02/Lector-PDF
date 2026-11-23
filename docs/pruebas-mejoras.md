@@ -12,7 +12,8 @@ las lleve. Cada paso: lo que haces → lo que debe pasar.
 3. Guarda (Ctrl+S) y abre el PDF en **Edge** → los dos textos se ven igual
    que en el programa, sin «?» ni cuadraditos.
 4. Ábrelo en **Adobe Reader** → igual.
-5. En Adobe, busca «Москва» (Ctrl+F) → lo encuentra.
+5. En Adobe, busca «Москва» (Ctrl+F) con «Incluir comentarios» marcado en
+   las opciones de búsqueda (lo escrito encima es un comentario) → lo encuentra.
 
 ## P.2 Pestañas dormidas
 

@@ -1570,6 +1570,36 @@ PDF protegido). Resultados y fallos se apuntan aquí.
   marcarlo como error de la página). Ahora solo se nombra si existe
   (`drawing._draw_pressed`). Los PDF ya guardados se siguen viendo bien en
   este programa y en Edge.
+- **Resultado (23/11/2026, hecho por Claude en el ordenador de Julen con la
+  0.7.0):** todo bien. Firma FNMT válida en Adobe; firma en el hueco de un
+  contrato (con clic y con Intro) sin campo nuevo; subrayar y guardar un PDF
+  firmado no pregunta y la firma sigue válida («cambios permitidos»); un margen
+  en un PDF firmado avisa; el PDF protegido firmado sigue sin dejar imprimir;
+  firma invisible con sello de tiempo; firmar varios (3 de 3, sin pedir PIN,
+  abajo a la derecha de la última página); anotaciones, colores, trazo con
+  presión, formas, sellos, firma manuscrita, margen, hoja de rayas, marcador,
+  capa de OCR y enlace a otro PDF se ven igual en Adobe; una nota hecha en
+  Adobe se borra en el programa; el formulario relleno se ve y se edita en
+  Adobe; texto griego y ruso (también en negrita) igual en Adobe; un PDF
+  abierto a la vez en Adobe avisa al guardar y no se pierde nada.
+- **También probado en el programa:** saltar a página y a artículo
+  (`art. 14`, `disposición transitoria quinta`, `art. 900` dice que no está),
+  buscar sin tildes con la vista girada, la ñ no es n, copiar texto,
+  pestañas, modo lectura, Ctrl+K, imprimir (la ventana y sus avisos),
+  «Buscar versiones nuevas», índice y miniaturas, marcador con Ctrl+M, modo
+  repaso, ver al lado, exportar resumen, versiones anteriores, enlace que abre
+  la ley al lado, zoom al 600 % nítido, cursor de lectura (F7), lista de
+  teclas, y al cerrar y abrir vuelven las pestañas.
+- **Detalles pequeños vistos (por decidir):** al deshacer todo hasta como
+  estaba guardado sigue poniendo «Cambios sin guardar»; el recuadro de la
+  firma visible es transparente y, si cae sobre texto, se mezcla; el programa
+  no recuerda si la ventana estaba maximizada.
+- **Sin probar (necesitan a Julen o algo que no hay):** lápiz y pantalla
+  táctil, NVDA, DNIe y lector de tarjetas, poner PIN o contraseñas (.pfx, PDF
+  con contraseña), cerrar a la fuerza con el Administrador de tareas, Edge,
+  exportar a Word, imprimir en papel, casillas Sí/No en Adobe (no había
+  formulario con ellas), crear Mis datos o la firma manuscrita (son datos de
+  Julen) y biblioteca del temario.
 
 ## Mejoras pendientes de fases anteriores (antes de la Fase 5)
 Decididas por Julen el 23/11/2026: se hacen todas, una tarea por pull request,
