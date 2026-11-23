@@ -1426,8 +1426,8 @@ Notas de la Fase 3:
 | 4.2 | Firmar con archivo .p12/.pfx | Ídem | 🔶 hecho; falta tu prueba con tu copia .pfx del certificado FNMT |
 | 4.3 | Firma visible o invisible; sello de tiempo opcional; recordar preferencias | Firmar es elegir dónde y poner el PIN | 🔶 hecho (PR 88); falta tu prueba en Adobe, Edge y VALIDe |
 | 4.4 | Firmar varios documentos de una vez | Firmo 10 documentos poniendo el PIN una vez | 🔶 hecho (PR 89); falta tu prueba con el certificado FNMT (¿pide el PIN una vez?) |
-| 4.5 | Firmar con DNIe y lector de tarjetas | Firmo con el DNIe (cuando tenga lector) | 🔶 hecho; falta tu prueba con el DNIe y un lector |
-| 4.6 | Ver y verificar firmas existentes | Abro un PDF firmado y me dice quién lo firmó y si es válido | ⬜ |
+| 4.5 | Firmar con DNIe y lector de tarjetas | Firmo con el DNIe (cuando tenga lector) | 🔶 hecho (PR 90); falta tu prueba con el DNIe y un lector |
+| 4.6 | Ver y verificar firmas existentes | Abro un PDF firmado y me dice quién lo firmó y si es válido | 🔶 hecho; falta tu prueba con PDFs firmados de verdad |
 | 4.7 | Versión 0.6 | — | ⬜ |
 
 Notas de la Fase 4:
@@ -1503,6 +1503,19 @@ Notas de la Fase 4:
     después de meter la tarjeta. Si no hay ninguno, la ventana lo sugiere.
   - Plan B si el DNIe no aparece en Windows: PKCS#11 con pyHanko (se
     decidiría entonces, porque añade una dependencia).
+- **4.6: Ver y comprobar las firmas de un PDF (23/11/2026).**
+  - Al abrir un PDF firmado, la barra de abajo lo dice. "Rellenar y firmar →
+    Comprobar firmas" muestra cada firma en palabras sencillas: ✔ "Firma
+    válida", ⚠ "Firma correcta, pero no se reconoce quién emitió el
+    certificado" o ✖ "Firma rota" / "Se ha cambiado después". Debajo: quién
+    firmó, quién emitió el certificado, la fecha (y si lleva sello de tiempo)
+    y qué se añadió después (otras firmas, campos rellenados, notas). Las
+    firmas visibles tienen "Ir a la firma".
+  - **Sin internet** (principio 1): se comprueba que lo firmado no ha
+    cambiado y que el certificado viene de una autoridad en la que confía
+    Windows (la FNMT y la del DNIe lo están). No se mira si el certificado
+    se ha anulado; la ventana lo dice y remite a VALIDe para la comprobación
+    oficial.
 
 ## Fase 5 – Organizar y convertir
 | # | Tarea | Terminado cuando… | Estado |

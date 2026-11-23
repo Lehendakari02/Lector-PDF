@@ -59,6 +59,7 @@ from app.core import (
     save_settings,
     saving,
     sheets,
+    signature_check,
     stamps,
     symbols,
 )
@@ -156,6 +157,7 @@ from app.ui.side_by_side import BesideArea
 from app.ui.side_panel import SidePanel, Tab
 from app.ui.sign_dialog import CertificateDialog
 from app.ui.signature_dialog import SignatureDialog
+from app.ui.signatures_dialog import SignaturesDialog
 from app.ui.text_recognition import TextRecognition
 from app.ui.theme import PAPER_SETTING, THEME_SETTING, Paper, Theme, apply_theme
 from app.ui.unsaved_dialog import CANCEL, DISCARD, SAVE, UnsavedDialog
@@ -402,6 +404,7 @@ class MainWindow(QMainWindow):
             "search": self.show_search,
             "sign_certificate": self.sign_with_certificate,
             "sign_many": self.sign_many,
+            "check_signatures": self.check_signatures,
             "ocr": self.recognize_text,
             "ocr_again": self.recognize_again,
             "zoom_in": lambda: self.pdf_view.zoom_in(),
@@ -2911,6 +2914,14 @@ class MainWindow(QMainWindow):
         if remembered is not None and not self._full_screen:
             self.show_side_panel(remembered, remember=False)
         self._save_session()
+        if save_checks.is_signed(page.path, document.password):
+            self.statusBar().showMessage(
+                self.tr(
+                    "Este documento está firmado con certificado. Para ver quién lo firmó: "
+                    "Rellenar y firmar → Comprobar firmas."
+                ),
+                STATUS_MESSAGE_MS * 2,
+            )
         return True
 
     def restore_session(self) -> int:
@@ -4285,6 +4296,33 @@ class MainWindow(QMainWindow):
         self._sign_when_saved = None
         if worked and page is self.current_document:
             QTimer.singleShot(0, self.sign_with_certificate)
+
+    def check_signatures(self) -> SignaturesDialog | None:
+        """«Comprobar firmas»: who signed the document in front, and whether it holds."""
+        page = self.current_document
+        if page.view.page_count == 0 or page.path is None:
+            self.statusBar().showMessage(
+                self.tr("Abre el documento cuyas firmas quieres ver."), STATUS_MESSAGE_MS
+            )
+            return None
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            reports = signature_check.check_signatures(page.path)
+        except (OSError, ValueError) as error:
+            self.reporter.log.record(type(error), error, error.__traceback__, "comprobar firmas")
+            self._show_problem(
+                self.tr("No se han podido leer las firmas"),
+                self.tr("El documento está dañado o no se puede leer."),
+            )
+            return None
+        finally:
+            QApplication.restoreOverrideCursor()
+        dialog = SignaturesDialog(self, page.path.name, reports, unsaved=page.view.modified)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        view = page.view
+        dialog.go_to_page.connect(view.scroll_to_page)
+        dialog.open()
+        return dialog
 
     def sign_many(self) -> bool:
         """«Firmar varios documentos»: the same certificate, the PIN once (when

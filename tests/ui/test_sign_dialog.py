@@ -2,6 +2,7 @@
 
 import pytest
 from pyhanko.pdf_utils.reader import PdfFileReader
+from PySide6.QtWidgets import QLabel, QPushButton
 
 from app.core import certificate_settings
 from app.core.signing import load_p12_signer
@@ -415,3 +416,56 @@ def test_with_the_dnie_the_signing_one_is_chosen_and_the_list_can_be_read_again(
 def test_with_certificates_given_there_is_nothing_to_read_again(qt_app, store):
     dialog = CertificateDialog(certificates=[store[1]])
     assert not dialog.refresh_button.isVisibleTo(dialog)
+
+
+# ---- looking at the signatures (task 4.6) ----
+
+
+def test_the_signatures_of_the_open_document_are_shown_in_plain_words(
+    window, sample, tmp_path, wait_until, monkeypatch
+):
+    from app.core import signature_check
+    from app.core.signing import Visible, sign_pdf
+
+    signer = load_p12_signer(sample("certificado-prueba.p12"), "prueba")
+    signed = sign_pdf(
+        sample("largo.pdf"), tmp_path / "firmado.pdf", signer, Visible(3, (50, 50, 220, 106))
+    )
+    monkeypatch.setattr(signature_check, "trusted_roots", lambda: [signer.signing_cert])
+    assert window.check_signatures() is None
+    assert "Abre el documento" in window.statusBar().currentMessage()
+    assert window.open_document(signed)
+    assert "firmado con certificado" in window.statusBar().currentMessage()
+    view = window.pdf_view
+    wait_until(lambda: view.page_count > 3)
+    dialog = window.check_signatures()
+    assert "Firma válida" in dialog.blocks[0].text()
+    go = [
+        button
+        for button in dialog.findChildren(QPushButton)
+        if button.text().startswith("Ir a la firma")
+    ]
+    assert go and "página 4" in go[0].text()
+    go[0].click()
+    wait_until(lambda: view.current_page == 3)
+
+
+def test_unknown_authorities_and_broken_signatures_are_told_apart(qt_app):
+    from datetime import UTC, datetime
+
+    from app.core.signature_check import ANNOTATED, CHANGED, SignatureReport
+    from app.ui.signatures_dialog import BAD, DOUBT, GOOD, SignaturesDialog, details, verdict
+
+    when = datetime(2026, 11, 22, 10, 30, tzinfo=UTC)
+    good = SignatureReport("Firma1", "ANA", "AC FNMT", when, True, True, True, ANNOTATED)
+    unknown = SignatureReport("Firma1", "ANA", "AC RARA", when, False, True, False, ANNOTATED)
+    broken = SignatureReport("Firma1", "ANA", "AC FNMT", when, False, False, True, CHANGED)
+    changed = SignatureReport("Firma2", "ANA", "AC FNMT", when, False, True, True, CHANGED)
+    assert verdict(good)[0] == GOOD
+    assert verdict(unknown)[0] == DOUBT
+    assert verdict(broken)[0] == BAD and "rota" in verdict(broken)[1]
+    assert verdict(changed)[0] == BAD and "cambiado" in verdict(changed)[1]
+    assert any("sello de tiempo" in line for line in details(good))
+    assert any("VALIDe" in line for line in details(unknown))
+    dialog = SignaturesDialog(None, "a.pdf", [], unsaved=True)
+    assert "no tiene firmas" in dialog.findChildren(QLabel)[0].text()
