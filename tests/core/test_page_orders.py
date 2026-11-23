@@ -142,6 +142,34 @@ def test_links_and_outline_follow_moved_pages(doc):
     assert [link["page"] for link in doc[1].get_links()] == [0]
 
 
+def test_any_new_order_is_reached_moving_few_pages(doc):
+    import itertools
+
+    from app.core.page_orders import _rearrange, _staying
+
+    first = texts(doc)
+    assert _staying([3, 0, 1, 2, 4]) == {0, 1, 2, 4}, "only page 4 has to move"
+    for order in itertools.permutations(range(5)):
+        _rearrange(doc, list(order))
+        assert texts(doc) == [first[old] for old in order]
+        back = [0] * 5
+        for place, old in enumerate(order):
+            back[old] = place
+        _rearrange(doc, back)
+        assert texts(doc) == first
+
+
+def test_moving_pages_of_a_document_with_a_structure_tree(sample):
+    # MuPDF's own rearranging reads freed memory with these (the BOE has one).
+    with pymupdf.open(sample("boe.pdf")) as boe:
+        first = [page.get_text()[:80] for page in boe]
+        order = move_pages([0], boe.page_count)
+        order.apply(boe)
+        assert [page.get_text()[:80] for page in boe] == first[1:] + first[:1]
+        order.undo(boe)
+        assert [page.get_text()[:80] for page in boe] == first
+
+
 def test_moving_goes_through_the_journal(doc):
     assert journal_round_trip(move_pages([2, 0], 4)) == MovePages((0, 2), 4)
 

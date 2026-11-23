@@ -147,7 +147,7 @@ class MovePages:
         changed = [place for place, old in enumerate(order) if place != old]
         if changed:
             try:
-                doc.select(order)
+                _rearrange(doc, order)
             except Exception as error:
                 raise CommandError(f"cannot move the pages: {error}") from error
         return changed
@@ -158,6 +158,51 @@ class MovePages:
     @classmethod
     def from_dict(cls, data: dict) -> "MovePages":
         return cls(_clean_pages(data["pages"]), int(data["to"]))
+
+
+def _staying(order: list[int]) -> set[int]:
+    """The longest run of pages already in the right order: they stay put."""
+    tails: list[int] = []  # place in ``order`` of the smallest tail of each length
+    before = [-1] * len(order)
+    for place, old in enumerate(order):
+        low, high = 0, len(tails)
+        while low < high:
+            middle = (low + high) // 2
+            if order[tails[middle]] < old:
+                low = middle + 1
+            else:
+                high = middle
+        before[place] = tails[low - 1] if low else -1
+        if low == len(tails):
+            tails.append(place)
+        else:
+            tails[low] = place
+    staying, place = set(), tails[-1] if tails else -1
+    while place != -1:
+        staying.add(order[place])
+        place = before[place]
+    return staying
+
+
+def _rearrange(doc, order: list[int]) -> None:
+    """Put the pages in ``order`` (the old number of each new place) moving
+    as few pages as possible, one by one.
+
+    Not ``Document.select``: MuPDF's ``pdf_rearrange_pages`` reads memory it
+    has already freed in documents with a structure tree (seen with valgrind
+    on the BOE sample), which on Windows kills the helper process."""
+    staying = _staying(order)
+    current = list(range(len(order)))
+    for old in order:  # first the pages that move go to the end, in their new order
+        if old not in staying:
+            doc.move_page(current.index(old), -1)
+            current.remove(old)
+            current.append(old)
+    for place, old in enumerate(order):  # then each one to its place
+        if old not in staying:
+            doc.move_page(current.index(old), place)
+            current.remove(old)
+            current.insert(place, old)
 
 
 def move_pages(pages, to: int) -> MovePages:
