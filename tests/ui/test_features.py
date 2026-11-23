@@ -40,7 +40,8 @@ def test_finds_by_other_words_people_use():
 
 
 def test_several_words_must_all_match():
-    assert ids("firmar certificado") == ["sign_certificate"]
+    assert ids("firmar certificado") == ["sign_certificate", "sign_many"]
+    assert ids("firmar varios") == ["sign_many"]
     assert ids("firmar zzz") == []
 
 

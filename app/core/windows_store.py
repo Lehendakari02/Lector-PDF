@@ -274,85 +274,111 @@ def sign_digest(
     ``key_algorithm`` is "rsa" or "ec". For RSA the result is a PKCS#1 v1.5
     signature; for EC, the two numbers as DER, which is what PDF needs.
     """
-    crypt32, ncrypt = _windows()
-    if key_algorithm not in ("rsa", "ec"):
-        raise StoreError(f"Keys of type {key_algorithm!r} are not supported")
-    store = _open_store(crypt32, PERSONAL_STORE)
-    context = key = None
-    try:
-        raw = bytes.fromhex(thumbprint)
-        buffer = ctypes.create_string_buffer(raw, len(raw))
-        blob = _Blob(len(raw), ctypes.cast(buffer, ctypes.c_void_p))
-        context = crypt32.CertFindCertificateInStore(
-            store, _ENCODING, 0, _CERT_FIND_SHA1_HASH, ctypes.byref(blob), None
-        )
-        if not context:
-            raise StoreError("The certificate is no longer in the Windows store")
+    with OpenKey(thumbprint, window_handle) as key:
+        return key.sign(digest, digest_algorithm, key_algorithm)
 
-        key = ctypes.c_void_p()
-        key_spec = ctypes.c_uint32()
-        must_free = ctypes.c_int()
-        acquired = crypt32.CryptAcquireCertificatePrivateKey(
-            context,
-            _CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG,
-            None,
-            ctypes.byref(key),
-            ctypes.byref(key_spec),
-            ctypes.byref(must_free),
-        )
-        if not acquired:
-            _fail("Windows could not get the private key", ctypes.get_last_error())
-        if not must_free.value:
-            key_to_free, key = None, key
-        else:
-            key_to_free = key
 
+class OpenKey:
+    """The private key of a certificate, held open by Windows.
+
+    Several signatures with the same open key let Windows (or the card)
+    ask for the PIN only once, when the key allows it: that is how several
+    documents are signed in one go. Close it (``with``) when done.
+    """
+
+    def __init__(self, thumbprint: str, window_handle: int | None = None) -> None:
+        self._crypt32, self._ncrypt = _windows()
+        self._store = _open_store(self._crypt32, PERSONAL_STORE)
+        self._context = None
+        self._key_to_free = None
         try:
+            raw = bytes.fromhex(thumbprint)
+            buffer = ctypes.create_string_buffer(raw, len(raw))
+            blob = _Blob(len(raw), ctypes.cast(buffer, ctypes.c_void_p))
+            self._context = self._crypt32.CertFindCertificateInStore(
+                self._store, _ENCODING, 0, _CERT_FIND_SHA1_HASH, ctypes.byref(blob), None
+            )
+            if not self._context:
+                raise StoreError("The certificate is no longer in the Windows store")
+            key = ctypes.c_void_p()
+            key_spec = ctypes.c_uint32()
+            must_free = ctypes.c_int()
+            acquired = self._crypt32.CryptAcquireCertificatePrivateKey(
+                self._context,
+                _CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG,
+                None,
+                ctypes.byref(key),
+                ctypes.byref(key_spec),
+                ctypes.byref(must_free),
+            )
+            if not acquired:
+                _fail("Windows could not get the private key", ctypes.get_last_error())
+            self._key = key
+            if must_free.value:
+                self._key_to_free = key
             if window_handle:
                 handle = ctypes.c_void_p(window_handle)
-                ncrypt.NCryptSetProperty(
+                self._ncrypt.NCryptSetProperty(
                     key,
                     _NCRYPT_WINDOW_HANDLE_PROPERTY,
                     ctypes.byref(handle),
                     ctypes.sizeof(handle),
                     0,
                 )
-            padding = flags = None
-            if key_algorithm == "rsa":
-                if digest_algorithm not in _HASH_NAMES:
-                    raise StoreError(f"Digest {digest_algorithm!r} is not supported")
-                padding = ctypes.byref(_Pkcs1Padding(_HASH_NAMES[digest_algorithm]))
-                flags = _BCRYPT_PAD_PKCS1
-            size = ctypes.c_uint32(0)
-            status = ncrypt.NCryptSignHash(
-                key, padding, digest, len(digest), None, 0, ctypes.byref(size), flags or 0
-            )
-            if status != 0:
-                _fail("Windows refused to sign", status)
-            signature = ctypes.create_string_buffer(size.value)
-            status = ncrypt.NCryptSignHash(
-                key,
-                padding,
-                digest,
-                len(digest),
-                signature,
-                size.value,
-                ctypes.byref(size),
-                flags or 0,
-            )
-            if status != 0:
-                _fail("Windows refused to sign", status)
-            result = signature.raw[: size.value]
-        finally:
-            if key_to_free is not None:
-                ncrypt.NCryptFreeObject(key_to_free)
-    finally:
-        if context:
-            crypt32.CertFreeCertificateContext(context)
-        crypt32.CertCloseStore(store, 0)
-    if key_algorithm == "ec":
-        return algos.DSASignature.from_p1363(result).dump()
-    return result
+        except BaseException:
+            self.close()
+            raise
+
+    def __enter__(self) -> "OpenKey":
+        return self
+
+    def __exit__(self, *_exc) -> None:
+        self.close()
+
+    def sign(self, digest: bytes, digest_algorithm: str, key_algorithm: str) -> bytes:
+        if key_algorithm not in ("rsa", "ec"):
+            raise StoreError(f"Keys of type {key_algorithm!r} are not supported")
+        ncrypt, key = self._ncrypt, self._key
+        padding = flags = None
+        if key_algorithm == "rsa":
+            if digest_algorithm not in _HASH_NAMES:
+                raise StoreError(f"Digest {digest_algorithm!r} is not supported")
+            padding = ctypes.byref(_Pkcs1Padding(_HASH_NAMES[digest_algorithm]))
+            flags = _BCRYPT_PAD_PKCS1
+        size = ctypes.c_uint32(0)
+        status = ncrypt.NCryptSignHash(
+            key, padding, digest, len(digest), None, 0, ctypes.byref(size), flags or 0
+        )
+        if status != 0:
+            _fail("Windows refused to sign", status)
+        signature = ctypes.create_string_buffer(size.value)
+        status = ncrypt.NCryptSignHash(
+            key,
+            padding,
+            digest,
+            len(digest),
+            signature,
+            size.value,
+            ctypes.byref(size),
+            flags or 0,
+        )
+        if status != 0:
+            _fail("Windows refused to sign", status)
+        result = signature.raw[: size.value]
+        if key_algorithm == "ec":
+            return algos.DSASignature.from_p1363(result).dump()
+        return result
+
+    def close(self) -> None:
+        if self._key_to_free is not None:
+            self._ncrypt.NCryptFreeObject(self._key_to_free)
+            self._key_to_free = None
+        if self._context:
+            self._crypt32.CertFreeCertificateContext(self._context)
+            self._context = None
+        if self._store is not None:
+            self._crypt32.CertCloseStore(self._store, 0)
+            self._store = None
 
 
 def _fail(what: str, code: int) -> None:

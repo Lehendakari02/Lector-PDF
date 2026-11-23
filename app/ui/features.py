@@ -281,6 +281,14 @@ FEATURES: list[Feature] = [
         "firmar firma digital electrónica",
     ),
     _f(
+        "sign_many",
+        FILL,
+        "Firmar varios documentos",
+        "Firmar con certificado muchos documentos de una vez, poniendo el PIN una sola vez",
+        "firmar lote varios muchos documentos certificado digital todos",
+        toolbar=False,
+    ),
+    _f(
         "check_signatures",
         FILL,
         "Comprobar firmas",

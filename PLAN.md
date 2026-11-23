@@ -1424,8 +1424,8 @@ Notas de la Fase 3:
 |---|-------|-------------------|--------|
 | 4.1 | Firmar con certificado instalado en Windows (FNMT), partiendo de la prueba 0.8 | El PDF firmado sale válido en VALIDe y en Adobe | 🔶 hecho; falta tu prueba con el certificado FNMT real en VALIDe y Adobe |
 | 4.2 | Firmar con archivo .p12/.pfx | Ídem | 🔶 hecho; falta tu prueba con tu copia .pfx del certificado FNMT |
-| 4.3 | Firma visible o invisible; sello de tiempo opcional; recordar preferencias | Firmar es elegir dónde y poner el PIN | 🔶 hecho; falta tu prueba en Adobe, Edge y VALIDe |
-| 4.4 | Firmar varios documentos de una vez | Firmo 10 documentos poniendo el PIN una vez | ⬜ |
+| 4.3 | Firma visible o invisible; sello de tiempo opcional; recordar preferencias | Firmar es elegir dónde y poner el PIN | 🔶 hecho (PR 88); falta tu prueba en Adobe, Edge y VALIDe |
+| 4.4 | Firmar varios documentos de una vez | Firmo 10 documentos poniendo el PIN una vez | 🔶 hecho; falta tu prueba con el certificado FNMT (¿pide el PIN una vez?) |
 | 4.5 | Firmar con DNIe y lector de tarjetas | Firmo con el DNIe (cuando tenga lector) | ⬜ |
 | 4.6 | Ver y verificar firmas existentes | Abro un PDF firmado y me dice quién lo firmó y si es válido | ⬜ |
 | 4.7 | Versión 0.6 | — | ⬜ |
@@ -1471,6 +1471,24 @@ Notas de la Fase 4:
     conexión, avisa y ofrece firmar sin sello.
   - Sin dependencias nuevas: el sello se pide con la biblioteca estándar de
     Python.
+- **4.4: Firmar varios documentos de una vez (23/11/2026).**
+  - "Archivo → Firmar varios documentos…" (y Ctrl+K "firmar varios"): una
+    lista de documentos (añadir del ordenador o los que están abiertos), y
+    dónde va la firma: visible en una esquina de la primera o la última
+    página (por defecto, abajo a la derecha de la última), o invisible. Se
+    recuerda lo elegido.
+  - El certificado se elige **una vez**. Con un certificado de Windows la
+    clave se abre una sola vez para todo el lote, así Windows o la tarjeta
+    pueden pedir el PIN una sola vez (depende de cómo esté protegido el
+    certificado: con algunos, Windows lo pide en cada firma). Con un archivo
+    .pfx, la contraseña se pone una vez.
+  - Cada documento se guarda como «nombre-firmado.pdf» en su carpeta; si ese
+    nombre ya existe, «nombre-firmado (2).pdf». Los originales no se tocan.
+  - Si uno no se puede firmar (contraseña, dañado), se dice al final y los
+    demás siguen. "Parar" o cancelar el PIN para el lote. Si falla el sello de
+    tiempo, pregunta una vez si seguir sin él.
+  - Los documentos abiertos con cambios sin guardar se firman como están
+    guardados, y la ventana lo avisa.
 
 ## Fase 5 – Organizar y convertir
 | # | Tarea | Terminado cuando… | Estado |

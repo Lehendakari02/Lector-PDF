@@ -206,6 +206,7 @@ class WindowsStoreSigner(Signer):
         self.window_handle = window_handle
         self.key_algorithm = signing_cert.public_key.algorithm
         self._signature_size = signing_cert.public_key.byte_size
+        self._open_key: windows_store.OpenKey | None = None
         super().__init__(
             signing_cert=signing_cert,
             cert_registry=SimpleCertificateStore.from_certs(self.chain),
@@ -217,9 +218,30 @@ class WindowsStoreSigner(Signer):
             extra = 0 if self.key_algorithm == "rsa" else self._signature_size + 9
             return bytes(self._signature_size + extra)
         digest = hashlib.new(digest_algorithm, data).digest()
+        if self._open_key is not None:
+            return self._open_key.sign(digest, digest_algorithm, self.key_algorithm)
         return windows_store.sign_digest(
             self.thumbprint, digest, digest_algorithm, self.key_algorithm, self.window_handle
         )
+
+    @contextlib.contextmanager
+    def key_kept_open(self):
+        """While inside, every signature uses the same open key, so that
+        Windows asks for the PIN once if the key allows it."""
+        with windows_store.OpenKey(self.thumbprint, self.window_handle) as key:
+            self._open_key = key
+            try:
+                yield self
+            finally:
+                self._open_key = None
+
+
+def key_kept_open(signer: Signer):
+    """``signer.key_kept_open()`` for a certificate of Windows; nothing to keep
+    open for a file (its password was given once already)."""
+    if isinstance(signer, WindowsStoreSigner):
+        return signer.key_kept_open()
+    return contextlib.nullcontext(signer)
 
 
 def load_p12_signer(path: str | Path, password: str) -> Signer:
