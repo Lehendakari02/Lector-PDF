@@ -1709,7 +1709,7 @@ Notas de las mejoras:
 |---|-------|-------------------|--------|
 | 5.1 | Reordenar, rotar, eliminar arrastrando miniaturas | Reorganizo un documento | ✅ |
 | 5.2 | Unir y dividir PDFs, extraer páginas | Uno 3 PDFs en uno | ✅ |
-| 5.3 | Insertar páginas de otro PDF o imágenes | Añado una imagen como página | ⬜ |
+| 5.3 | Insertar páginas de otro PDF o imágenes | Añado una imagen como página | ✅ |
 | 5.4 | De foto a PDF (recortar, enderezar, mejorar) | Hago una foto a un papel y queda como escaneado | ⬜ |
 | 5.5 | Exportar páginas como imagen o el documento como texto | Saco una página en PNG | ⬜ |
 | 5.6 | Tapar datos de verdad | Tapo mi DNI y no se puede recuperar copiando el texto | ⬜ |
@@ -1748,6 +1748,26 @@ Notas de la Fase 5:
   - **Extraer páginas**: las elegidas en las miniaturas (clic derecho) o desde
     Ctrl+K, a un documento nuevo que se abre.
   - Con cambios sin guardar: «Guardar y seguir» (usan el archivo guardado).
+- **5.3 Insertar páginas** (`page_orders.InsertPages`). Modo Organizar →
+  «Insertar páginas» (o clic derecho en una miniatura → «Insertar páginas
+  después…»): se eligen PDF e imágenes (varios a la vez) y dónde van (después
+  de la página que se lee, al principio, al final o tras la página N). Cada
+  imagen es una hoja A4 (tumbada si la foto es apaisada) con la foto entera.
+  Pide la contraseña de los PDF protegidos. Deshacer las quita; invalidan las
+  firmas con certificado (avisa al guardar).
+- **Arreglo pedido por Julen (23/11):** con un marcador o con «Texto» en la
+  mano, un clic en tu propio texto lo coge (como en PowerPoint) y arrastrándolo
+  se mueve; un segundo clic, doble clic o Intro lo abre para escribir.
+- **Arreglos del tema 8 de Julen (23/11):**
+  - Seleccionar cogía varias filas: la fuente Cambria de ese documento (hecho
+    con Word) dice que sus letras miden unas cinco líneas. Las letras de una
+    fuente con medidas absurdas se toman de la altura de su tamaño, como hace
+    Adobe (`search.read_page_text`, `TALL_FONT`).
+  - «Reconocer texto» no hacía nada: la última página es solo un logotipo
+    grande (55 % de la hoja) y se tomaba por escaneada. Ahora una página es
+    escaneada si la imagen cubre al menos el 75 % (`ocr.BIG_PICTURE`). Y si al
+    reconocer no aparece ninguna letra, lo dice («No hay letras que
+    reconocer…») en lugar de dar por reconocida la página.
   - Regla para el resto de la fase: cada orden nueva que cambie páginas se
     añade a `_breaks_signatures` (`ui/pdf_view.py`) y define `layout`.
 

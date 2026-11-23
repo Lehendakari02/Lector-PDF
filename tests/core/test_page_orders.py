@@ -8,9 +8,12 @@ import pytest
 from app.core.commands import CommandError, command_from_dict
 from app.core.page_orders import (
     DeletePages,
+    InsertPages,
     MovePages,
     RotatePages,
+    SourceNeedsPassword,
     delete_pages,
+    insert_pages,
     move_pages,
     moved_order,
     rotate_pages,
@@ -246,3 +249,72 @@ def test_the_fields_of_pages_taken_away_leave_the_form(doc):
     order.undo(doc)
     kind, fields = doc.xref_get_key(doc.pdf_catalog(), "AcroForm/Fields")
     assert len(fields.strip("[] ").split()) == 3
+
+
+# ---- putting pages in -------------------------------------------------------
+
+
+def make_pdf(path, name, count, size=(595, 842)):
+    other = pymupdf.open()
+    for number in range(count):
+        page = other.new_page(width=size[0], height=size[1])
+        page.insert_text((72, 72), f"{name}{number + 1}")
+    other.save(path)
+    other.close()
+    return path
+
+
+def test_pages_of_another_pdf_go_where_asked_and_undo_takes_them(doc, tmp_path):
+    other = make_pdf(tmp_path / "otro.pdf", "X", 2, (300, 400))
+    order = insert_pages(1, [other])
+    assert order.sizes == ((300.0, 400.0), (300.0, 400.0))
+    order.apply(doc)
+    assert texts(doc) == ["P1", "X1", "X2", "P2", "P3", "P4", "P5"]
+    order.undo(doc)
+    assert texts(doc) == ["P1", "P2", "P3", "P4", "P5"]
+
+
+def test_only_some_pages_and_at_the_end(doc, tmp_path):
+    other = make_pdf(tmp_path / "otro.pdf", "X", 4)
+    insert_pages(5, [(other, None, [3, 1])]).apply(doc)
+    assert texts(doc)[5:] == ["X4", "X2"]
+
+
+def test_a_picture_is_a_page_the_size_of_a_sheet(doc, tmp_path):
+    picture = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 400, 200), False)
+    picture.clear_with(200)
+    path = tmp_path / "foto.png"
+    picture.save(path)
+    order = insert_pages(0, [path])
+    assert order.sizes == ((842.0, 595.0),), "wider than tall: a sheet on its side"
+    order.apply(doc)
+    assert doc[0].get_images()
+    assert doc.page_count == 6
+
+
+def test_a_pdf_with_a_password_needs_it(doc, sample):
+    locked = sample("con-contrasena.pdf")
+    with pytest.raises(SourceNeedsPassword):
+        insert_pages(0, [locked])
+    assert insert_pages(0, [(locked, "lector")]).sizes
+
+
+def test_the_layout_of_pages_put_in(doc, tmp_path):
+    other = make_pdf(tmp_path / "otro.pdf", "X", 2, (300, 400))
+    order = insert_pages(2, [other])
+    before = sizes(doc)
+    mapping, after = order.layout(before, False)
+    order.apply(doc)
+    assert after == sizes(doc)
+    assert mapping == [0, 1, 4, 5, 6]
+    back, again = order.layout(after, True)
+    assert back == [0, 1, None, None, 2, 3, 4]
+    assert again == before
+
+
+def test_putting_pages_goes_through_the_journal(doc, tmp_path):
+    other = make_pdf(tmp_path / "otro.pdf", "X", 1)
+    read = journal_round_trip(insert_pages(0, [other]))
+    assert isinstance(read, InsertPages)
+    read.apply(doc)
+    assert texts(doc)[0] == "X1"

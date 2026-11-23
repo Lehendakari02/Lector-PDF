@@ -311,6 +311,13 @@ FEATURES: list[Feature] = [
         "Quitar páginas del documento",
         "borrar quitar",
     ),
+    _f(
+        "insert_pages",
+        ORGANIZE,
+        "Insertar páginas",
+        "Añadir páginas de otro PDF o imágenes",
+        "añadir meter imagen foto pdf páginas",
+    ),
     _f("merge", ORGANIZE, "Unir", "Juntar varios PDFs en uno", "juntar combinar fusionar"),
     _f("split", ORGANIZE, "Dividir", "Separar el documento en varios", "separar extraer partir"),
     _f(

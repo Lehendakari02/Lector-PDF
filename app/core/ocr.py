@@ -35,7 +35,7 @@ MIN_DPI = 150
 MAX_DPI = 300
 # A page with fewer letters than this and a big picture is taken for a scan.
 FEW_LETTERS = 20
-BIG_PICTURE = 0.5  # part of the page the picture covers
+BIG_PICTURE = 0.75  # part of the page a scan covers (a logo or a drawing covers less)
 
 Rect = tuple[float, float, float, float]
 

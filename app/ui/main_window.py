@@ -55,6 +55,7 @@ from app.core import (
     my_data,
     my_signature,
     ocr,
+    page_orders,
     pen,
     pictures,
     reading,
@@ -68,7 +69,7 @@ from app.core import (
     symbols,
     tab_sleep,
 )
-from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
+from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE, CommandError
 from app.core.doc_links import DocLink, relative_file, resolve
 from app.core.document import PdfDocument, PdfOpenError, engine_version
 from app.core.drawing import (
@@ -152,7 +153,7 @@ from app.ui.margin_dialog import MarginChoice, MarginDialog
 from app.ui.margin_dialog import remember as remember_margin
 from app.ui.margin_dialog import remembered as remembered_margin
 from app.ui.my_data_dialog import MyDataDialog, datum_names
-from app.ui.organize_dialogs import MergeDialog, SplitDialog
+from app.ui.organize_dialogs import InsertWhereDialog, MergeDialog, SplitDialog
 from app.ui.page_box import PageBox
 from app.ui.password_dialog import PasswordDialog
 from app.ui.pdf_view import SIGN_TOOL, PdfView
@@ -432,6 +433,9 @@ class MainWindow(QMainWindow):
         self.save_first_answer: bool | None = None
         self.merge_answer: list[Path] | None = None
         self.split_answer = None
+        # For the tests, Insertar páginas: the files chosen and where they go.
+        self.insert_files_answer: list[Path] | None = None
+        self.insert_where_answer: int | None = None
         self.organize_target_answer = None
         self._then_when_saved = None  # (page, what to do) once it is saved
         self.save_as_answer = None
@@ -504,6 +508,7 @@ class MainWindow(QMainWindow):
             "merge": self.merge_documents,
             "split": self.split_document,
             "extract_pages": lambda: self.extract_pages(),
+            "insert_pages": lambda: self.insert_pages(),
         }
         self._mark_pending_features()
         self._build_key_commands()
@@ -1205,6 +1210,69 @@ class MainWindow(QMainWindow):
             if box.clickedButton() is show:
                 QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
         return True
+
+    def insert_pages(self, files: list[Path] | None = None, at: int | None = None) -> bool:
+        """«Insertar páginas»: the pages of other PDFs, or pictures (one page
+        each), put in the document in front. Deshacer takes them away."""
+        view = self.pdf_view
+        if view.page_count == 0:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return False
+        if files is None:
+            files = self.insert_files_answer
+        if files is None:
+            folder = str(self.current_document.path.parent) if self.current_document.path else ""
+            images = " ".join(f"*.{kind}" for kind in page_orders.IMAGE_TYPES)
+            chosen, _filter = QFileDialog.getOpenFileNames(
+                self,
+                self.tr("Elegir los PDF o las imágenes que se insertan"),
+                folder,
+                self.tr("PDF e imágenes (*.pdf {0});;PDF (*.pdf);;Imágenes ({0})").format(images),
+            )
+            files = [Path(name) for name in chosen]
+        if not files:
+            return False
+        if at is None:
+            at = self.insert_where_answer
+        if at is None:
+            what = (
+                self.tr("las páginas de «{0}»").format(Path(files[0]).name)
+                if len(files) == 1
+                else self.tr("las páginas de {0} archivos").format(len(files))
+            )
+            dialog = InsertWhereDialog(self, what, view.page_count, max(0, view.current_page))
+            if dialog.exec() != InsertWhereDialog.DialogCode.Accepted:
+                return False
+            at = dialog.at
+        sources: list = [Path(name) for name in files]
+        while True:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            try:
+                done = view.insert_pages(at, sources)
+            except page_orders.SourceNeedsPassword as locked:
+                QApplication.restoreOverrideCursor()
+                unlocked = self.ask_password(Path(locked.path))
+                if unlocked is None:
+                    return False
+                sources = [
+                    (source, unlocked.password) if source == Path(locked.path) else source
+                    for source in sources
+                ]
+                continue
+            except CommandError as error:
+                QApplication.restoreOverrideCursor()
+                self._combine_failed(error, "insertar páginas")
+                return False
+            QApplication.restoreOverrideCursor()
+            break
+        if done:
+            self.statusBar().showMessage(
+                self.tr(
+                    "Páginas insertadas desde la página {0}. Deshacer (Ctrl+Z) las quita."
+                ).format(at + 1),
+                STATUS_MESSAGE_MS,
+            )
+        return done
 
     def extract_pages(self, pages: list[int] | None = None) -> bool:
         """«Extraer páginas»: the pages picked (or the one being read) into a
@@ -3370,6 +3438,7 @@ class MainWindow(QMainWindow):
         page.side_panel.tab_changed.connect(self._side_tab_changed)
         page.side_panel.thumbnails.delete_wanted.connect(lambda pages: self.delete_pages(pages))
         page.side_panel.thumbnails.extract_wanted.connect(lambda pages: self.extract_pages(pages))
+        page.side_panel.thumbnails.insert_wanted.connect(lambda at: self.insert_pages(at=at))
         # Ctrl+C and Ctrl+A belong to the document only while it has the keyboard:
         # in the search box they must keep copying and selecting what is typed.
         # The same goes for Ctrl+Z: in a text box it undoes what was typed there.
@@ -4728,8 +4797,8 @@ class MainWindow(QMainWindow):
         page.text_recognition = run
         run.progressed.connect(page.ocr_banner.show_progress)
         run.finished.connect(
-            lambda written, total, failed, cancelled, p=page: self._text_recognised(
-                p, written, total, failed, cancelled, replace
+            lambda written, total, failed, cancelled, p=page, r=run: self._text_recognised(
+                p, written, total, failed, cancelled, replace, r.empty
             )
         )
         run.failed.connect(self._text_recognition_failed)
@@ -4744,6 +4813,7 @@ class MainWindow(QMainWindow):
         failed: int,
         cancelled: bool,
         again: bool = False,
+        empty: int = 0,
     ) -> None:
         page.text_recognition = None
         page.ocr_banner.finish()
@@ -4754,6 +4824,18 @@ class MainWindow(QMainWindow):
                 ).format(written)
                 if written
                 else self.tr("Reconocimiento cancelado.")
+            )
+        elif written == 0 and empty:
+            message = (
+                self.tr(
+                    "No hay letras que reconocer: esa página es solo una imagen "
+                    "(un logotipo o un dibujo)."
+                )
+                if empty == 1
+                else self.tr(
+                    "No hay letras que reconocer: esas {0} páginas son solo imágenes "
+                    "(logotipos o dibujos)."
+                ).format(empty)
             )
         elif written == 0:
             message = self.tr("No se ha podido reconocer el texto de ninguna página.")

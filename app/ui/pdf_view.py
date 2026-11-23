@@ -2920,6 +2920,15 @@ class PdfView(QAbstractScrollArea):
             return False  # they are there already
         return self._do(page_orders.move_pages(pages, to))
 
+    def insert_pages(self, at: int, sources) -> bool:
+        """Put the pages of other documents or pictures (see
+        ``page_orders.insert_pages``) at place ``at``. Raises ``CommandError``
+        if one cannot be read (``SourceNeedsPassword`` if it needs one)."""
+        if self._document is None:
+            return False
+        at = max(0, min(at, self.page_count))
+        return self._do(page_orders.insert_pages(at, sources))
+
     def delete_pages(self, pages) -> bool:
         """Take those pages away (never all of them)."""
         pages = sorted({page for page in pages if 0 <= page < self.page_count})
@@ -4553,6 +4562,7 @@ def _breaks_signatures(order) -> bool:
             page_orders.RotatePages,
             page_orders.MovePages,
             page_orders.DeletePages,
+            page_orders.InsertPages,
         ),
     )
 

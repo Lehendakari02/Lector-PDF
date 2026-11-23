@@ -313,3 +313,55 @@ class SplitDialog(QDialog):
         self.note.setText(text)
         self.note.setVisible(bool(text))
         self.split_button.setEnabled(bool(parts))
+
+
+class InsertWhereDialog(QDialog):
+    """Where the pages go. After ``exec()`` returns ``Accepted``: ``at``,
+    the place the first of them takes (counting from 0)."""
+
+    def __init__(self, parent: QWidget | None, what: str, count: int, current: int) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(self.tr("Insertar páginas"))
+        self.count = count
+        explanation = QLabel(self.tr("¿Dónde van {0}?").format(what))
+        explanation.setWordWrap(True)
+        self.after_current = QRadioButton(
+            self.tr("Después de la página que estás leyendo ({0})").format(current + 1)
+        )
+        self.after_current.setProperty("at", current + 1)
+        self.first = QRadioButton(self.tr("Al principio"))
+        self.first.setProperty("at", 0)
+        self.last = QRadioButton(self.tr("Al final"))
+        self.last.setProperty("at", count)
+        self.after_page = QRadioButton(self.tr("Después de la página:"))
+        self.page_box = QSpinBox()
+        self.page_box.setRange(1, max(1, count))
+        self.page_box.setValue(max(1, current + 1))
+        self.page_box.setAccessibleName(self.tr("Número de página"))
+        self.page_box.valueChanged.connect(lambda _value: self.after_page.setChecked(True))
+        self.after_current.setChecked(True)
+        grid = QGridLayout()
+        grid.addWidget(self.after_current, 0, 0, 1, 2)
+        grid.addWidget(self.first, 1, 0, 1, 2)
+        grid.addWidget(self.last, 2, 0, 1, 2)
+        grid.addWidget(self.after_page, 3, 0)
+        grid.addWidget(self.page_box, 3, 1)
+        grid.setColumnStretch(1, 1)
+        buttons = QDialogButtonBox()
+        buttons.addButton(self.tr("Insertar"), QDialogButtonBox.ButtonRole.AcceptRole)
+        buttons.addButton(self.tr("Cancelar"), QDialogButtonBox.ButtonRole.RejectRole)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout = QVBoxLayout(self)
+        layout.addWidget(explanation)
+        layout.addLayout(grid)
+        layout.addWidget(buttons)
+
+    @property
+    def at(self) -> int:
+        if self.after_page.isChecked():
+            return self.page_box.value()
+        for button in (self.after_current, self.first, self.last):
+            if button.isChecked():
+                return int(button.property("at"))
+        return self.count

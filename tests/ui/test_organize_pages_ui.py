@@ -280,3 +280,60 @@ def test_a_power_cut_does_not_lose_the_new_order(window, opened, settings, qt_ap
         assert after[:3] == [before[2], before[0], before[1]]
         assert after[3:] == before[3:]
         assert rotations(path)[1] == 90
+
+
+def test_insertar_paginas_from_a_pdf_and_a_picture(window, opened, sample, tmp_path, wait_until):
+    view, path = opened()
+    before = page_texts(path)
+    picture = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 100, 200), False)
+    picture.clear_with(120)
+    photo = tmp_path / "foto.png"
+    picture.save(photo)
+    other = tmp_path / "partido.pdf"
+    shutil.copy(sample("texto-partido.pdf"), other)
+    with pymupdf.open(other) as doc:
+        other_texts = [page.get_text()[:200] for page in doc]
+    window.insert_files_answer = [other, photo]
+    window.insert_where_answer = 1
+    window.set_mode(Mode.ORGANIZE)
+    window.feature_actions["insert_pages"].trigger()
+    settle(view, wait_until)
+    added = len(other_texts) + 1
+    assert view.page_count == len(before) + added
+    assert window.side_panel.thumbnails.count() == len(before) + added
+    assert "insertadas" in window.statusBar().currentMessage()
+    assert view.breaks_signatures
+    window.save_document()
+    settle(view, wait_until)
+    after = page_texts(path)
+    assert after[0] == before[0]
+    assert after[1 : 1 + len(other_texts)] == other_texts
+    assert after[1 + added :] == before[1:]
+    assert view.undo()
+    settle(view, wait_until)
+    assert view.page_count == len(before)
+
+
+def test_insertar_asks_the_password_of_a_locked_pdf(window, opened, sample, wait_until):
+    view, _path = opened()
+    count = view.page_count
+    asked = []
+    from app.core.document import PdfDocument
+
+    window.ask_password = lambda path: asked.append(path) or PdfDocument(path, "lector")
+    assert window.insert_pages([sample("con-contrasena.pdf")], at=0)
+    settle(view, wait_until)
+    assert asked and view.page_count > count
+
+
+def test_insertar_from_the_miniatures_goes_after_the_page(window, opened, sample, wait_until):
+    view, path = opened()
+    before = page_texts(path)
+    window.insert_files_answer = [sample("texto-partido.pdf")]
+    window.show_side_panel(Tab.THUMBNAILS)
+    window.side_panel.thumbnails.insert_wanted.emit(3)
+    settle(view, wait_until)
+    window.save_document()
+    settle(view, wait_until)
+    assert page_texts(path)[:3] == before[:3]
+    assert page_texts(path)[-5:] == before[-5:]
