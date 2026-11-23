@@ -4,6 +4,7 @@ Every tab of the window is one of these. Each has its own helper process to
 draw the pages, so a document that gives trouble never disturbs the others.
 """
 
+import time
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -41,6 +42,7 @@ class DocumentPage(QWidget):
         self.autosave_told = False
         self.slowest_page = 0.0  # seconds, for the drawing figure of test builds
         self.mode = Mode.READ  # the work mode this document is used in
+        self.last_seen = time.monotonic()  # when it was last on screen (sleeping tabs)
         self.view = PdfView()
         self.search_panel = SearchPanel(self.view)
         self.search_panel.setMinimumWidth(SEARCH_PANEL_WIDTH)
@@ -81,6 +83,17 @@ class DocumentPage(QWidget):
             sizes = self.splitter.sizes()
             extra = sizes[0] - SIDE_PANEL_WIDTH
             self.splitter.setSizes([SIDE_PANEL_WIDTH, sizes[1] + extra, sizes[2]])
+
+    @property
+    def asleep(self) -> bool:
+        return self.view.asleep
+
+    def sleep(self) -> bool:
+        """Free the memory of a document out of sight (see ``app.core.tab_sleep``).
+        Not while its scanned pages are being read."""
+        if self.text_recognition is not None:
+            return False
+        return self.view.sleep()
 
     def shutdown(self) -> None:
         """Close the document and stop its helper process."""

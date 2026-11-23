@@ -133,6 +133,14 @@ class Fit(Enum):
 PAGES_AHEAD = 3
 PAGES_BEHIND = 1
 CACHE_BYTES = 400 * 1024 * 1024
+# Very close, a page is not drawn whole: only the pieces ("tiles") in sight are
+# drawn sharp, over a lighter picture of the whole page, like Adobe Reader or a
+# map. A page bigger than this, in pixels, goes by pieces.
+TILES_FROM_PIXELS = 12_000_000
+TILE_SIZE = 1024  # pixels on each side of a piece
+BASE_PIXELS = 4_000_000  # the lighter picture of the whole page under the pieces
+TILE_CACHE_BYTES = 160 * 1024 * 1024
+TILES_AROUND = 1  # pieces drawn ahead on each side of those in sight
 # Search results: see-through, so the text stays readable in light and dark pages.
 # Colours painted on the pages. They do not follow the light or dark appearance:
 # a page is a white sheet in both.
@@ -408,6 +416,13 @@ class PdfView(QAbstractScrollArea):
         self._total_height = 0
         self._content_width = 0
         self._cache: OrderedDict[int, tuple[float, QImage]] = OrderedDict()
+        # Pieces of pages seen very close, by (page, column, row): (zoom, picture,
+        # left, top, edition). A piece is old when its page has changed since
+        # (its edition went up): it stays on screen until the new one comes.
+        self._tiles: dict[tuple[int, int, int], tuple[float, QImage, int, int, int]] = {}
+        self._tile_bytes = 0
+        self._editions: dict[int, int] = {}
+        self._out_of_sight = False  # hidden behind another tab (keeps few pictures)
         self._cache_bytes = 0
         self._current_page = -1
         self._shown_first = False
@@ -707,7 +722,7 @@ class PdfView(QAbstractScrollArea):
             self.pick(None)
             self.set_review(False)  # nothing to cover on a clean page
         # Every picture is of the other kind: they stay until the new ones come.
-        self._stale.update(range(self.page_count))
+        self._mark_stale(range(self.page_count))
         self._settling.clear()
         self._request_pages()
         self.viewport().update()
@@ -772,7 +787,7 @@ class PdfView(QAbstractScrollArea):
             self._resize(grown)
         # The pictures of those pages are old: they stay on screen until the
         # new ones arrive, so nothing blinks.
-        self._stale.update(page for page in pages if 0 <= page < self.page_count)
+        self._mark_stale(page for page in pages if 0 <= page < self.page_count)
         for page in pages:
             self._want_notes(page, again=True)  # what is on those pages may be different
         if getattr(order, "text_change", False):
@@ -826,6 +841,7 @@ class PdfView(QAbstractScrollArea):
                 self._cache[new] = kept
                 self._cache_bytes += kept[1].sizeInBytes()
         self._stale = {new for new in map(moved, self._stale) if new is not None}
+        self._forget_tiles()
         self._failed_pages = {new for new in map(moved, self._failed_pages) if new is not None}
         self._marks = {}
         self._current_mark = None
@@ -991,6 +1007,7 @@ class PdfView(QAbstractScrollArea):
         self._sizes = []
         self._cache.clear()
         self._cache_bytes = 0
+        self._forget_tiles()
         self._failed_pages = set()
         self._current_page = -1
         self._shown_first = False
@@ -1335,6 +1352,7 @@ class PdfView(QAbstractScrollArea):
         self._rotation = degrees
         self._cache.clear()  # every picture was drawn the other way round
         self._cache_bytes = 0
+        self._forget_tiles()
         self._layout()
         self.scroll_to_page(page)
         self.rotation_changed.emit(degrees)
@@ -1515,8 +1533,8 @@ class PdfView(QAbstractScrollArea):
         self.viewport().update()
 
     def _request_pages(self) -> None:
-        if self._document is None:
-            return
+        if self._document is None or self._out_of_sight:
+            return  # nothing to draw, or out of sight: drawn when it comes back
         visible = self._visible_pages()
         if not len(visible):
             return
@@ -1530,16 +1548,164 @@ class PdfView(QAbstractScrollArea):
         self._wanted = []
         room = CACHE_BYTES
         for page in order:
-            room -= min(self._widths[page] * self._heights[page], MAX_PIXELS_PER_PAGE) * 3
+            whole = self._page_zoom(page)
+            pixels = self._widths[page] * self._heights[page] * (whole / zoom) ** 2
+            room -= min(pixels, MAX_PIXELS_PER_PAGE) * 3
             if room < 0 and page not in visible:
                 break
             if page in self._failed_pages:
                 continue  # it cannot be drawn: asking again would only fail again
-            if page not in self._cache or self._cache[page][0] != zoom or page in self._stale:
-                self._wanted.append(RenderRequest(page, zoom, self._rotation, self._look(page)))
+            if page not in self._cache or self._cache[page][0] != whole or page in self._stale:
+                self._wanted.append(RenderRequest(page, whole, self._rotation, self._look(page)))
+        # Very close: the pieces in sight, sharp, after the light whole pages.
+        for page in visible:
+            if self._tiled(page) and page not in self._failed_pages:
+                self._wanted += self._wanted_tiles(page, zoom)
         self.service.want(self._wanted)
         for page in visible:
             self._want_notes(page)
+
+    # ---- pages seen very close: by pieces ------------------------------------
+
+    def _tiled(self, page: int) -> bool:
+        """Whether this page is too big at this zoom to be drawn whole."""
+        return self._widths[page] * self._heights[page] > TILES_FROM_PIXELS
+
+    def _page_zoom(self, page: int) -> float:
+        """The zoom the whole page is drawn at: the one on screen or, for a page
+        seen by pieces, a lighter one that is shown stretched under them."""
+        zoom = self._render_zoom()
+        if not self._tiled(page):
+            return zoom
+        pixels = self._widths[page] * self._heights[page]
+        return round(zoom * (BASE_PIXELS / pixels) ** 0.5, 4)
+
+    def _tiles_in_sight(self, page: int, around: int = 0) -> list[tuple[int, int]]:
+        """The (column, row) of the pieces of a page on screen, and ``around`` more
+        on each side, the nearest to the middle of the window first."""
+        width, height = self._widths[page], self._heights[page]
+        left = self._page_left(page)
+        top = self._tops[page] - self._scroll_y()
+        view_w = self._to_pixels(self.viewport().width())
+        view_h = self._to_pixels(self.viewport().height())
+        columns = -(-width // TILE_SIZE)
+        rows = -(-height // TILE_SIZE)
+        first_col = max(0, (0 - left) // TILE_SIZE - around)
+        last_col = min(columns - 1, (view_w - 1 - left) // TILE_SIZE + around)
+        first_row = max(0, (0 - top) // TILE_SIZE - around)
+        last_row = min(rows - 1, (view_h - 1 - top) // TILE_SIZE + around)
+        middle_x, middle_y = view_w / 2 - left, view_h / 2 - top
+        found = [
+            (column, row)
+            for row in range(first_row, last_row + 1)
+            for column in range(first_col, last_col + 1)
+        ]
+        found.sort(
+            key=lambda place: (
+                ((place[0] + 0.5) * TILE_SIZE - middle_x) ** 2
+                + ((place[1] + 0.5) * TILE_SIZE - middle_y) ** 2
+            )
+        )
+        return found
+
+    def _tile_fresh(self, key: tuple[int, int, int], zoom: float) -> bool:
+        tile = self._tiles.get(key)
+        return tile is not None and tile[0] == zoom and tile[4] == self._editions.get(key[0], 0)
+
+    def _wanted_tiles(self, page: int, zoom: float) -> list[RenderRequest]:
+        wanted = []
+        for column, row in self._tiles_in_sight(page, TILES_AROUND):
+            if self._tile_fresh((page, column, row), zoom):
+                continue
+            left, top = column * TILE_SIZE, row * TILE_SIZE
+            right = min(left + TILE_SIZE, self._widths[page])
+            bottom = min(top + TILE_SIZE, self._heights[page])
+            wanted.append(
+                RenderRequest(
+                    page, zoom, self._rotation, self._look(page), (left, top, right, bottom)
+                )
+            )
+        return wanted
+
+    def _store_tile(self, result: RenderedPage) -> None:
+        if result.zoom != self._render_zoom() or not self._tiled(result.page):
+            return  # asked for at another zoom
+        image = QImage(
+            result.samples,
+            result.width,
+            result.height,
+            result.stride,
+            QImage.Format.Format_RGB888,
+        ).copy()
+        key = (result.page, result.tile[0] // TILE_SIZE, result.tile[1] // TILE_SIZE)
+        old = self._tiles.pop(key, None)
+        if old is not None:
+            self._tile_bytes -= old[1].sizeInBytes()
+        edition = self._editions.get(result.page, 0)
+        self._tiles[key] = (result.zoom, image, result.left, result.top, edition)
+        self._tile_bytes += image.sizeInBytes()
+        self._trim_tiles()
+        if result.page in self._settling and not self._waiting_tiles(result.page):
+            self._settling.pop(result.page, None)  # every piece in sight has it now
+        if result.page in self._visible_pages():
+            self.viewport().update()
+
+    def _waiting_tiles(self, page: int) -> bool:
+        """Whether a piece of this page in sight is still missing or old."""
+        zoom = self._render_zoom()
+        return any(
+            not self._tile_fresh((page, column, row), zoom)
+            for column, row in self._tiles_in_sight(page)
+        )
+
+    def _trim_tiles(self) -> None:
+        """Forget pieces drawn at another zoom first, then the farthest from sight."""
+        if self._tile_bytes <= TILE_CACHE_BYTES:
+            return
+        zoom = self._render_zoom()
+        visible = self._visible_pages()
+        in_sight = {
+            (page, *place)
+            for page in visible
+            if self._tiled(page)
+            for place in self._tiles_in_sight(page)
+        }
+
+        def worth(key) -> tuple:
+            page, column, row = key
+            if key in in_sight:
+                return (2, 0)
+            same_zoom = self._tiles[key][0] == zoom
+            distance = abs(page - self._current_page) * 1000 + column + row
+            return (1 if same_zoom else 0, -distance)
+
+        for key in sorted(self._tiles, key=worth):
+            if self._tile_bytes <= TILE_CACHE_BYTES or key in in_sight:
+                break
+            self._tile_bytes -= self._tiles.pop(key)[1].sizeInBytes()
+
+    def _forget_tiles(self, keep_in_sight: bool = False) -> None:
+        kept: set[tuple[int, int, int]] = set()
+        if keep_in_sight and self._tops:
+            kept = {
+                (page, *place)
+                for page in self._visible_pages()
+                if self._tiled(page)
+                for place in self._tiles_in_sight(page)
+            }
+        for key in [key for key in self._tiles if key not in kept]:
+            self._tile_bytes -= self._tiles.pop(key)[1].sizeInBytes()
+
+    def _mark_stale(self, pages) -> None:
+        """These pages have changed: their pictures are old. They stay on screen
+        until the new ones arrive, so nothing blinks."""
+        for page in pages:
+            self._stale.add(page)
+            self._editions[page] = self._editions.get(page, 0) + 1
+
+    def tile_count(self) -> int:
+        """How many pieces of pages seen very close are drawn and kept."""
+        return len(self._tiles)
 
     def _look(self, page: int) -> bool | tuple[str, ...]:
         """What of the annotations a page is drawn with (see ``RenderRequest``)."""
@@ -1573,6 +1739,11 @@ class PdfView(QAbstractScrollArea):
             return  # drawn before the view was turned
         if result.annotations != self._look(result.page):
             return  # drawn before the annotations were hidden or shown
+        if self._out_of_sight and result.page not in self._visible_pages():
+            return  # asked for before another tab came in front
+        if result.tile is not None:
+            self._store_tile(result)
+            return
         image = QImage(
             result.samples,
             result.width,
@@ -1581,7 +1752,10 @@ class PdfView(QAbstractScrollArea):
             QImage.Format.Format_RGB888,
         ).copy()  # own copy: the bytes object will not outlive this call
         self._stale.discard(result.page)
-        if result.page not in {sketch[0] for sketch in self._sent_sketches.values()}:
+        sketching = {sketch[0] for sketch in self._sent_sketches.values()}
+        if result.page not in sketching and not (
+            self._tiled(result.page) and self._waiting_tiles(result.page)
+        ):
             self._settling.pop(result.page, None)  # the picture has it now
         old = self._cache.pop(result.page, None)
         if old is not None:
@@ -1655,6 +1829,8 @@ class PdfView(QAbstractScrollArea):
                 painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
                 painter.drawImage(target, cached[1])
                 painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
+            if self._tiled(page):
+                self._paint_tiles(painter, page, target, zoom)
             self._tint_paper(painter, target)
             for hit in self._marks.get(page, ()):
                 color = CURRENT_MARK_COLOR if hit is self._current_mark else MARK_COLOR
@@ -1745,6 +1921,13 @@ class PdfView(QAbstractScrollArea):
         else:
             self._uncovered.add(name)
         self.viewport().update()
+
+    def _paint_tiles(self, painter: QPainter, page: int, target: QRect, zoom: float) -> None:
+        """The sharp pieces of a page seen very close, over its lighter picture."""
+        for column, row in self._tiles_in_sight(page):
+            tile = self._tiles.get((page, column, row))
+            if tile is not None and tile[0] == zoom:
+                painter.drawImage(target.left() + tile[2], target.top() + tile[3], tile[1])
 
     def _paint_doc_links(self, painter: QPainter, page: int, target: QRect, zoom: float) -> None:
         """A dotted line under the words that open another document."""
@@ -1985,6 +2168,51 @@ class PdfView(QAbstractScrollArea):
         if abs(zoom - self._zoom) > 1e-6:
             self._return_to(place)
         self._scrolled()
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        self._out_of_sight = False
+        if self.service.asleep:
+            self.wake()
+        elif not event.spontaneous():
+            self._request_pages()  # the pages forgotten while out of sight
+
+    def hideEvent(self, event) -> None:  # noqa: N802
+        super().hideEvent(event)
+        if not event.spontaneous():  # another tab in front, not the window minimised
+            self._out_of_sight = True
+            self.keep_only_shown()
+
+    # ---- sleeping while out of sight ---------------------------------------
+
+    def keep_only_shown(self) -> None:
+        """Forget the drawn pages that are not on screen: a document out of sight
+        keeps only the pictures it was showing, to show them again at once."""
+        shown = set(self._visible_pages())
+        for page in [page for page in self._cache if page not in shown]:
+            self._cache_bytes -= self._cache.pop(page)[1].sizeInBytes()
+        self._forget_tiles(keep_in_sight=True)
+
+    @property
+    def asleep(self) -> bool:
+        return self.service.asleep
+
+    def sleep(self) -> bool:
+        """Stop the helper of a document out of sight, to free its memory (like
+        the sleeping tabs of Edge). Nothing is lost: the document, its changes
+        and its place stay, and it wakes up by itself when it is needed."""
+        if self._document is None or self.isVisible() or self.saving:
+            return False
+        if not self.service.sleep():
+            return False
+        self.keep_only_shown()
+        return True
+
+    def wake(self) -> None:
+        """Ask again for what the document needs; the first request starts a
+        new helper, which opens the document with its changes."""
+        if self._document is not None:
+            self._helper_restarted()
 
     def changeEvent(self, event) -> None:  # noqa: N802
         super().changeEvent(event)
@@ -2672,13 +2900,13 @@ class PdfView(QAbstractScrollArea):
         QTimer.singleShot(0, self._place_picked_bar)
         if self._hiding is not None:
             page, self._hiding = self._hiding[0], None
-            self._stale.add(page)  # drawn again with the text in its place
+            self._mark_stale([page])  # drawn again with the text in its place
             self._request_pages()
         self.setFocus()
 
     def _hide_while_editing(self, page: int, name: str) -> None:
         self._hiding = (page, name)
-        self._stale.add(page)
+        self._mark_stale([page])
         self._request_pages()
 
     def _editor_origin(self, origin: tuple[float, float]) -> tuple[float, float]:

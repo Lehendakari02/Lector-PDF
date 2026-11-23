@@ -400,6 +400,7 @@ def test_huge_pages_are_not_drawn_again_and_again(view, sample, wait_until, monk
     # With a lot of zoom, the pages ahead do not fit in memory next to the ones
     # being read. They used to be asked for, thrown away and asked for again.
     monkeypatch.setattr(pdf_view, "CACHE_BYTES", 50 * 1024 * 1024)
+    monkeypatch.setattr(pdf_view, "TILES_FROM_PIXELS", 10**12)  # whole pages, not pieces
     show(view, sample("boe.pdf"), wait_until)
     view.set_zoom(4.0)
     zoom = view._render_zoom()
