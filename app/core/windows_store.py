@@ -33,6 +33,11 @@ _BCRYPT_PAD_PKCS1 = 0x00000002
 _NCRYPT_WINDOW_HANDLE_PROPERTY = "HWND Handle"
 # Answers of Windows that mean "the person pressed Cancel".
 _CANCELLED = {0x8010006E, 0x80090036, 0x000004C7, 0x800704C7}
+# A wrong PIN or password (SCARD_W_WRONG_CHV, ERROR_INVALID_PASSWORD as HRESULT).
+_WRONG_PIN = {0x8010006B, 0x80070056}
+_CARD_BLOCKED = {0x8010006C}  # SCARD_W_CHV_BLOCKED: too many wrong PINs
+# The card is not in the reader (SCARD_W_REMOVED_CARD, SCARD_E_NO_SMARTCARD).
+_NO_CARD = {0x80100069, 0x8010000C}
 _HASH_NAMES = {"sha1": "SHA1", "sha256": "SHA256", "sha384": "SHA384", "sha512": "SHA512"}
 
 
@@ -42,6 +47,18 @@ class StoreError(Exception):
 
 class SigningCancelled(StoreError):
     """The person closed the password or PIN window of Windows."""
+
+
+class WrongPin(StoreError):
+    """The PIN or password typed in the window of Windows is not the right one."""
+
+
+class CardBlocked(StoreError):
+    """The card is locked after too many wrong PINs."""
+
+
+class NoCard(StoreError):
+    """The card of the certificate is not in the reader."""
 
 
 @dataclass(frozen=True)
@@ -398,6 +415,13 @@ class OpenKey:
 
 def _fail(what: str, code: int) -> None:
     code &= 0xFFFFFFFF
+    kind = StoreError
     if code in _CANCELLED:
-        raise SigningCancelled(f"{what}: cancelled (0x{code:08X})")
-    raise StoreError(f"{what} (0x{code:08X})")
+        kind = SigningCancelled
+    elif code in _WRONG_PIN:
+        kind = WrongPin
+    elif code in _CARD_BLOCKED:
+        kind = CardBlocked
+    elif code in _NO_CARD:
+        kind = NoCard
+    raise kind(f"{what} (0x{code:08X})")

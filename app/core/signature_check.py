@@ -66,6 +66,28 @@ def trusted_roots() -> list:
     return roots
 
 
+def known_authorities() -> list:
+    """The intermediate authorities this computer knows (Windows' list): many
+    signatures made with other programs do not carry them inside."""
+    from asn1crypto import x509
+
+    from app.core import windows_store
+
+    if not windows_store.is_available():
+        return []
+    try:
+        found = windows_store.store_certificates(windows_store.INTERMEDIATE_STORE)
+    except windows_store.StoreError:
+        return []
+    authorities = []
+    for der in found:
+        try:
+            authorities.append(x509.Certificate.load(der))
+        except Exception:  # noqa: S112 - one unreadable certificate must not hide the rest
+            continue
+    return authorities
+
+
 def _name(name) -> str:
     fields = name.native
     for key in ("common_name", "organization_name"):
@@ -109,20 +131,30 @@ def _pages_of_fields(path: Path) -> dict[str, int]:
     return found
 
 
-def check_signatures(path: str | Path, roots: list | None = None) -> list[SignatureReport]:
+def check_signatures(
+    path: str | Path, roots: list | None = None, intermediates: list | None = None
+) -> list[SignatureReport]:
     """Every signature of the document, in the order they were made.
 
-    ``roots``: the authorities to trust (by default, the ones of Windows).
+    ``roots``: the authorities to trust (by default, the ones of Windows);
+    ``intermediates``: others that may complete a chain (the same).
     A document without signatures gives an empty list; one that cannot be
     read raises ``OSError`` or ``ValueError``.
     """
     from pyhanko.pdf_utils.reader import PdfFileReader
-    from pyhanko.sign.validation import validate_pdf_signature
+    from pyhanko.sign.validation import KeyUsageConstraints, validate_pdf_signature
     from pyhanko_certvalidator import ValidationContext
 
     path = Path(path)
     if roots is None:
         roots = trusted_roots()
+    if intermediates is None:
+        intermediates = known_authorities()
+    # Either mark makes a certificate good for signing, as Adobe takes it
+    # (the library asks for «non-repudiation» alone by default).
+    usage = KeyUsageConstraints(
+        key_usage={"digital_signature", "non_repudiation"}, match_all_key_usages=False
+    )
     pages = _pages_of_fields(path)
     reports = []
     with path.open("rb") as handle:
@@ -140,9 +172,12 @@ def check_signatures(path: str | Path, roots: list | None = None) -> list[Signat
                 signer = issuer = ""
             try:
                 context = ValidationContext(
-                    trust_roots=roots, allow_fetching=False, revocation_mode="soft-fail"
+                    trust_roots=roots,
+                    other_certs=intermediates,
+                    allow_fetching=False,
+                    revocation_mode="soft-fail",
                 )
-                status = validate_pdf_signature(signature, context)
+                status = validate_pdf_signature(signature, context, key_usage_settings=usage)
             except Exception as exc:
                 reports.append(
                     SignatureReport(

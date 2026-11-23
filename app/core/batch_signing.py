@@ -7,7 +7,10 @@ originals are never touched. The signature is invisible or visible in the
 same place of each document: a corner of its first or last page.
 
 A document that cannot be signed (a password, a damaged file) is left out and
-told; the others go on. Cancelling the PIN window stops the batch.
+told; the others go on. Cancelling the PIN window stops the batch, and so does
+any other problem with the key (a wrong PIN, the card out of its reader): the
+next document would ask for the PIN again, and a card locks itself after a few
+wrong ones.
 """
 
 from collections.abc import Callable, Iterable
@@ -18,6 +21,7 @@ from pyhanko.sign.signers import Signer
 
 from app.core.signing import (
     BOX_SIZE,
+    NotAllowed,
     PasswordProtected,
     SigningError,
     TimestampFailed,
@@ -38,7 +42,7 @@ CORNERS = (BOTTOM_RIGHT, BOTTOM_LEFT, TOP_RIGHT, TOP_LEFT)
 MARGIN = 36.0  # points between the box and the edges of the page: half an inch
 
 # What went wrong with one document.
-SIGNED, PASSWORD, FAILED = "firmado", "contraseña", "fallo"
+SIGNED, PASSWORD, NOT_ALLOWED, FAILED = "firmado", "contraseña", "no permitido", "fallo"
 
 
 @dataclass(frozen=True)
@@ -53,7 +57,7 @@ class Placement:
 class Outcome:
     source: Path
     target: Path | None
-    result: str  # SIGNED, PASSWORD or FAILED
+    result: str  # SIGNED, PASSWORD, NOT_ALLOWED or FAILED
     details: str = ""
 
 
@@ -68,25 +72,34 @@ def signed_copy_name(source: Path) -> Path:
     return target
 
 
-def visible_in(path: Path, placement: Placement, png: bytes | None) -> Visible:
+def visible_in(
+    path: Path, placement: Placement, png: bytes | None, password: str | None = None
+) -> Visible:
     """The box in the chosen corner of the chosen page of a document, as shown."""
     import pymupdf
 
     with pymupdf.open(path) as doc:
-        if doc.needs_pass:
-            raise PasswordProtected("Documents with a password cannot be signed yet")
+        if doc.needs_pass and not (password and doc.authenticate(password)):
+            raise PasswordProtected("The document asks for a password")
         number = 0 if placement.page == FIRST else doc.page_count - 1
         if number < 0:
             raise SigningError("The document has no pages")
         page = doc[number].rect
-    width = min(BOX_SIZE[0], page.width)
-    height = min(BOX_SIZE[1], page.height)
-    margin_x = min(MARGIN, (page.width - width) / 2)
-    margin_y = min(MARGIN, (page.height - height) / 2)
+    return corner_box(page.width, page.height, placement, number, png)
+
+
+def corner_box(
+    page_width: float, page_height: float, placement: Placement, number: int, png=None
+) -> Visible:
+    """The box in a corner of a page of that size (as shown)."""
+    width = min(BOX_SIZE[0], page_width)
+    height = min(BOX_SIZE[1], page_height)
+    margin_x = min(MARGIN, (page_width - width) / 2)
+    margin_y = min(MARGIN, (page_height - height) / 2)
     left = placement.corner in (BOTTOM_LEFT, TOP_LEFT)
     top = placement.corner in (TOP_LEFT, TOP_RIGHT)
-    x0 = margin_x if left else page.width - margin_x - width
-    y0 = margin_y if top else page.height - margin_y - height
+    x0 = margin_x if left else page_width - margin_x - width
+    y0 = margin_y if top else page_height - margin_y - height
     return Visible(number, (x0, y0, x0 + width, y0 + height), png)
 
 
@@ -98,14 +111,16 @@ def sign_many(
     timestamp_server: str = "",
     without_timestamp: Callable[[], bool] = lambda: False,
     progress: Callable[[int, Path], bool] = lambda _done, _path: True,
+    passwords: dict[Path, str] | None = None,
 ) -> list[Outcome]:
     """Sign each document into its «-firmado» copy. ``placement`` None:
     invisible. If the timestamping server fails, ``without_timestamp()`` says
     whether to go on without it (once for the whole batch). ``progress(n,
     path)`` is told before each one and stops the batch by answering False.
-    Cancelling the PIN raises ``SigningCancelled`` with the outcomes so far
-    in its ``outcomes``."""
-    from app.core.windows_store import SigningCancelled
+    ``passwords``: those of the documents that have one (the open ones).
+    Cancelling the PIN raises ``SigningCancelled``, and any other problem with
+    the key its ``StoreError``, with the outcomes so far in ``outcomes``."""
+    from app.core.windows_store import SigningCancelled, StoreError
 
     outcomes: list[Outcome] = []
     with key_kept_open(signer):
@@ -113,20 +128,25 @@ def sign_many(
             if not progress(done, source):
                 break
             target = signed_copy_name(source)
+            password = (passwords or {}).get(source)
             try:
-                visible = None if placement is None else visible_in(source, placement, png)
+                visible = (
+                    None if placement is None else visible_in(source, placement, png, password)
+                )
                 try:
-                    sign_pdf(source, target, signer, visible, timestamp_server)
+                    sign_pdf(source, target, signer, visible, timestamp_server, password)
                 except TimestampFailed:
                     if not without_timestamp():
                         raise
                     timestamp_server = ""
-                    sign_pdf(source, target, signer, visible)
-            except SigningCancelled as cancelled:
-                cancelled.outcomes = outcomes
+                    sign_pdf(source, target, signer, visible, password=password)
+            except StoreError as stopped:  # SigningCancelled too
+                stopped.outcomes = outcomes
                 raise
             except PasswordProtected as error:
                 outcomes.append(Outcome(source, None, PASSWORD, str(error)))
+            except NotAllowed as error:
+                outcomes.append(Outcome(source, None, NOT_ALLOWED, str(error)))
             except TimestampFailed as error:
                 cancelled = SigningCancelled(str(error))
                 cancelled.outcomes = outcomes

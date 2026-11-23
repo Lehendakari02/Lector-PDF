@@ -76,7 +76,7 @@ def is_signed(path: str | Path, password: str | None = None) -> bool:
                 return False
             # The form's own list of fields, not every page: it is asked at
             # every save, and a document of hundreds of pages must not wait.
-            return _has_signed_field(doc)
+            return has_signed_field(doc)
     except Exception:  # PyMuPDF raises several unrelated error types
         return False
 
@@ -84,7 +84,7 @@ def is_signed(path: str | Path, password: str | None = None) -> bool:
 _REFERENCE = re.compile(r"(\d+)\s+0\s+R")
 
 
-def _has_signed_field(doc) -> bool:
+def has_signed_field(doc) -> bool:
     """Whether a field of the form is a signature with a value (signed)."""
     kind, value = doc.xref_get_key(doc.pdf_catalog(), "AcroForm/Fields")
     if kind == "xref":

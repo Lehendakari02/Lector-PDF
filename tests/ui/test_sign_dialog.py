@@ -263,7 +263,7 @@ def test_the_handwritten_signature_goes_in_the_box_unless_not_wanted(
     monkeypatch.setattr(
         module,
         "sign_pdf",
-        lambda source, target, signer, visible=None, server="": (
+        lambda source, target, signer, visible=None, server="", password=None: (
             asked.append((visible, server)) or target.write_bytes(source.read_bytes())
         ),
     )

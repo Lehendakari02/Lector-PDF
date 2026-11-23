@@ -65,6 +65,7 @@ from app.core import (
     places,
     sheets,
 )
+from app.core.batch_signing import Placement, corner_box
 from app.core.commands import (
     HIGHLIGHT,
     MARKUP_KINDS,
@@ -2944,6 +2945,16 @@ class PdfView(QAbstractScrollArea):
         y0 = max(0.0, min(size.height - height, y - height / 2))
         return (x0, y0, x0 + width, y0 + height)
 
+    def put_certificate_in_corner(self) -> bool:
+        """Without a mouse (Intro): the signature goes at the bottom right of the
+        page in view, like the corner chosen for several documents."""
+        page = self.current_page
+        if self._markup_tool != PLACE_TOOL or not 0 <= page < self.page_count:
+            return False
+        size = self._sizes[page]
+        box = corner_box(size.width, size.height, Placement(), page).rect
+        return self.put_certificate_place(page, (box[0] + box[2]) / 2, (box[1] + box[3]) / 2)
+
     def put_certificate_place(self, page: int, x: float, y: float) -> bool:
         """Say that the signature with a certificate goes here."""
         if self._markup_tool != PLACE_TOOL or not 0 <= page < self.page_count:
@@ -4007,6 +4018,8 @@ class PdfView(QAbstractScrollArea):
             bar.setValue(bar.value() + bar.singleStep())
         elif key == Qt.Key.Key_Up:
             bar.setValue(bar.value() - bar.singleStep())
+        elif key in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and self._markup_tool == PLACE_TOOL:
+            self.put_certificate_in_corner()
         elif key == Qt.Key.Key_Escape and self._sketch is not None:
             self._sketch = None  # what was being drawn is dropped
             self._sketch_pressures = None

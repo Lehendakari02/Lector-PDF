@@ -99,7 +99,35 @@ Necesitas un lector de tarjetas y el PIN del DNIe.
    tu nombre, "AC FNMT Usuarios" (o la del DNIe) y la fecha.
 3. Abre algún PDF firmado que te haya llegado de fuera (una nómina, un
    certificado de la administración…) y compara con lo que dice Adobe.
-4. Añade una nota a un PDF firmado, guárdalo y comprueba: sigue ✔ y dice
-   que después se añadieron notas.
+4. Añade una nota a un PDF firmado y pulsa Guardar: avisa de que la firma
+   dejará de valer. Guarda una copia y comprueba la copia: sale ✖ "Firma
+   rota". Es lo esperado hoy (el programa reescribe el archivo entero al
+   guardar; ver la revisión de la Fase 4). Con un PDF al que otro programa
+   añadió notas sí debe salir ✔ y "después se añadieron notas".
 5. Si en algún caso sale ⚠ o ✖ y Adobe o VALIDe dicen que está bien, dime
    cuál.
+
+## Tarea 4.8 – Arreglos de la revisión de la Fase 4
+
+1. **PIN equivocado al firmar varios** (con el DNIe ten cuidado: tres PIN mal
+   lo bloquean; prueba esto con tu certificado FNMT si su clave tiene
+   contraseña). Firmar varios documentos, 3 documentos, y pon mal el PIN o la
+   contraseña la primera vez: el lote **se para** y dice "El PIN o la
+   contraseña no es correcto". No vuelve a pedirlo para los demás.
+2. Saca la tarjeta del lector y firma: dice "Mete la tarjeta en el lector".
+3. **La ventana del PIN de Windows** sale delante del programa, no detrás.
+4. **PDF con restricciones:** uno que se abre sin contraseña pero no deja
+   imprimir o copiar (muchos de la administración). Firmar con certificado:
+   ahora firma. Ábrelo en Adobe: la firma es válida y sigue protegido.
+5. **PDF con contraseña:** ábrelo en el programa con su contraseña y firma: el
+   firmado sigue pidiendo la misma contraseña. Si es un PDF hecho con este
+   mismo programa u otros basados en MuPDF, puede decir que no se puede
+   firmar tal cual (limitación conocida).
+6. **Página girada:** firma un escaneado con páginas giradas: el recuadro sale
+   justo donde haces clic.
+7. **Formulario con un campo de texto «Firma1»** (frecuente en formularios
+   oficiales): ahora firma.
+8. **Sin ratón:** Firmar con certificado → Intro: la firma va abajo a la
+   derecha de la página que ves.
+9. En Ajustes → Firma escribe otro servidor de sellos y cierra con Esc:
+   al volver sigue el que escribiste.
