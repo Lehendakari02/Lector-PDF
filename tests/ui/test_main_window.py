@@ -265,3 +265,24 @@ def test_the_bars_leave_most_of_a_laptop_screen_to_the_document(window, sample, 
     qt_app.processEvents()
     taken = window.height() - window.pdf_view.viewport().height()
     assert taken <= 200, f"the bars take {taken} px"
+
+
+def test_the_window_comes_back_as_it_was(qt_app, tmp_path):
+    path = tmp_path / "ajustes.json"
+    first = MainWindow(Settings(path))
+    first.show()
+    first.resize(760, 720)  # fits the small test screen
+    qt_app.processEvents()
+    first.close()
+    assert Settings(path).get("ventana")
+
+    second = MainWindow(Settings(path))
+    assert (second.width(), second.height()) == (760, 720)
+    second.close()
+
+
+def test_a_damaged_window_place_is_ignored(qt_app, settings):
+    settings.set("ventana", "esto no vale")
+    window = MainWindow(settings)
+    assert (window.width(), window.height()) == (1240, 800)
+    window.close()

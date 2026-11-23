@@ -157,13 +157,14 @@ def signer_name(signer: Signer) -> str:
 
 def appearance(width: float, height: float, name: str, when: str, png: bytes | None) -> bytes:
     """A one-page PDF, the size of the box as shown, with what the visible
-    signature shows: the handwritten signature at the left (if any), and who
-    signs and when."""
+    signature shows on a white card: the handwritten signature at the left
+    (if any), and who signs and when."""
     import pymupdf
 
     with pymupdf.open() as doc:
         page = doc.new_page(width=width, height=height)
-        page.draw_rect(page.rect, color=(0.55, 0.6, 0.7), width=0.8)
+        # A white card, as Adobe's: on top of printed text it is still readable.
+        page.draw_rect(page.rect, color=(0.55, 0.6, 0.7), fill=(1, 1, 1), width=0.8)
         text_left = 4.0
         if png:
             picture = pymupdf.Rect(3, 3, width * 0.42, height - 3)

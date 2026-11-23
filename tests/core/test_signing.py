@@ -354,3 +354,14 @@ def test_an_unreachable_timestamp_server_fails_clearly_and_leaves_nothing(sample
             timestamp_server="http://127.0.0.1:9/tsa",
         )
     assert list(tmp_path.iterdir()) == []
+
+
+def test_the_visible_signature_is_a_white_card():
+    """Put over printed text, the signature must not mix with it."""
+    import pymupdf
+
+    picture = signing.appearance(170, 56, "MUÑOZ ÁLVAREZ ÍÑIGO", "22/11/2026 10:30", None)
+    with pymupdf.open(stream=picture, filetype="pdf") as doc:
+        pixmap = doc[0].get_pixmap(alpha=True)
+    # A spot inside the box with no letters: white and not see-through.
+    assert pixmap.pixel(pixmap.width - 8, pixmap.height - 6) == (255, 255, 255, 255)

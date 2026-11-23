@@ -8,7 +8,7 @@ import time
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 
-from PySide6.QtCore import QEvent, QSize, Qt, QTimer, QUrl, Signal, qVersion
+from PySide6.QtCore import QByteArray, QEvent, QSize, Qt, QTimer, QUrl, Signal, qVersion
 from PySide6.QtGui import (
     QAccessible,
     QAction,
@@ -193,6 +193,7 @@ LAST_FOLDER_SETTING = "ultima_carpeta"
 WELCOME_RECENT = 5  # recent documents offered on the welcome page
 # The tools of each mode with their names under the drawing, or only the drawings.
 TOOLBAR_SETTING = "barra_herramientas"
+WINDOW_SETTING = "ventana"  # size, place and maximized, as Qt keeps them
 SAVE_AS, SAVE_HERE = "save_as", "save_here"  # answers to a warning before saving
 # Something of another program taken away, too big to copy: saving makes it
 # impossible to undo. Asked every time, whatever the settings say.
@@ -295,6 +296,7 @@ class MainWindow(QMainWindow):
         self._printer: QPrinter | None = None  # kept alive while it prints
         self.setWindowTitle(APP_NAME)
         self.resize(1240, 800)
+        self._restore_window_place()
         self.setAcceptDrops(True)  # a PDF dropped on the window is opened
 
         self._full_screen = False
@@ -5268,8 +5270,23 @@ class MainWindow(QMainWindow):
             self._remember_place(page)
             self._set_changes_aside(page)  # "No guardar": recoverable for some days
         self._save_session()
+        self._remember_window_place()
         self.shutdown_documents()
         super().closeEvent(event)
+
+    def _remember_window_place(self) -> None:
+        """Size, place and whether it was maximized, for the next start."""
+        if self._full_screen:
+            return  # the place before full screen is not known here: keep the last one
+        geometry = bytes(self.saveGeometry().toBase64()).decode("ascii")
+        self.settings.set(WINDOW_SETTING, geometry)
+
+    def _restore_window_place(self) -> None:
+        """Back where it was the last time (maximized if it was); Qt keeps it
+        inside the screens there are now."""
+        geometry = self.settings.get(WINDOW_SETTING, "")
+        if isinstance(geometry, str) and geometry:
+            self.restoreGeometry(QByteArray.fromBase64(geometry.encode("ascii")))
 
     def shutdown_documents(self) -> None:
         """Stop the helper processes of every tab. Safe to call more than once."""
