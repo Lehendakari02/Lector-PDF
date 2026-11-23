@@ -173,9 +173,9 @@ def test_if_it_cannot_be_saved_the_tab_stays_open(window, opened, wait_until, mo
     mark_something(window, wait_until)
     window.unsaved_answer = SAVE
     window.close_document()
-    wait_until(lambda: not window.pdf_view.saving, seconds=60)
+    # The failure is told after the helper answers: on a slow machine a moment later.
+    wait_until(lambda: not window.pdf_view.saving and not window._saving_to_close, seconds=60)
     assert len(window.documents) == 1 and window.pdf_view.modified
-    assert not window._saving_to_close
     assert marked(path) == 0
 
 

@@ -382,7 +382,8 @@ def signed_form(signer, sample, tmp_path) -> Path:
 def saved_with(path: Path, change) -> Path:
     from app.core.saving import save_to
 
-    with pymupdf.open(path) as doc:
+    # Read from memory, as the program does: Windows does not replace an open file.
+    with pymupdf.open(stream=path.read_bytes(), filetype="pdf") as doc:
         change(doc)
         save_to(doc, path)
     return path
