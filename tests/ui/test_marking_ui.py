@@ -286,3 +286,37 @@ def test_the_right_click_menu_marks_through_the_same_path(window, opened, wait_u
     assert view.mark_selection("glitter") is False
     assert view.mark_selection("underline") is True
     settle(view, wait_until, 1)
+
+
+def test_undoing_back_to_the_file_is_not_a_change(window, opened, wait_until):
+    view, _path = opened()
+    select_words(view, "españoles son")
+    view.mark_selection("highlight")
+    settle(view, wait_until, 1)
+    assert view.modified and "●" in window.document_tabs.tabText(0)
+    view.undo()
+    settle(view, wait_until, 2)
+    assert not view.modified and "●" not in window.document_tabs.tabText(0)
+    assert not window.save_action.isEnabled()
+    view.redo()
+    settle(view, wait_until, 3)
+    assert view.modified
+
+
+def test_undoing_past_what_was_saved_is_a_change(window, opened, wait_until):
+    view, _path = opened()
+    select_words(view, "españoles son")
+    view.mark_selection("highlight")
+    settle(view, wait_until, 1)
+    window.save_document()
+    wait_until(lambda: not view.saving)
+    assert not view.modified
+    view.undo()  # the file has the mark, the page does not
+    settle(view, wait_until, 2)
+    assert view.modified
+    select_words(view, "iguales")
+    view.mark_selection("underline")  # a new branch: the saved state is gone
+    settle(view, wait_until, 3)
+    view.undo()
+    settle(view, wait_until, 4)
+    assert view.modified

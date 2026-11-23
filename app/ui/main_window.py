@@ -8,7 +8,7 @@ import time
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 
-from PySide6.QtCore import QEvent, QSize, Qt, QTimer, QUrl, Signal, qVersion
+from PySide6.QtCore import QByteArray, QEvent, QSize, Qt, QTimer, QUrl, Signal, qVersion
 from PySide6.QtGui import (
     QAccessible,
     QAction,
@@ -171,6 +171,7 @@ from app.ui.signature_dialog import SignatureDialog
 from app.ui.signatures_dialog import SignaturesDialog
 from app.ui.text_recognition import TextRecognition
 from app.ui.theme import PAPER_SETTING, THEME_SETTING, Paper, Theme, apply_theme
+from app.ui.tool_strip import ToolStrip
 from app.ui.unsaved_dialog import CANCEL, DISCARD, SAVE, UnsavedDialog
 from app.ui.updater import UpdateBanner, Updater
 from app.ui.versions_dialog import RESTORE, VIEW, VersionsDialog
@@ -196,6 +197,7 @@ LAST_FOLDER_SETTING = "ultima_carpeta"
 WELCOME_RECENT = 5  # recent documents offered on the welcome page
 # The tools of each mode with their names under the drawing, or only the drawings.
 TOOLBAR_SETTING = "barra_herramientas"
+WINDOW_SETTING = "ventana"  # size, place and maximized, as Qt keeps them
 SAVE_AS, SAVE_HERE = "save_as", "save_here"  # answers to a warning before saving
 # Something of another program taken away, too big to copy: saving makes it
 # impossible to undo. Asked every time, whatever the settings say.
@@ -303,6 +305,7 @@ class MainWindow(QMainWindow):
         self._printer: QPrinter | None = None  # kept alive while it prints
         self.setWindowTitle(APP_NAME)
         self.resize(1240, 800)
+        self._restore_window_place()
         self.setAcceptDrops(True)  # a PDF dropped on the window is opened
 
         self._full_screen = False
@@ -318,6 +321,10 @@ class MainWindow(QMainWindow):
         # Set when the program must start again after this window closes.
         self.restart_wanted = False
 
+        # Made before the actions it will show, so that when the window goes
+        # the tools go first and never hear about actions already gone.
+        self.tools_bar = QToolBar(self.tr("Herramientas"), self)
+        self.tool_strip = ToolStrip(self.tools_bar)
         self._build_feature_actions()
         self._build_tool_keys()
         self._build_mode_bar()
@@ -803,6 +810,15 @@ class MainWindow(QMainWindow):
         self.addToolBarBreak(Qt.ToolBarArea.TopToolBarArea)
 
     def _build_tool_bars(self) -> None:
+        # The tools of every mode share one row that slides sideways when the
+        # window is too narrow for them (instead of a hidden second row).
+        holder = self.tools_bar
+        holder.setObjectName("toolsBar")
+        holder.setMovable(False)
+        holder.setFloatable(False)
+        holder.toggleViewAction().setEnabled(False)
+        holder.addWidget(self.tool_strip)
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, holder)
         for mode in MODES:
             toolbar = QToolBar(self.tr("Herramientas de {0}").format(translate(mode.value)))
             toolbar.setObjectName(f"tools_{mode.name.lower()}")
@@ -811,6 +827,7 @@ class MainWindow(QMainWindow):
             toolbar.toggleViewAction().setEnabled(False)
             toolbar.setProperty("tools", True)  # the style sheet looks for this
             toolbar.setIconSize(QSize(20, 20))
+            self.tool_strip.add_tool_bar(toolbar)
             if mode is not Mode.READ:
                 # Saving is at hand wherever the document can be changed.
                 toolbar.addAction(self.feature_actions["save"])
@@ -823,12 +840,6 @@ class MainWindow(QMainWindow):
                 action = self.feature_actions[feature.id]
                 toolbar.addAction(action)
                 toolbar.widgetForAction(action).setMinimumHeight(MIN_BUTTON_HEIGHT)
-            # The button that appears when the window is too narrow for every tool.
-            more = toolbar.findChild(QToolButton, "qt_toolbar_ext_button")
-            if more is not None:
-                more.setIcon(icons.icon("more"))
-                more.setToolTip(self.tr("Más herramientas"))
-            self.addToolBar(Qt.ToolBarArea.TopToolBarArea, toolbar)
             self.mode_toolbars[mode] = toolbar
         self._build_color_menus()
         self._build_sheet_menu()
@@ -2127,6 +2138,7 @@ class MainWindow(QMainWindow):
             self.current_document.mode = mode
         for other, toolbar in self.mode_toolbars.items():
             toolbar.setVisible(other is mode and not self._full_screen)
+        self.tools_bar.setVisible(not self._full_screen)
         self._place_favourites_bar()
         self.mode_actions[mode].setChecked(True)
         index = MODES.index(mode)
@@ -5589,8 +5601,23 @@ class MainWindow(QMainWindow):
             self._remember_place(page)
             self._set_changes_aside(page)  # "No guardar": recoverable for some days
         self._save_session()
+        self._remember_window_place()
         self.shutdown_documents()
         super().closeEvent(event)
+
+    def _remember_window_place(self) -> None:
+        """Size, place and whether it was maximized, for the next start."""
+        if self._full_screen:
+            return  # the place before full screen is not known here: keep the last one
+        geometry = bytes(self.saveGeometry().toBase64()).decode("ascii")
+        self.settings.set(WINDOW_SETTING, geometry)
+
+    def _restore_window_place(self) -> None:
+        """Back where it was the last time (maximized if it was); Qt keeps it
+        inside the screens there are now."""
+        geometry = self.settings.get(WINDOW_SETTING, "")
+        if isinstance(geometry, str) and geometry:
+            self.restoreGeometry(QByteArray.fromBase64(geometry.encode("ascii")))
 
     def shutdown_documents(self) -> None:
         """Stop the helper processes of every tab. Safe to call more than once."""
