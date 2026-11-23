@@ -511,6 +511,10 @@ class PdfView(QAbstractScrollArea):
         # click uncovers one (by its name) until the mode is left.
         self._review = False
         self._place_hover = None  # (page, box) where the certificate signature would go
+        # Empty signature fields of the document, offered while choosing the
+        # place: {page: [(name, box as shown)]}. ``placed_field``: the one chosen.
+        self.signature_fields: dict[int, list[tuple[str, tuple]]] = {}
+        self.placed_field = ""
         self._uncovered: set[str] = set()
         self._review_click = False  # the press uncovered something: its release does nothing
         # A text being changed in its editor: (page, its name). Its page is
@@ -604,6 +608,7 @@ class PdfView(QAbstractScrollArea):
         self.save_failed.connect(self._save_did_not_work)
         self._changes = 0  # changes made to the document since it was opened
         self._saved_changes = 0  # how many of them are in the file
+        self._breaking_change = 0  # the last one that breaks signatures
         self._saves: dict[int, int] = {}  # save number -> changes it carries
         # Things of other programs taken away since the last save that are too
         # big to keep a copy of: saving would make them impossible to undo.
@@ -776,7 +781,7 @@ class PdfView(QAbstractScrollArea):
                 self._asked_texts.discard(page)
         if _too_big_to_undo_after_saving(order):
             self._lost_on_save += -1 if undone else 1
-        self.mark_modified()
+        self.mark_modified(breaking=_breaks_signatures(order))
         self._request_pages()
         self.history_changed.emit()
         self.pages_changed.emit(list(pages))
@@ -916,10 +921,16 @@ class PdfView(QAbstractScrollArea):
     def saving(self) -> bool:
         return bool(self._saves)
 
-    def mark_modified(self) -> None:
-        """Called after every change made to the document."""
+    def mark_modified(self, breaking: bool = True) -> None:
+        """Called after every change made to the document.
+
+        ``breaking``: the change touches what a signature with a certificate
+        covers. A change whose kind is not known counts as one.
+        """
         was = self.modified
         self._changes += 1
+        if breaking:
+            self._breaking_change = self._changes
         if not was:
             self.modified_changed.emit(True)
 
@@ -962,7 +973,7 @@ class PdfView(QAbstractScrollArea):
             self._annotations_shown = True
             self.annotations_shown_changed.emit(True)
         self.set_review(False)
-        self._changes = self._saved_changes = 0
+        self._changes = self._saved_changes = self._breaking_change = 0
         self._lost_on_save = 0
         self._place_asked = self._place_shown = None
         self._saves.clear()
@@ -1662,6 +1673,14 @@ class PdfView(QAbstractScrollArea):
             if self._review:
                 self._paint_covers(painter, page, target, zoom)
             self._paint_sketches(painter, page, target, zoom)
+            if self._markup_tool == PLACE_TOOL:
+                # The empty signature fields: a place ready for the signature.
+                for _name, field in self.signature_fields.get(page, ()):
+                    x0, y0, x1, y1 = self._shown_rect(page, field)
+                    box = QRectF(x0 * zoom, y0 * zoom, (x1 - x0) * zoom, (y1 - y0) * zoom)
+                    painter.setPen(QPen(PLACE_COLOR, max(1.0, 2 * scale)))
+                    painter.setBrush(PLACE_FILL)
+                    painter.drawRect(box.translated(target.left(), target.top()))
             if self._place_hover is not None and self._place_hover[0] == page:
                 x0, y0, x1, y1 = self._shown_rect(page, self._place_hover[1])
                 box = QRectF(x0 * zoom, y0 * zoom, (x1 - x0) * zoom, (y1 - y0) * zoom)
@@ -2903,6 +2922,15 @@ class PdfView(QAbstractScrollArea):
         undone), and saving it has not been asked about since."""
         return not self._signing_asked and any(map(pictures.puts_picture, self._undo))
 
+    @property
+    def breaks_signatures(self) -> bool:
+        """Whether a change not saved yet touches what a signature with a
+        certificate covers: margins, inserted sheets, recognised text (they
+        change the pages) or bookmarks (the outline), done or taken back.
+        Notes, marks, drawings, stamps and filled fields do not: saved at the
+        end, they are allowed."""
+        return self._breaking_change > self._saved_changes
+
     @signed_by_hand.setter
     def signed_by_hand(self, signed: bool) -> None:
         self._signing_asked = not signed
@@ -2930,11 +2958,30 @@ class PdfView(QAbstractScrollArea):
         self.clear_selection()
         self.set_markup_tool(SIGN_TOOL if png else "")
 
-    def choose_certificate_place(self, choosing: bool = True) -> None:
+    def choose_certificate_place(self, choosing: bool = True, fields=None) -> None:
         """The next click on a page says where the signature with a
-        certificate goes (``certificate_place``); Esc lets it go."""
+        certificate goes (``certificate_place``); Esc lets it go.
+
+        ``fields``: the empty signature fields of the document, as
+        ``(name, page, box as shown)``. They are shown, and a click inside one
+        signs in it (``placed_field`` says which), as in Adobe Reader."""
         self.clear_selection()
+        if choosing:
+            self.placed_field = ""
+            self.signature_fields = {}
+            for name, page, box in fields or ():
+                self.signature_fields.setdefault(page, []).append((name, tuple(box)))
+        else:
+            self.signature_fields = {}
         self.set_markup_tool(PLACE_TOOL if choosing else "")
+        self.viewport().update()
+
+    def _signature_field_at(self, page: int, x: float, y: float):
+        """The empty signature field under a point of the page, or None."""
+        for name, (x0, y0, x1, y1) in self.signature_fields.get(page, ()):
+            if x0 <= x <= x1 and y0 <= y <= y1:
+                return name, (x0, y0, x1, y1)
+        return None
 
     def certificate_box(self, page: int, x: float, y: float) -> tuple[float, float, float, float]:
         """The box of a signature with a certificate centred at a point of the
@@ -2946,11 +2993,15 @@ class PdfView(QAbstractScrollArea):
         return (x0, y0, x0 + width, y0 + height)
 
     def put_certificate_in_corner(self) -> bool:
-        """Without a mouse (Intro): the signature goes at the bottom right of the
-        page in view, like the corner chosen for several documents."""
+        """Without a mouse (Intro): the signature goes in the first empty
+        signature field of the document, if it has one; if not, at the bottom
+        right of the page in view, like the corner chosen for several documents."""
         page = self.current_page
         if self._markup_tool != PLACE_TOOL or not 0 <= page < self.page_count:
             return False
+        for number in sorted(self.signature_fields):
+            _name, (x0, y0, x1, y1) = self.signature_fields[number][0]
+            return self.put_certificate_place(number, (x0 + x1) / 2, (y0 + y1) / 2)
         size = self._sizes[page]
         box = corner_box(size.width, size.height, Placement(), page).rect
         return self.put_certificate_place(page, (box[0] + box[2]) / 2, (box[1] + box[3]) / 2)
@@ -2959,8 +3010,10 @@ class PdfView(QAbstractScrollArea):
         """Say that the signature with a certificate goes here."""
         if self._markup_tool != PLACE_TOOL or not 0 <= page < self.page_count:
             return False
-        rect = self.certificate_box(page, x, y)
+        field = self._signature_field_at(page, x, y)
+        rect = field[1] if field is not None else self.certificate_box(page, x, y)
         self.choose_certificate_place(False)
+        self.placed_field = field[0] if field is not None else ""
         self.certificate_place.emit(page, rect)
         return True
 
@@ -3820,7 +3873,11 @@ class PdfView(QAbstractScrollArea):
         """A hand over a note, a cross to put one, an I-beam over text, an arrow elsewhere."""
         if self._markup_tool == PLACE_TOOL or self._place_hover is not None:
             point = self._point_on_page(position) if self._markup_tool == PLACE_TOOL else None
-            hover = None if point is None else (point[0], self.certificate_box(*point))
+            hover = None
+            if point is not None:
+                field = self._signature_field_at(*point)
+                box = field[1] if field is not None else self.certificate_box(*point)
+                hover = (point[0], box)
             if hover != self._place_hover:
                 self._place_hover = hover
                 self.viewport().update()
@@ -4067,6 +4124,16 @@ class PdfView(QAbstractScrollArea):
         if 0 <= page < self.page_count:
             gap = self._to_pixels(PAGE_GAP) // 2
             self.verticalScrollBar().setValue(self._to_units(self._tops[page] - gap))
+
+
+def _breaks_signatures(order) -> bool:
+    """Whether a change of this kind touches what a signature with a
+    certificate covers (see ``PdfView.breaks_signatures``)."""
+    if isinstance(order, Together):
+        return any(map(_breaks_signatures, order.orders))
+    return isinstance(
+        order, (margins.AddMargin, sheets.InsertSheet, AddTextLayer, bookmarks.AddBookmark)
+    )
 
 
 def _too_big_to_undo_after_saving(order) -> bool:

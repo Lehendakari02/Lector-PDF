@@ -203,3 +203,59 @@ def test_enter_puts_the_visible_signature_at_the_bottom_right(window, sample, wa
     assert rect[2] == size.width - batch_signing.MARGIN
     assert rect[3] == size.height - batch_signing.MARGIN
     assert view.markup_tool != PLACE_TOOL
+
+
+# ---- Idea 1: signing inside the empty signature field the document has ----
+
+
+def test_a_click_in_the_empty_field_signs_inside_it(window, sample, tmp_path, wait_until):
+    from tests.core.test_signing_review import with_signature_field
+
+    window.show_problem_dialogs = False
+    source = with_signature_field(tmp_path / "contrato.pdf")
+    _open(window, source, wait_until)
+    view = window.pdf_view
+    window.signer_answer = _signer(sample)
+    window.sign_target_answer = lambda suggested: tmp_path / "f.pdf"
+    asked = []
+    real = window.sign_document
+    window.sign_document = lambda *args: asked.append(args[3]) or real(*args)
+    assert window.sign_with_certificate()
+    assert view.markup_tool == PLACE_TOOL
+    assert view.signature_fields == {0: [("Firma del trabajador", (50.0, 600.0, 250.0, 660.0))]}
+    assert view.put_certificate_place(0, 100, 630)  # inside the field
+    (visible,) = asked
+    assert visible.field == "Firma del trabajador"
+    assert visible.rect == (50.0, 600.0, 250.0, 660.0)
+    with (tmp_path / "f.pdf").open("rb") as handle:
+        (signature,) = PdfFileReader(handle, strict=False).embedded_signatures
+        assert signature.field_name == "Firma del trabajador"
+
+
+def test_a_click_elsewhere_makes_a_new_signature(window, tmp_path, wait_until):
+    from tests.core.test_signing_review import with_signature_field
+
+    _open(window, with_signature_field(tmp_path / "contrato.pdf"), wait_until)
+    view = window.pdf_view
+    placed = []
+    view.certificate_place.disconnect()
+    view.certificate_place.connect(lambda page, rect: placed.append(rect))
+    view.choose_certificate_place(fields=[("Firma del trabajador", 0, (50, 600, 250, 660))])
+    assert view.put_certificate_place(0, 300, 200)
+    assert view.placed_field == "" and placed[0] != (50, 600, 250, 660)
+
+
+def test_enter_goes_to_the_empty_field(window, tmp_path, wait_until):
+    from tests.core.test_signing_review import with_signature_field
+
+    _open(window, with_signature_field(tmp_path / "contrato.pdf"), wait_until)
+    view = window.pdf_view
+    placed = []
+    view.certificate_place.disconnect()
+    view.certificate_place.connect(lambda page, rect: placed.append((page, rect)))
+    view.choose_certificate_place(fields=[("Firma del trabajador", 0, (50, 600, 250, 660))])
+    view.keyPressEvent(
+        QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Return, Qt.KeyboardModifier.NoModifier)
+    )
+    assert placed == [(0, (50, 600, 250, 660))]
+    assert view.placed_field == "Firma del trabajador"

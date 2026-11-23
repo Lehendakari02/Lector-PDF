@@ -9,6 +9,10 @@ If the target cannot be replaced (another program holds it, a cloud folder is
 syncing it, it is read-only, the disk is full) a ``SaveError`` says why, and
 nothing has been lost: the old file is untouched and the document in memory
 still has its changes.
+
+A PDF signed with a certificate is written "adding at the end" (incremental),
+as Adobe Reader does: what was signed stays byte for byte as it was, followed
+by the changes. Notes, marks and filled fields then keep the signatures valid.
 """
 
 import contextlib
@@ -59,8 +63,44 @@ def _kind_of(error: OSError, target: Path) -> str:
     return FAILED
 
 
+def keeps_signatures(doc) -> bool:
+    """Whether ``doc`` is signed with a certificate and can be saved adding the
+    changes at the end, which keeps its signatures."""
+    from app.core.save_checks import has_signed_field
+
+    try:
+        return bool(
+            doc.get_sigflags() > 0
+            and has_signed_field(doc)
+            and doc.can_save_incrementally()
+            and not doc.is_repaired
+        )
+    except Exception:  # PyMuPDF raises several unrelated error types
+        return False
+
+
+def _added_at_the_end(doc) -> bytes:
+    """The whole file: the document as it was read, then the changes."""
+    import io
+
+    import pymupdf
+    from pymupdf import mupdf
+
+    options = mupdf.PdfWriteOptions()
+    options.do_incremental = 1
+    options.do_encrypt = pymupdf.PDF_ENCRYPT_KEEP
+    output = io.BytesIO()
+    writer = pymupdf.JM_new_output_fileptr(output)
+    mupdf.pdf_write_document(pymupdf._as_pdf_document(doc), writer, options)
+    writer.fz_close_output()
+    return output.getvalue()
+
+
 def write_copy(doc, target: str | Path, password: str | None = None) -> Path:
     """Write the open PyMuPDF document ``doc`` whole into the temporary file of ``target``.
+
+    A signed document is written adding the changes at the end, so that its
+    signatures stay valid (``keeps_signatures``).
 
     The copy is pushed to the disk and opened again to check it is a complete
     PDF with the same pages. Returns the temporary file; ``target`` is not touched.
@@ -76,9 +116,16 @@ def write_copy(doc, target: str | Path, password: str | None = None) -> Path:
         # garbage=1 leaves out what nothing uses any more (a text or a note
         # taken away), so that it is really gone from the file. The objects are
         # not renumbered, and the open document keeps them for Deshacer.
-        doc.save(str(temp), garbage=1, deflate=True, encryption=pymupdf.PDF_ENCRYPT_KEEP)
-        with open(temp, "rb+") as written:
-            os.fsync(written.fileno())
+        if keeps_signatures(doc):
+            data = _added_at_the_end(doc)
+            with open(temp, "wb") as written:
+                written.write(data)
+                written.flush()
+                os.fsync(written.fileno())
+        else:
+            doc.save(str(temp), garbage=1, deflate=True, encryption=pymupdf.PDF_ENCRYPT_KEEP)
+            with open(temp, "rb+") as written:
+                os.fsync(written.fileno())
     except OSError as error:
         _discard(temp)
         raise SaveError(_kind_of(error, target), str(error)) from error

@@ -112,6 +112,7 @@ from app.core.signing import (
     TimestampFailed,
     Visible,
     WindowsStoreSigner,
+    empty_signature_fields,
     sign_pdf,
 )
 from app.core.stamps import Stamp
@@ -2176,12 +2177,21 @@ class MainWindow(QMainWindow):
         self._start_saving(page, None)
         return True
 
-    def _save_warnings(self, page: DocumentPage) -> list[str]:
+    def _save_warnings(self, page: DocumentPage, by_itself: bool = False) -> list[str]:
         if page.path is None:
             return []
         document = page.view._document
         password = document.password if document is not None else None
         found = save_checks.warnings_for(page.path, page.stamp, password)
+        if (
+            save_checks.SIGNED in found
+            and not by_itself  # a signed PDF is never saved by itself
+            and not page.view.breaks_signatures
+            and save_checks.signatures_kept(page.path, password)
+        ):
+            # Notes, marks and filled fields are added at the end of the file,
+            # as Adobe does: the signatures stay valid, nothing to warn about.
+            found.remove(save_checks.SIGNED)
         if not self.warn_about_temporary_folders and save_checks.TEMPORARY in found:
             found.remove(save_checks.TEMPORARY)
         if page.view.loses_undo_on_save:
@@ -2351,7 +2361,9 @@ class MainWindow(QMainWindow):
             return False
         if not page.view.modified or page.view.saving:
             return False
-        reasons = [r for r in self._save_warnings(page) if r not in page.accepted_warnings]
+        reasons = [
+            r for r in self._save_warnings(page, by_itself=True) if r not in page.accepted_warnings
+        ]
         if reasons:
             if not page.autosave_told:
                 page.autosave_told = True
@@ -2511,8 +2523,8 @@ class MainWindow(QMainWindow):
         if page.path is not None and file_key(path) != file_key(page.path):
             # "Guardar como": from now on this tab is the new file.
             page.path = path
-            # The copy is the user's own working file: its signature, if it had
-            # one, went with the changes, and the signed original is untouched.
+            # The copy is the user's own working file (and the signed original
+            # is untouched): no more warnings about its signatures.
             page.accepted_warnings = {save_checks.SIGNED}
             self.history.add_recent(path)
             if page in self.documents:
@@ -4244,14 +4256,22 @@ class MainWindow(QMainWindow):
                 return False
             return True
         if certificate_settings.visible_wanted(self.settings):
-            view.choose_certificate_place()
-            self.statusBar().showMessage(
-                self.tr(
+            password = view._document.password if view._document is not None else None
+            fields = empty_signature_fields(page.path, password)
+            view.choose_certificate_place(fields=fields)
+            if fields:
+                text = self.tr(
+                    "El documento tiene un hueco para la firma (resaltado): haz clic dentro "
+                    "para firmar en él, o en otro sitio de la página (Intro: en el hueco). "
+                    "Esc para cancelar."
+                )
+                view.scroll_to_page(fields[0][1])
+            else:
+                text = self.tr(
                     "Haz clic en la página donde quieres la firma (Intro: abajo a la "
                     "derecha). Esc para cancelar. (Firma invisible: en Ajustes → Firma.)"
-                ),
-                STATUS_MESSAGE_MS * 3,
-            )
+                )
+            self.statusBar().showMessage(text, STATUS_MESSAGE_MS * 3)
             return True
         return self._sign_at(page, None)
 
@@ -4264,7 +4284,8 @@ class MainWindow(QMainWindow):
         png = None
         if certificate_settings.handwritten_wanted(self.settings):
             png = self.saved_signature(my_signature.SIGNATURE)
-        return self._sign_at(page, Visible(number, tuple(rect), png))
+        field = page.view.placed_field  # an empty signature field, if it was clicked
+        return self._sign_at(page, Visible(number, tuple(rect), png, field))
 
     def _sign_at(self, page: DocumentPage, visible: Visible | None) -> bool:
         signer = self._choose_signer()

@@ -312,3 +312,146 @@ def test_a_protected_document_is_never_prepared_by_writing_it_again(sample):
 def test_a_signed_document_is_never_prepared_by_writing_it_again(sample):
     with pytest.raises(SigningError):
         signing._rewritten(sample("firmado.pdf").read_bytes())
+
+
+# ---- Idea 1: signing inside the empty signature field the document has ----
+
+
+def with_signature_field(path: Path, rotation: int = 0, box=(50, 600, 250, 660)) -> Path:
+    with pymupdf.open() as doc:
+        page = doc.new_page(width=595, height=842)
+        widget = pymupdf.Widget()
+        widget.field_type = pymupdf.PDF_WIDGET_TYPE_SIGNATURE
+        widget.field_name = "Firma del trabajador"
+        widget.rect = pymupdf.Rect(box)
+        page.add_widget(widget)
+        page.set_rotation(rotation)
+        doc.save(path)
+    return path
+
+
+def test_the_empty_signature_fields_are_found(tmp_path, sample):
+    source = with_signature_field(tmp_path / "contrato.pdf")
+    assert signing.empty_signature_fields(source) == [
+        ("Firma del trabajador", 0, (50.0, 600.0, 250.0, 660.0))
+    ]
+    assert signing.empty_signature_fields(sample("formulario.pdf")) == []
+    assert signing.empty_signature_fields(tmp_path / "no-existe.pdf") == []
+
+
+def test_a_signed_field_is_not_offered_again(signer, tmp_path):
+    source = with_signature_field(tmp_path / "contrato.pdf")
+    (name, page, box) = signing.empty_signature_fields(source)[0]
+    target = sign_pdf(source, tmp_path / "f.pdf", signer, Visible(page, box, field=name))
+    assert signing.empty_signature_fields(target) == []
+
+
+@pytest.mark.parametrize("rotation", [0, 90, 180, 270])
+def test_signing_inside_the_field_uses_it_and_its_place(signer, tmp_path, rotation):
+    source = with_signature_field(tmp_path / "contrato.pdf", rotation)
+    ((name, page, box),) = signing.empty_signature_fields(source)
+    target = sign_pdf(source, tmp_path / "f.pdf", signer, Visible(page, box, field=name))
+    with target.open("rb") as handle:
+        reader = PdfFileReader(handle, strict=False)
+        (signature,) = reader.embedded_signatures
+        assert signature.field_name == "Firma del trabajador"
+        names = [field.get_object()["/T"] for field in reader.root["/AcroForm"]["/Fields"]]
+    assert names == ["Firma del trabajador"], "no second field is made"
+    got = drawn_box(target)
+    assert all(abs(a - b) <= 1 for a, b in zip(got, box, strict=True)), (got, box)
+
+
+def test_signing_inside_the_field_of_a_protected_document(signer, tmp_path):
+    source = with_signature_field(tmp_path / "contrato.pdf")
+    with pymupdf.open(source) as doc:
+        doc.save(tmp_path / "p.pdf", encryption=pymupdf.PDF_ENCRYPT_AES_256, owner_pw="dueno")
+    ((name, page, box),) = signing.empty_signature_fields(tmp_path / "p.pdf")
+    target = sign_pdf(
+        tmp_path / "p.pdf", tmp_path / "f.pdf", signer, Visible(page, box, field=name)
+    )
+    assert signing.empty_signature_fields(target) == []
+
+
+# ---- Idea 2: a signed PDF is saved adding the changes at the end ----
+
+
+def signed_form(signer, sample, tmp_path) -> Path:
+    return sign_pdf(sample("formulario.pdf"), tmp_path / "firmado.pdf", signer)
+
+
+def saved_with(path: Path, change) -> Path:
+    from app.core.saving import save_to
+
+    with pymupdf.open(path) as doc:
+        change(doc)
+        save_to(doc, path)
+    return path
+
+
+def note(doc) -> None:
+    doc[0].add_text_annot((100, 100), "Repasar")
+
+
+def highlight(doc) -> None:
+    doc[0].add_highlight_annot(pymupdf.Rect(72, 72, 200, 90))
+
+
+def ink(doc) -> None:
+    doc[0].add_ink_annot([[(100, 300), (150, 320), (200, 300)]])
+
+
+def fill(doc) -> None:
+    page = doc[0]
+    widget = next(w for w in page.widgets() if w.field_type == pymupdf.PDF_WIDGET_TYPE_TEXT)
+    widget.field_value = "Ana Pérez"
+    widget.update()
+
+
+@pytest.mark.parametrize(
+    ("change", "after"),
+    [
+        (note, signature_check.ANNOTATED),
+        (highlight, signature_check.ANNOTATED),
+        (ink, signature_check.ANNOTATED),
+        (fill, signature_check.FORM_FILLED),
+    ],
+)
+def test_light_changes_keep_the_signature(signer, sample, tmp_path, change, after):
+    path = signed_form(signer, sample, tmp_path)
+    signed = path.read_bytes()
+    saved_with(path, change)
+    assert path.read_bytes().startswith(signed), "what was signed stays as it was"
+    (report,) = signature_check.check_signatures(path, roots=[], intermediates=[])
+    assert report.intact and report.after == after
+
+
+def test_a_change_of_the_page_is_told(signer, sample, tmp_path):
+    path = signed_form(signer, sample, tmp_path)
+
+    def margin(doc) -> None:
+        page = doc[0]
+        page.set_mediabox(pymupdf.Rect(0, 0, page.rect.width + 100, page.rect.height))
+
+    saved_with(path, margin)
+    (report,) = signature_check.check_signatures(path, roots=[], intermediates=[])
+    assert report.after == signature_check.CHANGED and not report.good
+
+
+def test_a_document_without_signatures_is_written_whole(sample):
+    with pymupdf.open(sample("formulario.pdf")) as doc:
+        assert not saving_keeps(doc)
+
+
+def test_a_repaired_signed_document_is_written_whole(signer, sample, tmp_path):
+    path = signed_form(signer, sample, tmp_path)
+    with pymupdf.open(path) as doc:
+        assert saving_keeps(doc)
+    broken = path.read_bytes().replace(b"startxref", b"startxrof")
+    with pymupdf.open(stream=broken, filetype="pdf") as doc:
+        assert doc.is_repaired and not saving_keeps(doc)
+
+
+def saving_keeps(doc) -> bool:
+    from app.core.saving import keeps_signatures
+
+    return keeps_signatures(doc)

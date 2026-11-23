@@ -115,6 +115,54 @@ def _after(status) -> str:
     return CHANGED
 
 
+def _looked_at_by_hand(data: bytes, signed_until: int) -> str:
+    """What was added after a signature, judged by the pages themselves, for
+    when the signing library cannot explain the changes (it is stricter than
+    Adobe: notes or filled fields saved by PyMuPDF look unexplained to it).
+
+    Same pages with the same content and size: only annotations (ANNOTATED)
+    or only form fields (FORM_FILLED) changed. Anything else: CHANGED.
+    """
+    import pymupdf
+
+    def look(doc) -> list:
+        pages = []
+        for page in doc:
+            marks = sorted(
+                (annot.type[1], tuple(round(v, 1) for v in annot.rect))
+                for annot in page.annots(types=None) or ()
+                if annot.type[0] != pymupdf.PDF_ANNOT_WIDGET
+            )
+            pages.append(
+                (
+                    page.read_contents(),
+                    tuple(page.mediabox),
+                    tuple(page.cropbox),
+                    page.rotation,
+                    marks,
+                )
+            )
+        return pages
+
+    try:
+        with (
+            pymupdf.open(stream=data[:signed_until], filetype="pdf") as signed,
+            pymupdf.open(stream=data, filetype="pdf") as now,
+        ):
+            if signed.needs_pass or now.needs_pass:
+                return CHANGED
+            before, after = look(signed), look(now)
+    except Exception:
+        return CHANGED
+    if len(before) != len(after):
+        return CHANGED
+    if any(old[:4] != new[:4] for old, new in zip(before, after, strict=True)):
+        return CHANGED
+    if any(old[4] != new[4] for old, new in zip(before, after, strict=True)):
+        return ANNOTATED
+    return FORM_FILLED
+
+
 def _pages_of_fields(path: Path) -> dict[str, int]:
     """On which page each signature can be seen (fields with a box)."""
     import pymupdf
@@ -143,6 +191,7 @@ def check_signatures(
     """
     from pyhanko.pdf_utils.reader import PdfFileReader
     from pyhanko.sign.validation import KeyUsageConstraints, validate_pdf_signature
+    from pyhanko.sign.validation.status import SignatureCoverageLevel
     from pyhanko_certvalidator import ValidationContext
 
     path = Path(path)
@@ -156,6 +205,7 @@ def check_signatures(
         key_usage={"digital_signature", "non_repudiation"}, match_all_key_usages=False
     )
     pages = _pages_of_fields(path)
+    data = path.read_bytes()
     reports = []
     with path.open("rb") as handle:
         try:
@@ -187,6 +237,10 @@ def check_signatures(
                 )  # fmt: skip
                 continue
             stamp = status.timestamp_validity
+            after = _after(status)
+            if after == CHANGED and status.coverage == SignatureCoverageLevel.ENTIRE_REVISION:
+                start, length = signature.byte_range[2], signature.byte_range[3]
+                after = _looked_at_by_hand(data, start + length)
             when = stamp.timestamp if stamp is not None else status.signer_reported_dt
             reports.append(
                 SignatureReport(
@@ -197,7 +251,7 @@ def check_signatures(
                     timestamped=stamp is not None,
                     intact=bool(status.intact and status.valid),
                     trusted=bool(status.trusted),
-                    after=_after(status),
+                    after=after,
                     page=pages.get(field),
                 )
             )

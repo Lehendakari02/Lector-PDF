@@ -99,11 +99,8 @@ Necesitas un lector de tarjetas y el PIN del DNIe.
    tu nombre, "AC FNMT Usuarios" (o la del DNIe) y la fecha.
 3. Abre algún PDF firmado que te haya llegado de fuera (una nómina, un
    certificado de la administración…) y compara con lo que dice Adobe.
-4. Añade una nota a un PDF firmado y pulsa Guardar: avisa de que la firma
-   dejará de valer. Guarda una copia y comprueba la copia: sale ✖ "Firma
-   rota". Es lo esperado hoy (el programa reescribe el archivo entero al
-   guardar; ver la revisión de la Fase 4). Con un PDF al que otro programa
-   añadió notas sí debe salir ✔ y "después se añadieron notas".
+4. Añade una nota a un PDF firmado y pulsa Guardar: guarda sin preguntar.
+   Comprobar firmas: sigue ✔ y dice que después se añadieron notas.
 5. Si en algún caso sale ⚠ o ✖ y Adobe o VALIDe dicen que está bien, dime
    cuál.
 
@@ -131,3 +128,14 @@ Necesitas un lector de tarjetas y el PIN del DNIe.
    derecha de la página que ves.
 9. En Ajustes → Firma escribe otro servidor de sellos y cierra con Esc:
    al volver sigue el que escribiste.
+10. **Hueco de firma:** abre un PDF que traiga un hueco para firmar (muchos
+    contratos y formularios oficiales; en Adobe se ve como un recuadro con
+    una etiqueta roja). Firmar con certificado: el hueco sale resaltado en
+    azul. Haz clic dentro: la firma ocupa el hueco. Ábrelo en Adobe: la firma
+    está en ese hueco y no hay otro campo nuevo. Con Intro también va al hueco.
+11. **Anotar un PDF firmado:** abre un PDF firmado (tuyo o de fuera), subraya,
+    pon una nota y rellena un campo si tiene. Guardar: no pregunta nada.
+    Ábrelo en Adobe: la firma sigue válida y Adobe dice que hubo cambios
+    permitidos después de firmar. En el programa, Comprobar firmas dice ✔.
+12. **Margen en un PDF firmado:** añade un margen y pulsa Guardar: avisa de
+    que la firma dejará de valer (esto sí la rompe).

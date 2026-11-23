@@ -1540,10 +1540,23 @@ Notas de la Fase 4:
     certificados con solo "firma digital" y usa las autoridades intermedias
     de Windows; la cadena de un .p12 se completa con las de Windows; Intro
     coloca la firma visible sin ratón; reloj de espera al firmar.
-  - **Ideas pendientes de decisión de Julen:** firmar dentro del hueco de
-    firma vacío que trae el documento; guardar "añadiendo al final" los PDF
-    ya firmados, para que rellenarlos o anotarlos no rompa la firma de otro
-    (hoy se reescribe el archivo entero y se avisa antes).
+  - **Dos ideas aprobadas por Julen (23/11/2026), hechas en la misma tarea:**
+    - **Firmar dentro del hueco de firma** que trae el documento («Firma del
+      trabajador»…), como Adobe: al pulsar Firmar con certificado el hueco se
+      resalta y un clic dentro firma en él, con su tamaño (Intro: en el hueco).
+      Un clic fuera hace una firma nueva. No se crea un segundo campo.
+      (`signing.empty_signature_fields`, `Visible.field`.)
+    - **Guardar un PDF firmado añadiendo los cambios al final**, como Adobe:
+      notas, subrayados, dibujos, sellos y campos rellenados ya no rompen las
+      firmas, y no se avisa. Se sigue avisando (y entonces sí la rompen) con
+      márgenes, hojas añadidas, texto reconocido y marcadores, también si se
+      deshacen antes de guardar. Un PDF firmado nunca se guarda solo.
+      Comprobar firmas distingue "se añadieron notas" de "cambiado" mirando
+      las páginas (pyHanko es demasiado estricto con lo que escribe MuPDF).
+      Lo borrado después de firmar sigue dentro del archivo, en la parte
+      firmada (así funciona la firma; Adobe hace lo mismo). Un archivo
+      reparado al abrirlo se reescribe entero. (`saving.keeps_signatures`,
+      `PdfView.breaks_signatures`, `signature_check._looked_at_by_hand`.)
 
 ## Fase 5 – Organizar y convertir
 | # | Tarea | Terminado cuando… | Estado |

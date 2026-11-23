@@ -77,12 +77,50 @@ class Visible:
 
     ``rect`` is in the coordinates of the page as shown (turned pages too),
     like everything the view hands over. ``png`` is the handwritten signature
-    to show at its left, if wanted.
+    to show at its left, if wanted. ``field``: the name of an empty signature
+    field of the document to sign in (``rect`` is then its box).
     """
 
     page: int
     rect: tuple[float, float, float, float]
     png: bytes | None = None
+    field: str = ""
+
+
+def empty_signature_fields(path: str | Path, password: str | None = None) -> list[tuple]:
+    """The places a document has ready for a signature, not signed yet
+    («Firma del trabajador»…): ``(name, page, box as shown)``, page by page.
+    Nothing for a document that cannot be read."""
+    import pymupdf
+
+    try:
+        with Path(path).open("rb") as handle:
+            reader = PdfFileReader(handle, strict=False)
+            if reader.encrypted and reader.decrypt(password or "").status == AuthStatus.FAILED:
+                return []
+            empty = {
+                ref.idnum: name
+                for name, value, ref in fields.enumerate_sig_fields(reader, filled_status=False)
+                if value is None and ref is not None
+            }
+        if not empty:
+            return []
+        found = []
+        with pymupdf.open(str(path), filetype="pdf") as doc:
+            if doc.needs_pass and not doc.authenticate(password or ""):
+                return []
+            for number, page in enumerate(doc):
+                for widget in page.widgets(types=[pymupdf.PDF_WIDGET_TYPE_SIGNATURE]) or ():
+                    parent = doc.xref_get_key(widget.xref, "Parent")
+                    name = empty.get(widget.xref)
+                    if name is None and parent[0] == "xref":
+                        name = empty.get(int(parent[1].split()[0]))
+                    box = widget.rect * page.rotation_matrix
+                    if name is not None and box.width > 2 and box.height > 2:
+                        found.append((name, number, (box.x0, box.y0, box.x1, box.y1)))
+        return found
+    except Exception:
+        return []
 
 
 class TimestampServer(TimeStamper):
@@ -412,6 +450,8 @@ def sign_pdf(
         except Exception:
             writer = _open_for_signing(_rewritten(data))
         field_name = next_field_name(writer.prev)
+        if visible is not None and visible.field:
+            field_name = visible.field  # the place the document has for it
         metadata = signers.PdfSignatureMetadata(
             field_name=field_name,
             md_algorithm="sha256",
@@ -428,9 +468,10 @@ def sign_pdf(
             picture_file = Path(name)
             with os.fdopen(handle, "wb") as out:
                 out.write(picture)
-            options["new_field_spec"] = fields.SigFieldSpec(
-                field_name, on_page=visible.page, box=box
-            )
+            if not visible.field:
+                options["new_field_spec"] = fields.SigFieldSpec(
+                    field_name, on_page=visible.page, box=box
+                )
             options["stamp_style"] = stamp.StaticStampStyle.from_pdf_file(
                 str(picture_file),
                 border_width=0,

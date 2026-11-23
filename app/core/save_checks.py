@@ -81,6 +81,22 @@ def is_signed(path: str | Path, password: str | None = None) -> bool:
         return False
 
 
+def signatures_kept(path: str | Path, password: str | None = None) -> bool:
+    """Whether saving the signed PDF at ``path`` adds the changes at the end
+    and so keeps its signatures (see ``saving.keeps_signatures``)."""
+    import pymupdf
+
+    from app.core.saving import keeps_signatures
+
+    try:
+        with pymupdf.open(str(path), filetype="pdf") as doc:
+            if doc.needs_pass and not (password and doc.authenticate(password)):
+                return False
+            return keeps_signatures(doc)
+    except Exception:  # PyMuPDF raises several unrelated error types
+        return False
+
+
 _REFERENCE = re.compile(r"(\d+)\s+0\s+R")
 
 

@@ -87,7 +87,7 @@ def test_save_here_anyway_saves_and_does_not_ask_again(window, opened, wait_unti
     window.save_warning_answer = SAVE_HERE
     window.pdf_view.mark_modified()
     assert save_and_wait(window, wait_until)
-    assert path.read_bytes() != before
+    assert path.read_bytes().startswith(before), "added at the end: what was signed stays"
     window.pdf_view.mark_modified()
     assert save_and_wait(window, wait_until)
     assert questions == ["signed"], "asked once for this document"
@@ -216,3 +216,53 @@ def test_save_as_never_asks(window, opened, wait_until, tmp_path):
     window.pdf_view.mark_modified()
     assert save_and_wait(window, wait_until)
     assert questions == [], "the copy is the user's working file; the original stays signed"
+
+
+# ---- a signed PDF saved adding the changes at the end (as Adobe does) ----
+
+
+def test_a_note_on_a_signed_pdf_is_saved_without_breaking_the_signature(window, opened, wait_until):
+    from app.core import signature_check
+
+    path = opened("firmado.pdf")
+    wait_until(lambda: window.pdf_view.page_count > 0)
+    before = path.read_bytes()
+    questions = asked(window)
+    view = window.pdf_view
+    assert view.put_note(0, 100, 100, "Revisar la cláusula 3")
+    wait_until(lambda: view.modified and view.can_undo)
+    assert not view.breaks_signatures
+    assert save_and_wait(window, wait_until)
+    assert questions == [] and not view.modified
+    assert path.read_bytes().startswith(before)
+    (report,) = signature_check.check_signatures(path, roots=[], intermediates=[])
+    assert report.intact and report.after == signature_check.ANNOTATED
+
+
+def test_a_margin_on_a_signed_pdf_still_asks(window, opened, wait_until):
+    path = opened("firmado.pdf")
+    wait_until(lambda: window.pdf_view.page_count > 0)
+    before = path.read_bytes()
+    questions = asked(window)
+    view = window.pdf_view
+    assert view.add_margin(0, 100, 0)
+    wait_until(lambda: view.modified and view.can_undo)
+    assert view.breaks_signatures
+    assert window.save_document() is False, "nobody to ask: not saved"
+    assert questions == ["signed"] and path.read_bytes() == before
+
+
+def test_a_margin_taken_back_before_saving_still_asks(window, opened, wait_until):
+    """Taking it back changes the page again: better asked than broken."""
+    opened("firmado.pdf")
+    wait_until(lambda: window.pdf_view.page_count > 0)
+    view = window.pdf_view
+    assert view.put_note(0, 100, 100, "Nota")
+    wait_until(lambda: view.can_undo)
+    assert save_and_wait(window, wait_until)
+    assert not view.breaks_signatures
+    assert view.add_margin(0, 100, 0)
+    wait_until(lambda: view.modified)
+    assert view.undo()
+    wait_until(lambda: view.can_redo)
+    assert view.breaks_signatures

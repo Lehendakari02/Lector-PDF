@@ -254,3 +254,16 @@ def test_what_is_chosen_is_kept_and_followed_at_once(window, opened, wait_until)
     dialog.autosave_box.setChecked(False)
     assert not window._autosave_timer.isActive() and dialog.close_box.isEnabled()
     dialog.close()
+
+
+def test_a_signed_pdf_with_only_notes_is_not_saved_by_itself_either(window, opened, wait_until):
+    """Saving it keeps the signature, but a signed document is saved when asked."""
+    window.settings.set(ss.AUTOSAVE_SETTING, True)
+    window.apply_save_settings()
+    path = opened("firmado.pdf")
+    wait_until(lambda: window.pdf_view.page_count > 0)
+    before = path.read_bytes()
+    assert window.pdf_view.put_note(0, 100, 100, "Nota")
+    wait_until(lambda: window.pdf_view.modified)
+    idle(window, wait_until)
+    assert path.read_bytes() == before and window.pdf_view.modified
