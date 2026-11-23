@@ -165,6 +165,10 @@ def approximate_text(text: str) -> str:
     return "".join(_look_alike(char) for char in text if not char.isspace())
 
 
+TALL_FONT = 1.6  # ascender to descender, in font sizes: more is a font with wrong measures
+ASCENT, DESCENT = 0.9, 0.25  # of a usual font, in font sizes, for those
+
+
 def read_page_text(page) -> PageText:
     """Collect the letters of a PyMuPDF page with their position.
 
@@ -186,10 +190,19 @@ def read_page_text(page) -> PageText:
         for line in block.get("lines", ()):
             before = len(chars)
             for span in line["spans"]:
+                # Some fonts (Cambria in documents made with Word, for one) say
+                # their letters are several lines tall: a selection would take
+                # the lines above and below. Their boxes are made the height a
+                # letter of that size has, as Adobe shows them.
+                tall = span["ascender"] - span["descender"] > TALL_FONT
+                size = span["size"]
                 for char in span["chars"]:
                     letter, box = char["c"], char["bbox"]
                     if len(letter) != 1:
                         continue
+                    if tall:
+                        base = char["origin"][1]
+                        box = (box[0], base - size * ASCENT, box[2], base + size * DESCENT)
                     if turn is not None:
                         box = tuple((pymupdf.Rect(box) * turn).normalize())
                     if unicodedata.combining(letter):

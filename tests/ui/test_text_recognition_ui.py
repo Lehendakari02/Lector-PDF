@@ -197,3 +197,22 @@ def test_a_power_cut_in_the_middle_keeps_the_pages_read(
         wait_until(lambda: not view.saving and not view.modified)
         assert layers_in_file(path) == [0, 1, 2]
         assert not any(again.ocr_cache.folder.glob("*.json")), "kept only until it is written"
+
+
+def test_a_page_with_a_picture_and_no_letters_says_so(window, opened, tmp_path, wait_until):
+    path = tmp_path / "logo.pdf"
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    picture = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 60, 85), False)
+    picture.clear_with(255)
+    page.insert_image(page.rect, pixmap=picture)
+    doc.save(path)
+    doc.close()
+    assert window.open_document(path)
+    view = window.pdf_view
+    wait_until(lambda: view.scanned_known, seconds=30)
+    assert view.scanned_pages == [0]
+    assert window.recognize_text()
+    finished(window, wait_until)
+    assert "No hay letras que reconocer" in window.statusBar().currentMessage()
+    assert not view.modified, "nothing written"

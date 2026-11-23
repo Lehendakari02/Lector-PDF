@@ -29,3 +29,47 @@ PDF. Ve marcando lo que funcione y dime lo que no.
     guardar de que la firma dejará de valer.
 11. Con un lector de pantalla (NVDA): las miniaturas se pueden recorrer con
     las flechas y se mueven con Alt+flechas.
+
+## Tarea 5.2 – Unir, dividir y extraer páginas
+
+1. Modo Organizar → **Unir**. Sale la lista con el documento abierto; añade dos
+   más con «Añadir documentos…» o «Añadir los abiertos». Cambia el orden
+   arrastrando o con Subir/Bajar. Pulsa «Unir 3 documentos» y elige dónde
+   guardarlo: se abre el documento unido.
+2. En el índice del unido, cada documento es un apartado, con sus propios
+   apartados dentro. Las notas y subrayados de cada uno siguen ahí.
+3. Une uno con contraseña: te la pide. Si cancelas, no se crea nada.
+4. **Dividir** la Constitución (o un tema largo): elige «Por los apartados
+   principales del índice». Mira la carpeta: un archivo por título, con su
+   nombre. Prueba también «Cada 5 páginas» y «Por páginas: 1-3, 4-».
+5. Divide dos veces en la misma carpeta: los segundos se llaman «… (2).pdf»,
+   no pisan los primeros.
+6. En las miniaturas, elige varias páginas → clic derecho → **Extraer a un
+   documento nuevo…**: se abre un documento solo con ellas.
+7. Haz un cambio sin guardar y extrae o divide: pregunta «Guardar y seguir».
+8. Abre en **Adobe Reader** un documento unido y una parte: el índice y las
+   anotaciones se ven bien.
+
+## Tarea 5.3 – Insertar páginas de otro PDF o imágenes
+
+1. Modo Organizar → **Insertar páginas**. Elige un PDF y una foto (JPG o PNG)
+   a la vez. Elige «Después de la página que estás leyendo»: aparecen ahí, la
+   foto ocupando una hoja entera (tumbada si la foto es apaisada).
+2. Ctrl+Z las quita de golpe.
+3. En las miniaturas, clic derecho → **Insertar páginas después…**: van detrás
+   de esa página, sin preguntar dónde.
+4. Inserta un PDF con contraseña: te la pide.
+5. Guarda y ábrelo en **Adobe** y en **Edge**: las páginas añadidas se ven
+   igual.
+
+## Arreglo: mover tu texto con un clic
+
+1. Con el marcador (o con «Texto») en la mano, haz un clic en un texto tuyo:
+   queda cogido, con su barra encima. Arrástralo: se mueve.
+2. Un segundo clic encima (o doble clic, o Intro) lo abre para escribir.
+
+## Arreglos del tema 8
+
+1. Abre el tema 8: ya no avisa de páginas escaneadas.
+2. Selecciona una frase arrastrando: coge solo esa línea, no varias. Subraya:
+   el subrayado tiene la altura de la línea.

@@ -8,6 +8,7 @@ from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QLabel
 
+from app.core.commands import HIGHLIGHT
 from app.core.notes import MONO, NOTE, SERIF, TEXT_BOX
 from app.ui.features import Mode
 from app.ui.main_window import MainWindow
@@ -250,7 +251,7 @@ def test_the_page_is_drawn_again_with_the_text(window, opened, wait_until):
     assert bytes(view._cache[0][1].constBits()) != before
 
 
-def test_a_text_is_opened_with_the_tool_or_with_a_double_click(window, opened, wait_until):
+def test_a_text_is_opened_with_two_clicks_or_a_double_click(window, opened, wait_until):
     view, _ = opened()
     view.put_text_box(0, 60, 300, "antes")
     settle(view, wait_until)
@@ -265,7 +266,9 @@ def test_a_text_is_opened_with_the_tool_or_with_a_double_click(window, opened, w
     assert [box.text for box in view.notes_of(0)] == ["después"]
     window.use_writing_tool(TEXT_BOX)
     click(view, inside)
-    assert view.note_panel.edit.toPlainText() == "después"
+    assert view.note_panel is None, "with the tool a click picks it"
+    click(view, inside)
+    assert view.note_panel.edit.toPlainText() == "después", "and a second click opens it"
     view.note_panel.cancel()
 
 
@@ -446,3 +449,35 @@ def test_the_draft_is_written_again_only_when_what_is_written_changes(window, op
     assert "más larga" in view.journal.draft_file.read_text(encoding="utf-8")
     assert view.journal.draft_file.stat().st_mtime_ns >= first
     view.close_note_panel(keep=False)
+
+
+@pytest.mark.parametrize("tool", [HIGHLIGHT, TEXT_BOX])
+def test_with_a_tool_in_hand_one_click_picks_a_text_and_dragging_moves_it(
+    window, opened, wait_until, tool
+):
+    view, _ = opened()
+    view.put_text_box(0, 60, 300, "mío")
+    settle(view, wait_until)
+    if tool == TEXT_BOX:
+        window.use_writing_tool(TEXT_BOX)
+    else:
+        window.use_marker(tool)
+    inside = place(view, 0, 70, 308)
+    click(view, inside)
+    assert view.note_panel is None
+    assert view.picked_item() is not None and view.picked_item().text == "mío"
+    QTest.mousePress(
+        view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, inside
+    )
+    for step in range(1, 6):
+        QTest.mouseMove(view.viewport(), inside + QPoint(0, 12 * step))
+    QTest.mouseRelease(
+        view.viewport(),
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+        inside + QPoint(0, 60),
+    )
+    settle(view, wait_until)
+    (box,) = view.notes_of(0)
+    assert box.text == "mío" and box.rect[1] > 300, "it moved down"
+    assert view.note_panel is None

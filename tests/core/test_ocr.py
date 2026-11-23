@@ -166,3 +166,28 @@ def test_missing_language_file_is_a_clear_error(sample, monkeypatch, tmp_path):
     assert not ocr.is_available()
     with pymupdf.open(sample("escaneado.pdf")) as doc, pytest.raises(OcrError):
         recognize_page(doc[0])
+
+
+def _page_with_picture(side: float):
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    picture = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 50, 50), False)
+    picture.clear_with(230)
+    page.insert_image(pymupdf.Rect(36, 160, 36 + side, 160 + side), pixmap=picture)
+    return doc, page
+
+
+def test_a_logo_on_a_page_is_not_a_scan():
+    doc, page = _page_with_picture(523)  # a big round logo: half the page
+    assert not looks_scanned(page)
+    doc.close()
+
+
+def test_a_picture_covering_the_page_is_a_scan():
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    picture = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 50, 70), False)
+    picture.clear_with(230)
+    page.insert_image(page.rect, pixmap=picture)
+    assert looks_scanned(page)
+    doc.close()

@@ -240,7 +240,7 @@ def test_whole_page_fits_in_the_window_and_follows_its_size(window, qt_app):
 
 def test_functions_not_built_yet_look_different_and_say_so(window):
     built = window.feature_actions["open"]
-    pending = window.feature_actions["merge"]
+    pending = window.feature_actions["compare"]
     assert "todavía no disponible" in pending.toolTip()
     assert "todavía no disponible" not in built.toolTip()
     button = window.mode_toolbars[Mode.ORGANIZE].widgetForAction(pending)

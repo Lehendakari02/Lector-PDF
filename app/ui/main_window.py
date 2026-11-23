@@ -51,9 +51,11 @@ from app import APP_NAME, BUILD_LABEL, __version__
 from app.core import (
     batch_signing,
     certificate_settings,
+    combine,
     my_data,
     my_signature,
     ocr,
+    page_orders,
     pen,
     pictures,
     reading,
@@ -67,7 +69,7 @@ from app.core import (
     symbols,
     tab_sleep,
 )
-from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE
+from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE, CommandError
 from app.core.doc_links import DocLink, relative_file, resolve
 from app.core.document import PdfDocument, PdfOpenError, engine_version
 from app.core.drawing import (
@@ -151,6 +153,7 @@ from app.ui.margin_dialog import MarginChoice, MarginDialog
 from app.ui.margin_dialog import remember as remember_margin
 from app.ui.margin_dialog import remembered as remembered_margin
 from app.ui.my_data_dialog import MyDataDialog, datum_names
+from app.ui.organize_dialogs import InsertWhereDialog, MergeDialog, SplitDialog
 from app.ui.page_box import PageBox
 from app.ui.password_dialog import PasswordDialog
 from app.ui.pdf_view import SIGN_TOOL, PdfView
@@ -208,6 +211,11 @@ TOP_SEARCH_WIDTH = 280
 SIDE_PANEL_SETTING = "panel_lateral"  # "", "miniaturas", "indice" or "anotaciones"
 SUMMARY_FORMAT_SETTING = "resumen/formato"  # "pdf" or "docx": the last one chosen
 SHEET_SETTING = "hoja_nueva"  # the kind of sheet Insertar hoja puts: the last one chosen
+
+
+def free_name_beside(path: Path, stem: str) -> Path:
+    """«stem.pdf» in the folder of ``path``, with a number if it is taken."""
+    return combine.free_name(Path(path).with_name(f"{stem}.pdf"))
 
 
 def pages_text(pages: list[int], tr=lambda text: text) -> str:
@@ -419,6 +427,17 @@ class MainWindow(QMainWindow):
         # For the tests: the documents and the placement «Firmar varios» answers.
         self.sign_many_answer = None
         self._sign_when_saved: DocumentPage | None = None
+        # For the tests, Unir / Dividir / Extraer: whether to save first, the
+        # documents to join, how to cut (parts, titles, folder) and where the
+        # result goes (given the proposal).
+        self.save_first_answer: bool | None = None
+        self.merge_answer: list[Path] | None = None
+        self.split_answer = None
+        # For the tests, Insertar páginas: the files chosen and where they go.
+        self.insert_files_answer: list[Path] | None = None
+        self.insert_where_answer: int | None = None
+        self.organize_target_answer = None
+        self._then_when_saved = None  # (page, what to do) once it is saved
         self.save_as_answer = None
         self.new_stamp_answer: str | None = None  # the tests answer without asking
         self._saving_to_close: list[DocumentPage] = []  # being saved before closing
@@ -486,6 +505,10 @@ class MainWindow(QMainWindow):
             "pages": self.organize_pages,
             "rotate": lambda: self.rotate_pages(90),
             "delete_pages": lambda: self.delete_pages(),
+            "merge": self.merge_documents,
+            "split": self.split_document,
+            "extract_pages": lambda: self.extract_pages(),
+            "insert_pages": lambda: self.insert_pages(),
         }
         self._mark_pending_features()
         self._build_key_commands()
@@ -1005,6 +1028,287 @@ class MainWindow(QMainWindow):
             QMessageBox.StandardButton.Yes,
         )
         return answer == QMessageBox.StandardButton.Yes
+
+    # ---- joining, cutting and taking pages out ------------------------------
+
+    def _with_saved_file(self, page: DocumentPage, title: str, then) -> bool:
+        """Whether the file of ``page`` has everything now. If it has changes
+        not saved, offers to save them first and runs ``then`` once saved."""
+        view = page.view
+        view.finish_writing()
+        if view.saving:
+            return False
+        if not view.modified:
+            return True
+        if self.save_first_answer is not None:
+            wanted = self.save_first_answer
+        else:
+            box = QMessageBox(self)
+            box.setIcon(QMessageBox.Icon.Question)
+            box.setWindowTitle(title)
+            box.setText(
+                self.tr(
+                    "«{0}» tiene cambios sin guardar. Para que entren, primero se guardan."
+                ).format(page.title)
+            )
+            go = box.addButton(self.tr("Guardar y seguir"), QMessageBox.ButtonRole.AcceptRole)
+            box.addButton(self.tr("Cancelar"), QMessageBox.ButtonRole.RejectRole)
+            box.setDefaultButton(go)
+            box.exec()
+            wanted = box.clickedButton() is go
+        if not wanted:
+            return False
+        self._then_when_saved = (page, then)
+        if not self.save_document(page):
+            self._then_when_saved = None
+        return False
+
+    def _go_on_after_saving(self, page: DocumentPage, worked: bool) -> None:
+        if self._then_when_saved is None or self._then_when_saved[0] is not page:
+            return
+        then = self._then_when_saved[1]
+        self._then_when_saved = None
+        if worked and page is self.current_document:
+            QTimer.singleShot(0, then)
+
+    def _source_of(self, page: DocumentPage) -> combine.Source:
+        document = page.view._document
+        return combine.Source(page.path, document.password if document is not None else None)
+
+    def _organize_target(self, suggested: Path, title: str) -> Path | None:
+        """Where a new document goes: asked, with a proposal."""
+        if self.organize_target_answer is not None:
+            chosen = self.organize_target_answer(suggested)
+        else:
+            chosen, _filter = QFileDialog.getSaveFileName(
+                self, title, str(suggested), self.tr("Documentos PDF (*.pdf)")
+            )
+        if not chosen:
+            return None
+        target = Path(chosen).absolute()
+        if target.suffix.lower() != ".pdf":
+            target = target.with_name(target.name + ".pdf")
+        return target
+
+    def _combine_failed(self, error: Exception, what: str) -> None:
+        self.reporter.log.record(type(error), error, error.__traceback__, what)
+        self._show_problem(
+            self.tr("No se ha podido terminar"),
+            self.tr(
+                "Algún documento está dañado o no se puede leer, o no se puede escribir en "
+                "esa carpeta. No se ha cambiado nada."
+            ),
+        )
+
+    def merge_documents(self) -> bool:
+        """«Unir»: several documents into a new one, which is opened."""
+        opened = [(page.path, page.view.modified) for page in self.documents if page.path]
+        if self.merge_answer is not None:
+            paths = list(self.merge_answer)
+        else:
+            current = self.current_document.path if self.pdf_view.page_count else None
+            dialog = MergeDialog(self, opened, [current] if current else [])
+            if dialog.exec() != MergeDialog.DialogCode.Accepted:
+                return False
+            paths = dialog.paths
+        if len(paths) < 2:
+            return False
+        target = self._organize_target(
+            free_name_beside(paths[0], self.tr("Unido")), self.tr("Guardar el documento unido como")
+        )
+        if target is None:
+            return False
+        passwords = {
+            page.path: self._source_of(page).password for page in self.documents if page.path
+        }
+        sources = [combine.Source(path, passwords.get(path)) for path in paths]
+        while True:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            try:
+                count = combine.merge(sources, target)
+            except combine.NeedsPassword as locked:
+                QApplication.restoreOverrideCursor()
+                unlocked = self.ask_password(locked.path)
+                if unlocked is None:
+                    return False
+                sources = [
+                    combine.Source(source.path, unlocked.password)
+                    if source.path == locked.path
+                    else source
+                    for source in sources
+                ]
+                continue
+            except combine.CombineError as error:
+                QApplication.restoreOverrideCursor()
+                self._combine_failed(error, "unir")
+                return False
+            QApplication.restoreOverrideCursor()
+            break
+        self.open_document(target)
+        self.statusBar().showMessage(
+            self.tr("{0} documentos unidos en «{1}» ({2} páginas).").format(
+                len(paths), target.name, count
+            ),
+            STATUS_MESSAGE_MS,
+        )
+        return True
+
+    def split_document(self) -> bool:
+        """«Dividir»: the document in front, cut into several new ones."""
+        page = self.current_document
+        if self.pdf_view.page_count == 0 or page.path is None:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return False
+        if self.pdf_view.page_count < 2:
+            self.statusBar().showMessage(
+                self.tr("Un documento de una sola página no se puede dividir."), STATUS_MESSAGE_MS
+            )
+            return False
+        if not self._with_saved_file(page, self.tr("Dividir"), self.split_document):
+            return False
+        source = self._source_of(page)
+        try:
+            sections = combine.outline_parts(source.path, source.password)
+        except combine.CombineError:
+            sections = []
+        if self.split_answer is not None:
+            parts, titles, folder = self.split_answer
+        else:
+            dialog = SplitDialog(
+                self, page.path.name, self.pdf_view.page_count, page.path.parent, sections
+            )
+            if dialog.exec() != SplitDialog.DialogCode.Accepted:
+                return False
+            parts, titles, folder = dialog.parts, dialog.titles, dialog.folder
+        if not parts:
+            return False
+        names = combine.part_names(page.path.stem, len(parts), titles)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            made = combine.split(source, parts, Path(folder), names)
+        except combine.CombineError as error:
+            self._combine_failed(error, "dividir")
+            return False
+        finally:
+            QApplication.restoreOverrideCursor()
+        self.statusBar().showMessage(
+            self.tr("Dividido en {0} documentos, en «{1}».").format(len(made), Path(folder).name),
+            STATUS_MESSAGE_MS * 2,
+        )
+        if self.show_problem_dialogs:
+            box = QMessageBox(self)
+            box.setIcon(QMessageBox.Icon.Information)
+            box.setWindowTitle(self.tr("Dividir"))
+            box.setText(
+                self.tr("Se han creado {0} documentos en {1}, empezando por «{2}».").format(
+                    len(made), folder, made[0].name
+                )
+            )
+            show = box.addButton(self.tr("Abrir la carpeta"), QMessageBox.ButtonRole.ActionRole)
+            box.addButton(self.tr("Cerrar"), QMessageBox.ButtonRole.RejectRole)
+            box.exec()
+            if box.clickedButton() is show:
+                QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+        return True
+
+    def insert_pages(self, files: list[Path] | None = None, at: int | None = None) -> bool:
+        """«Insertar páginas»: the pages of other PDFs, or pictures (one page
+        each), put in the document in front. Deshacer takes them away."""
+        view = self.pdf_view
+        if view.page_count == 0:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return False
+        if files is None:
+            files = self.insert_files_answer
+        if files is None:
+            folder = str(self.current_document.path.parent) if self.current_document.path else ""
+            images = " ".join(f"*.{kind}" for kind in page_orders.IMAGE_TYPES)
+            chosen, _filter = QFileDialog.getOpenFileNames(
+                self,
+                self.tr("Elegir los PDF o las imágenes que se insertan"),
+                folder,
+                self.tr("PDF e imágenes (*.pdf {0});;PDF (*.pdf);;Imágenes ({0})").format(images),
+            )
+            files = [Path(name) for name in chosen]
+        if not files:
+            return False
+        if at is None:
+            at = self.insert_where_answer
+        if at is None:
+            what = (
+                self.tr("las páginas de «{0}»").format(Path(files[0]).name)
+                if len(files) == 1
+                else self.tr("las páginas de {0} archivos").format(len(files))
+            )
+            dialog = InsertWhereDialog(self, what, view.page_count, max(0, view.current_page))
+            if dialog.exec() != InsertWhereDialog.DialogCode.Accepted:
+                return False
+            at = dialog.at
+        sources: list = [Path(name) for name in files]
+        while True:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            try:
+                done = view.insert_pages(at, sources)
+            except page_orders.SourceNeedsPassword as locked:
+                QApplication.restoreOverrideCursor()
+                unlocked = self.ask_password(Path(locked.path))
+                if unlocked is None:
+                    return False
+                sources = [
+                    (source, unlocked.password) if source == Path(locked.path) else source
+                    for source in sources
+                ]
+                continue
+            except CommandError as error:
+                QApplication.restoreOverrideCursor()
+                self._combine_failed(error, "insertar páginas")
+                return False
+            QApplication.restoreOverrideCursor()
+            break
+        if done:
+            self.statusBar().showMessage(
+                self.tr(
+                    "Páginas insertadas desde la página {0}. Deshacer (Ctrl+Z) las quita."
+                ).format(at + 1),
+                STATUS_MESSAGE_MS,
+            )
+        return done
+
+    def extract_pages(self, pages: list[int] | None = None) -> bool:
+        """«Extraer páginas»: the pages picked (or the one being read) into a
+        new document, which is opened."""
+        page = self.current_document
+        if self.pdf_view.page_count == 0 or page.path is None:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return False
+        pages = self._pages_to_organize() if pages is None else sorted(pages)
+        if not pages:
+            return False
+        if not self._with_saved_file(
+            page, self.tr("Extraer páginas"), lambda p=pages: self.extract_pages(p)
+        ):
+            return False
+        suggested = page.path.with_name(
+            f"{page.path.stem} - {pages_text(pages, self.tr).lower()}.pdf"
+        )
+        target = self._organize_target(
+            combine.free_name(suggested), self.tr("Guardar las páginas como")
+        )
+        if target is None:
+            return False
+        try:
+            combine.extract(self._source_of(page), pages, target)
+        except combine.CombineError as error:
+            self._combine_failed(error, "extraer páginas")
+            return False
+        self.open_document(target)
+        self.statusBar().showMessage(
+            self.tr("{0} en un documento nuevo: «{1}».").format(
+                pages_text(pages, self.tr), target.name
+            ),
+            STATUS_MESSAGE_MS,
+        )
+        return True
 
     @property
     def sheet_kind(self) -> str:
@@ -2864,11 +3168,13 @@ class MainWindow(QMainWindow):
         self._refresh_save_actions()
         self._saved_before_closing(page, True)
         self._sign_after_saving(page, True)
+        self._go_on_after_saving(page, True)
 
     def _save_failed(self, page: DocumentPage, _number: int, kind: str) -> None:
         self._refresh_save_actions()
         self._saved_before_closing(page, False)
         self._sign_after_saving(page, False)
+        self._go_on_after_saving(page, False)
         name = page.title
         reasons = {
             saving.LOCKED: self.tr(
@@ -3131,6 +3437,8 @@ class MainWindow(QMainWindow):
         page.side_panel.closed.connect(self.close_side_panel)
         page.side_panel.tab_changed.connect(self._side_tab_changed)
         page.side_panel.thumbnails.delete_wanted.connect(lambda pages: self.delete_pages(pages))
+        page.side_panel.thumbnails.extract_wanted.connect(lambda pages: self.extract_pages(pages))
+        page.side_panel.thumbnails.insert_wanted.connect(lambda at: self.insert_pages(at=at))
         # Ctrl+C and Ctrl+A belong to the document only while it has the keyboard:
         # in the search box they must keep copying and selecting what is typed.
         # The same goes for Ctrl+Z: in a text box it undoes what was typed there.
@@ -4489,8 +4797,8 @@ class MainWindow(QMainWindow):
         page.text_recognition = run
         run.progressed.connect(page.ocr_banner.show_progress)
         run.finished.connect(
-            lambda written, total, failed, cancelled, p=page: self._text_recognised(
-                p, written, total, failed, cancelled, replace
+            lambda written, total, failed, cancelled, p=page, r=run: self._text_recognised(
+                p, written, total, failed, cancelled, replace, r.empty
             )
         )
         run.failed.connect(self._text_recognition_failed)
@@ -4505,6 +4813,7 @@ class MainWindow(QMainWindow):
         failed: int,
         cancelled: bool,
         again: bool = False,
+        empty: int = 0,
     ) -> None:
         page.text_recognition = None
         page.ocr_banner.finish()
@@ -4515,6 +4824,18 @@ class MainWindow(QMainWindow):
                 ).format(written)
                 if written
                 else self.tr("Reconocimiento cancelado.")
+            )
+        elif written == 0 and empty:
+            message = (
+                self.tr(
+                    "No hay letras que reconocer: esa página es solo una imagen "
+                    "(un logotipo o un dibujo)."
+                )
+                if empty == 1
+                else self.tr(
+                    "No hay letras que reconocer: esas {0} páginas son solo imágenes "
+                    "(logotipos o dibujos)."
+                ).format(empty)
             )
         elif written == 0:
             message = self.tr("No se ha podido reconocer el texto de ninguna página.")

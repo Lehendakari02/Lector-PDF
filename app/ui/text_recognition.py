@@ -58,6 +58,7 @@ class TextRecognition(QObject):
         self._tries: dict[int, int] = {}
         self.done: dict[int, OcrPage] = {}
         self.failures = 0
+        self.empty = 0  # pages read in which there were no letters
         self.total = len(self._where)
         self.running = False
         self._recognizer: Recognizer | None = None
@@ -206,10 +207,15 @@ class TextRecognition(QObject):
     def _end(self, cancelled: bool) -> None:
         self.stop()
         pages = []
+        self.empty = 0
         for key, result in sorted(self.done.items()):
             page = self._where.get(key)
-            if page is not None:
-                pages.append(replace(result, page=page))
+            if page is None:
+                continue
+            if not result.words:
+                self.empty += 1  # a picture without letters (a logo): nothing to write
+                continue
+            pages.append(replace(result, page=page))
         if pages and self._same_document():
             self.view.add_text_layer(pages, self.replace)
             if self.cache is not None:
@@ -217,7 +223,7 @@ class TextRecognition(QObject):
                 self.cache.forget(self._pictures.get(key) for key in self.done)
         else:
             pages = []
-        failures = self.total - len(pages) if not cancelled else self.failures
+        failures = self.total - len(pages) - self.empty if not cancelled else self.failures
         self.finished.emit(len(pages), self.total, failures, cancelled)
 
     def _same_document(self) -> bool:

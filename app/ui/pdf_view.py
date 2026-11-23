@@ -2920,6 +2920,15 @@ class PdfView(QAbstractScrollArea):
             return False  # they are there already
         return self._do(page_orders.move_pages(pages, to))
 
+    def insert_pages(self, at: int, sources) -> bool:
+        """Put the pages of other documents or pictures (see
+        ``page_orders.insert_pages``) at place ``at``. Raises ``CommandError``
+        if one cannot be read (``SourceNeedsPassword`` if it needs one)."""
+        if self._document is None:
+            return False
+        at = max(0, min(at, self.page_count))
+        return self._do(page_orders.insert_pages(at, sources))
+
     def delete_pages(self, pages) -> bool:
         """Take those pages away (never all of them)."""
         pages = sorted({page for page in pages if 0 <= page < self.page_count})
@@ -3885,10 +3894,14 @@ class PdfView(QAbstractScrollArea):
                 self.viewport().update()
         note = self.note_under(position)
         writing = self._markup_tool in (NOTE, TEXT_BOX)
-        if writing and note is not None and note.ours and note.kind == TEXT_BOX:
-            # Dragged, the text moves; a plain click opens it to write.
-            self._start_grab(note, None, position)
-            self._grab["open"] = True
+        marking = self._markup_tool in MARKUP_KINDS
+        if (writing or marking) and note is not None and note.ours and note.kind == TEXT_BOX:
+            # One's own text, as in PowerPoint: a click picks it (then the
+            # arrows, Supr or its bar work on it) and dragged it moves; a
+            # second click on it, a double click or Intro opens it to write.
+            picked = self.picked_item() == note
+            self._start_grab(note, self._handle_under(position) if picked else None, position)
+            self._grab["open"] = picked
             return
         if note is not None and (note.kind == NOTE or writing):
             self.open_note(note, position)
@@ -4549,6 +4562,7 @@ def _breaks_signatures(order) -> bool:
             page_orders.RotatePages,
             page_orders.MovePages,
             page_orders.DeletePages,
+            page_orders.InsertPages,
         ),
     )
 
