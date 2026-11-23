@@ -25,7 +25,9 @@ from pathlib import Path
 
 from asn1crypto import tsp, x509
 from pyhanko import stamp
-from pyhanko.pdf_utils import layout
+from pyhanko.pdf_utils import generic, layout
+from pyhanko.pdf_utils.crypt import AuthStatus
+from pyhanko.pdf_utils.crypt.permissions import StandardPermissions
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import fields, signers
@@ -58,7 +60,11 @@ class NotForSigning(SigningError):
 
 
 class PasswordProtected(SigningError):
-    """The document asks for a password; signing those comes in a later phase."""
+    """The document asks for a password, and none (or a wrong one) was given."""
+
+
+class NotAllowed(SigningError):
+    """The author of the document does not allow filling it in or signing it."""
 
 
 class TimestampFailed(SigningError):
@@ -71,12 +77,50 @@ class Visible:
 
     ``rect`` is in the coordinates of the page as shown (turned pages too),
     like everything the view hands over. ``png`` is the handwritten signature
-    to show at its left, if wanted.
+    to show at its left, if wanted. ``field``: the name of an empty signature
+    field of the document to sign in (``rect`` is then its box).
     """
 
     page: int
     rect: tuple[float, float, float, float]
     png: bytes | None = None
+    field: str = ""
+
+
+def empty_signature_fields(path: str | Path, password: str | None = None) -> list[tuple]:
+    """The places a document has ready for a signature, not signed yet
+    («Firma del trabajador»…): ``(name, page, box as shown)``, page by page.
+    Nothing for a document that cannot be read."""
+    import pymupdf
+
+    try:
+        with Path(path).open("rb") as handle:
+            reader = PdfFileReader(handle, strict=False)
+            if reader.encrypted and reader.decrypt(password or "").status == AuthStatus.FAILED:
+                return []
+            empty = {
+                ref.idnum: name
+                for name, value, ref in fields.enumerate_sig_fields(reader, filled_status=False)
+                if value is None and ref is not None
+            }
+        if not empty:
+            return []
+        found = []
+        with pymupdf.open(str(path), filetype="pdf") as doc:
+            if doc.needs_pass and not doc.authenticate(password or ""):
+                return []
+            for number, page in enumerate(doc):
+                for widget in page.widgets(types=[pymupdf.PDF_WIDGET_TYPE_SIGNATURE]) or ():
+                    parent = doc.xref_get_key(widget.xref, "Parent")
+                    name = empty.get(widget.xref)
+                    if name is None and parent[0] == "xref":
+                        name = empty.get(int(parent[1].split()[0]))
+                    box = widget.rect * page.rotation_matrix
+                    if name is not None and box.width > 2 and box.height > 2:
+                        found.append((name, number, (box.x0, box.y0, box.x1, box.y1)))
+        return found
+    except Exception:
+        return []
 
 
 class TimestampServer(TimeStamper):
@@ -133,12 +177,16 @@ def appearance(width: float, height: float, name: str, when: str, png: bytes | N
         return doc.tobytes(garbage=3, deflate=True)
 
 
-def _place(data: bytes, visible: Visible, picture: bytes) -> tuple[tuple, bytes]:
+def _place(
+    data: bytes, visible: Visible, picture: bytes, password: str | None = None
+) -> tuple[tuple, bytes]:
     """The box in the coordinates of the PDF file (bottom up, page not turned)
     and the appearance turned to look upright on a turned page."""
     import pymupdf
 
     with pymupdf.open(stream=data, filetype="pdf") as doc:
+        if doc.needs_pass and not doc.authenticate(password or ""):
+            raise PasswordProtected("The document asks for a password")
         if not 0 <= visible.page < doc.page_count:
             raise SigningError("That page is not in the document")
         page = doc[visible.page]
@@ -146,8 +194,11 @@ def _place(data: bytes, visible: Visible, picture: bytes) -> tuple[tuple, bytes]
         if shown.is_empty:
             raise SigningError("The signature box is outside the page")
         unturned = shown * page.derotation_matrix
-        in_file = unturned * ~page.transformation_matrix
         rotation = page.rotation
+        # On a turned page PyMuPDF's matrix forgets where the page is cropped
+        # (CropBox); the page not turned has it right. Only this copy changes.
+        page.set_rotation(0)
+        in_file = unturned * ~page.transformation_matrix
     if rotation:
         with pymupdf.open() as turned, pymupdf.open(stream=picture, filetype="pdf") as upright:
             sheet = turned.new_page(width=unturned.width, height=unturned.height)
@@ -253,7 +304,23 @@ def load_p12_signer(path: str | Path, password: str) -> Signer:
     if signer is None:
         raise SigningError("Wrong password, or the file is not a certificate with its key")
     check_usable(signer.signing_cert)
+    _complete_chain(signer)
     return signer
+
+
+def _complete_chain(signer: Signer) -> None:
+    """Add the authorities Windows knows that the file did not bring: validators
+    want the whole chain inside the signature."""
+    if not windows_store.is_available():
+        return
+    with contextlib.suppress(Exception):
+        known = []
+        for der in windows_store.chain_candidates():
+            with contextlib.suppress(Exception):
+                known.append(x509.Certificate.load(der))
+        registry = signer.cert_registry
+        for authority in build_chain(signer.signing_cert, list(registry) + known):
+            registry.register(authority)
 
 
 def check_usable(certificate: x509.Certificate, now: datetime | None = None) -> None:
@@ -271,23 +338,61 @@ def check_usable(certificate: x509.Certificate, now: datetime | None = None) -> 
 
 
 def next_field_name(reader: PdfFileReader) -> str:
-    """A name for the new signature that no field of the document uses yet."""
+    """A name for the new signature that no field of the document uses yet
+    (a text field called «Firma1» is common in forms)."""
     used = {name for name, _value, _ref in fields.enumerate_sig_fields(reader)}
+    with contextlib.suppress(Exception):
+        for field in reader.root["/AcroForm"]["/Fields"]:
+            with contextlib.suppress(Exception):
+                used.add(str(field.get_object()["/T"]))
     number = 1
     while f"{FIELD_PREFIX}{number}" in used:
         number += 1
     return f"{FIELD_PREFIX}{number}"
 
 
-def _open_for_signing(data: bytes) -> IncrementalPdfFileWriter:
+# What the author of a protected document must allow for it to be signed:
+# adding annotations and filling in, or at least filling in (which includes
+# signing), as Adobe Reader asks.
+_SIGNING_ALLOWED = (
+    StandardPermissions.ALLOW_ANNOTS_FORM_FILLING | StandardPermissions.ALLOW_FORM_FILLING
+)
+
+
+def _unlock(writer: IncrementalPdfFileWriter, password: str | None) -> None:
+    """Open a protected document with its password (none for one that only
+    has permissions). The signature is then written protected the same way."""
+    if not writer.prev.encrypted:
+        return
+    try:
+        result = writer.encrypt(password or "")
+    except Exception as exc:
+        raise SigningError(f"This protection is not supported: {exc}") from exc
+    if result.status == AuthStatus.FAILED:
+        raise PasswordProtected("The document asks for a password")
+    if result.status == AuthStatus.USER and not result.permission_flags & _SIGNING_ALLOWED:
+        raise NotAllowed("The author of the document does not allow signing it")
+    if not isinstance(writer._encrypt, generic.IndirectObject):
+        # Some programs (PyMuPDF among them) write the protection inside the
+        # file's trailer. The signing library needs it as an object of its own:
+        # the new part of the file gets one. Tried with Adobe's rules and
+        # PyMuPDF; with an opening password the result cannot be read by
+        # PyMuPDF, so those are refused rather than spoilt.
+        if password:
+            raise SigningError("This protection with a password is not supported")
+        writer._encrypt = writer.add_object(writer._encrypt)
+
+
+def _open_for_signing(data: bytes, password: str | None = None) -> IncrementalPdfFileWriter:
     """Prepare the document and check that the signing library can write it."""
     writer = IncrementalPdfFileWriter(io.BytesIO(data), strict=False)
-    if writer.prev.encrypted:
-        raise PasswordProtected("Documents with a password cannot be signed yet")
+    _unlock(writer, password)
     next_field_name(writer.prev)
     # A rehearsal without signature. It fails here, and not after Windows has
     # asked for the PIN, with documents the library cannot handle.
-    IncrementalPdfFileWriter(io.BytesIO(data), strict=False).write(io.BytesIO())
+    rehearsal = IncrementalPdfFileWriter(io.BytesIO(data), strict=False)
+    _unlock(rehearsal, password)
+    rehearsal.write(io.BytesIO())
     return writer
 
 
@@ -300,10 +405,15 @@ def _rewritten(data: bytes) -> bytes:
     """
     import pymupdf
 
+    from app.core.save_checks import has_signed_field
+
     with pymupdf.open(stream=data, filetype="pdf") as doc:
         if doc.needs_pass:
-            raise PasswordProtected("Documents with a password cannot be signed yet")
-        if doc.get_sigflags() > 0:
+            raise PasswordProtected("The document asks for a password")
+        if doc.xref_get_key(-1, "Encrypt")[0] != "null":
+            # Written again it would lose its protection.
+            raise SigningError("This protected document cannot be prepared for signing")
+        if doc.get_sigflags() > 0 and has_signed_field(doc):
             raise SigningError(
                 "This document already has signatures and cannot be prepared without breaking them"
             )
@@ -316,10 +426,15 @@ def sign_pdf(
     signer: Signer,
     visible: Visible | None = None,
     timestamp_server: str = "",
+    password: str | None = None,
 ) -> Path:
     """Write to ``target`` a copy of ``source`` with a PAdES signature:
     invisible, or visible where ``visible`` says; with a timestamp from
     ``timestamp_server`` if one is given (``TimestampFailed`` if it fails).
+    ``password``: the one the document was opened with, if it has one.
+
+    A problem with the key (a wrong PIN, the card out of its reader) comes
+    out as the ``StoreError`` of Windows, not as a problem of the document.
 
     The copy is written whole to a temporary file next to ``target`` and only
     then given its name, so a failure never leaves half a file.
@@ -329,12 +444,14 @@ def sign_pdf(
     try:
         data = source.read_bytes()
         try:
-            writer = _open_for_signing(data)
+            writer = _open_for_signing(data, password)
         except SigningError:
             raise
         except Exception:
             writer = _open_for_signing(_rewritten(data))
         field_name = next_field_name(writer.prev)
+        if visible is not None and visible.field:
+            field_name = visible.field  # the place the document has for it
         metadata = signers.PdfSignatureMetadata(
             field_name=field_name,
             md_algorithm="sha256",
@@ -346,14 +463,15 @@ def sign_pdf(
             width, height = visible.rect[2] - visible.rect[0], visible.rect[3] - visible.rect[1]
             when = datetime.now().astimezone().strftime("%d/%m/%Y %H:%M")
             upright = appearance(width, height, signer_name(signer), when, visible.png)
-            box, picture = _place(writer_bytes(writer), visible, upright)
+            box, picture = _place(writer_bytes(writer), visible, upright, password)
             handle, name = tempfile.mkstemp(prefix="lectorpdf-aspecto-", suffix=".pdf")
             picture_file = Path(name)
             with os.fdopen(handle, "wb") as out:
                 out.write(picture)
-            options["new_field_spec"] = fields.SigFieldSpec(
-                field_name, on_page=visible.page, box=box
-            )
+            if not visible.field:
+                options["new_field_spec"] = fields.SigFieldSpec(
+                    field_name, on_page=visible.page, box=box
+                )
             options["stamp_style"] = stamp.StaticStampStyle.from_pdf_file(
                 str(picture_file),
                 border_width=0,
@@ -371,16 +489,18 @@ def sign_pdf(
         with os.fdopen(handle, "wb+") as out:
             signers.PdfSigner(metadata, signer, **options).sign_pdf(writer, output=out)
         os.replace(temporary, target)
-    except (windows_store.SigningCancelled, SigningError):
+    except (windows_store.StoreError, SigningError):
         _remove(temporary)
         raise
     except Exception as exc:
         _remove(temporary)
         cause = exc
-        while cause is not None and not isinstance(cause, SigningError):
+        while cause is not None and not isinstance(cause, (SigningError, windows_store.StoreError)):
             cause = cause.__cause__ or cause.__context__
         if isinstance(cause, TimestampFailed):
             raise TimestampFailed(str(cause)) from exc
+        if isinstance(cause, windows_store.StoreError):
+            raise cause from exc  # the key, not the document
         raise SigningError(f"The document could not be signed: {exc}") from exc
     finally:
         _remove(picture_file)

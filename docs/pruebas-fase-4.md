@@ -99,7 +99,43 @@ Necesitas un lector de tarjetas y el PIN del DNIe.
    tu nombre, "AC FNMT Usuarios" (o la del DNIe) y la fecha.
 3. Abre algún PDF firmado que te haya llegado de fuera (una nómina, un
    certificado de la administración…) y compara con lo que dice Adobe.
-4. Añade una nota a un PDF firmado, guárdalo y comprueba: sigue ✔ y dice
-   que después se añadieron notas.
+4. Añade una nota a un PDF firmado y pulsa Guardar: guarda sin preguntar.
+   Comprobar firmas: sigue ✔ y dice que después se añadieron notas.
 5. Si en algún caso sale ⚠ o ✖ y Adobe o VALIDe dicen que está bien, dime
    cuál.
+
+## Tarea 4.8 – Arreglos de la revisión de la Fase 4
+
+1. **PIN equivocado al firmar varios** (con el DNIe ten cuidado: tres PIN mal
+   lo bloquean; prueba esto con tu certificado FNMT si su clave tiene
+   contraseña). Firmar varios documentos, 3 documentos, y pon mal el PIN o la
+   contraseña la primera vez: el lote **se para** y dice "El PIN o la
+   contraseña no es correcto". No vuelve a pedirlo para los demás.
+2. Saca la tarjeta del lector y firma: dice "Mete la tarjeta en el lector".
+3. **La ventana del PIN de Windows** sale delante del programa, no detrás.
+4. **PDF con restricciones:** uno que se abre sin contraseña pero no deja
+   imprimir o copiar (muchos de la administración). Firmar con certificado:
+   ahora firma. Ábrelo en Adobe: la firma es válida y sigue protegido.
+5. **PDF con contraseña:** ábrelo en el programa con su contraseña y firma: el
+   firmado sigue pidiendo la misma contraseña. Si es un PDF hecho con este
+   mismo programa u otros basados en MuPDF, puede decir que no se puede
+   firmar tal cual (limitación conocida).
+6. **Página girada:** firma un escaneado con páginas giradas: el recuadro sale
+   justo donde haces clic.
+7. **Formulario con un campo de texto «Firma1»** (frecuente en formularios
+   oficiales): ahora firma.
+8. **Sin ratón:** Firmar con certificado → Intro: la firma va abajo a la
+   derecha de la página que ves.
+9. En Ajustes → Firma escribe otro servidor de sellos y cierra con Esc:
+   al volver sigue el que escribiste.
+10. **Hueco de firma:** abre un PDF que traiga un hueco para firmar (muchos
+    contratos y formularios oficiales; en Adobe se ve como un recuadro con
+    una etiqueta roja). Firmar con certificado: el hueco sale resaltado en
+    azul. Haz clic dentro: la firma ocupa el hueco. Ábrelo en Adobe: la firma
+    está en ese hueco y no hay otro campo nuevo. Con Intro también va al hueco.
+11. **Anotar un PDF firmado:** abre un PDF firmado (tuyo o de fuera), subraya,
+    pon una nota y rellena un campo si tiene. Guardar: no pregunta nada.
+    Ábrelo en Adobe: la firma sigue válida y Adobe dice que hubo cambios
+    permitidos después de firmar. En el programa, Comprobar firmas dice ✔.
+12. **Margen en un PDF firmado:** añade un margen y pulsa Guardar: avisa de
+    que la firma dejará de valer (esto sí la rompe).

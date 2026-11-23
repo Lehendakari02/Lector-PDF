@@ -118,7 +118,10 @@ solo, siempre) y **cambiar el PDF** (lo decide el usuario). Decidido el 12/11/20
    anteriores" permite ver y restaurar cualquiera. Así, si se guardó algo que no
    se quería, se puede volver.
 6. **Avisos que salen siempre, con cualquier ajuste:**
-   - el PDF está firmado (guardar invalida la firma): nunca se guarda solo;
+   - el PDF está firmado: nunca se guarda solo. Al guardarlo, como hace Adobe,
+     los cambios se añaden al final del archivo y las firmas siguen valiendo
+     con notas, marcas y campos rellenados (sin aviso). Avisa cuando el cambio
+     sí las invalida (márgenes, hojas añadidas, texto reconocido, marcadores);
    - hay cambios fuertes: borrar páginas, tapar datos, cambiar el texto original;
    - el archivo no se puede guardar en su sitio (adjunto de correo en carpeta
      temporal, solo lectura): ofrece "Guardar como";

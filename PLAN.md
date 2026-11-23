@@ -1429,6 +1429,7 @@ Notas de la Fase 3:
 | 4.5 | Firmar con DNIe y lector de tarjetas | Firmo con el DNIe (cuando tenga lector) | 🔶 hecho (PR 90); falta tu prueba con el DNIe y un lector |
 | 4.6 | Ver y verificar firmas existentes | Abro un PDF firmado y me dice quién lo firmó y si es válido | 🔶 hecho (PR 91); falta tu prueba con PDFs firmados de verdad |
 | 4.7 | Versión 0.6 | — | 🔶 número 0.6.0 puesto (23/11/2026); falta que Julen cree la Release v0.6.0 |
+| 4.8 | Arreglos de la revisión del código de la Fase 4 | Todo lo de la revisión arreglado y probado | 🔶 hecho (pull request de la rama `claude/project-thread-bdtogg`); falta tu prueba (apartado 4.8 de `docs/pruebas-fase-4.md`) |
 
 Notas de la Fase 4:
 - **4.1: Firmar con el certificado instalado en Windows (22/11/2026).**
@@ -1516,6 +1517,46 @@ Notas de la Fase 4:
     Windows (la FNMT y la del DNIe lo están). No se mira si el certificado
     se ha anulado; la ventana lo dice y remite a VALIDe para la comprobación
     oficial.
+
+- **4.8: Revisión del código de la Fase 4 (23/11/2026).** Informe completo en
+  la carpeta del proyecto (`revision-codigo-fase-4.md`). Arreglado:
+  - **Un problema con la clave para el lote** (PIN equivocado, tarjeta fuera,
+    tarjeta bloqueada): antes seguía con los demás documentos pidiendo el PIN
+    otra vez, y el DNIe se bloquea tras tres PIN mal. Los avisos lo dicen en
+    palabras (`windows_store.WrongPin`, `CardBlocked`, `NoCard`).
+  - **PDF con permisos y con contraseña:** se firman con la contraseña con la
+    que se abrieron (ninguna si solo tienen permisos) y siguen protegidos. Si
+    el autor no permite rellenar ni firmar, no se firma (`NotAllowed`), como
+    en Adobe. Al firmar varios, los abiertos usan su contraseña.
+  - **Limitación conocida:** los PDF con contraseña de apertura protegidos por
+    PyMuPDF (y otros programas que guardan la protección dentro del final del
+    archivo) no se firman: el resultado no lo podría leer PyMuPDF. **Para la
+    tarea 5.7** (poner contraseña): comprobar que lo que guarde este programa
+    se puede firmar después, o avisar de firmar antes de proteger.
+  - Firma visible bien colocada en páginas giradas y recortadas; un campo de
+    texto «Firma1» ya no impide firmar; la ventana del PIN va sobre la ventana
+    principal; mientras se firman varios, la ventana principal espera; no se
+    firma encima de otra pestaña con cambios; Comprobar firmas acepta
+    certificados con solo "firma digital" y usa las autoridades intermedias
+    de Windows; la cadena de un .p12 se completa con las de Windows; Intro
+    coloca la firma visible sin ratón; reloj de espera al firmar.
+  - **Dos ideas aprobadas por Julen (23/11/2026), hechas en la misma tarea:**
+    - **Firmar dentro del hueco de firma** que trae el documento («Firma del
+      trabajador»…), como Adobe: al pulsar Firmar con certificado el hueco se
+      resalta y un clic dentro firma en él, con su tamaño (Intro: en el hueco).
+      Un clic fuera hace una firma nueva. No se crea un segundo campo.
+      (`signing.empty_signature_fields`, `Visible.field`.)
+    - **Guardar un PDF firmado añadiendo los cambios al final**, como Adobe:
+      notas, subrayados, dibujos, sellos y campos rellenados ya no rompen las
+      firmas, y no se avisa. Se sigue avisando (y entonces sí la rompen) con
+      márgenes, hojas añadidas, texto reconocido y marcadores, también si se
+      deshacen antes de guardar. Un PDF firmado nunca se guarda solo.
+      Comprobar firmas distingue "se añadieron notas" de "cambiado" mirando
+      las páginas (pyHanko es demasiado estricto con lo que escribe MuPDF).
+      Lo borrado después de firmar sigue dentro del archivo, en la parte
+      firmada (así funciona la firma; Adobe hace lo mismo). Un archivo
+      reparado al abrirlo se reescribe entero. (`saving.keeps_signatures`,
+      `PdfView.breaks_signatures`, `signature_check._looked_at_by_hand`.)
 
 ## Fase 5 – Organizar y convertir
 | # | Tarea | Terminado cuando… | Estado |

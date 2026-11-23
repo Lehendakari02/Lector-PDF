@@ -106,10 +106,13 @@ from app.core.ocr_cache import OcrCache
 from app.core.paths import data_dir, is_portable
 from app.core.settings import Settings
 from app.core.signing import (
+    NotAllowed,
     PasswordProtected,
     SigningError,
     TimestampFailed,
     Visible,
+    WindowsStoreSigner,
+    empty_signature_fields,
     sign_pdf,
 )
 from app.core.stamps import Stamp
@@ -118,7 +121,7 @@ from app.core.tool_keys import FAVOURITE_KEYS, TOOL_KEYS, tool_keys_wanted
 from app.core.updates import Release
 from app.core.versions import FOLDER_NAME as VERSIONS_FOLDER
 from app.core.versions import Version, VersionError, Versions
-from app.core.windows_store import SigningCancelled, StoreError
+from app.core.windows_store import CardBlocked, NoCard, SigningCancelled, StoreError, WrongPin
 from app.ui import color_naming, icons
 from app.ui import theme as theme_module
 from app.ui.about_dialog import AboutDialog
@@ -2174,12 +2177,21 @@ class MainWindow(QMainWindow):
         self._start_saving(page, None)
         return True
 
-    def _save_warnings(self, page: DocumentPage) -> list[str]:
+    def _save_warnings(self, page: DocumentPage, by_itself: bool = False) -> list[str]:
         if page.path is None:
             return []
         document = page.view._document
         password = document.password if document is not None else None
         found = save_checks.warnings_for(page.path, page.stamp, password)
+        if (
+            save_checks.SIGNED in found
+            and not by_itself  # a signed PDF is never saved by itself
+            and not page.view.breaks_signatures
+            and save_checks.signatures_kept(page.path, password)
+        ):
+            # Notes, marks and filled fields are added at the end of the file,
+            # as Adobe does: the signatures stay valid, nothing to warn about.
+            found.remove(save_checks.SIGNED)
         if not self.warn_about_temporary_folders and save_checks.TEMPORARY in found:
             found.remove(save_checks.TEMPORARY)
         if page.view.loses_undo_on_save:
@@ -2349,7 +2361,9 @@ class MainWindow(QMainWindow):
             return False
         if not page.view.modified or page.view.saving:
             return False
-        reasons = [r for r in self._save_warnings(page) if r not in page.accepted_warnings]
+        reasons = [
+            r for r in self._save_warnings(page, by_itself=True) if r not in page.accepted_warnings
+        ]
         if reasons:
             if not page.autosave_told:
                 page.autosave_told = True
@@ -2509,8 +2523,8 @@ class MainWindow(QMainWindow):
         if page.path is not None and file_key(path) != file_key(page.path):
             # "Guardar como": from now on this tab is the new file.
             page.path = path
-            # The copy is the user's own working file: its signature, if it had
-            # one, went with the changes, and the signed original is untouched.
+            # The copy is the user's own working file (and the signed original
+            # is untouched): no more warnings about its signatures.
             page.accepted_warnings = {save_checks.SIGNED}
             self.history.add_recent(path)
             if page in self.documents:
@@ -4242,14 +4256,22 @@ class MainWindow(QMainWindow):
                 return False
             return True
         if certificate_settings.visible_wanted(self.settings):
-            view.choose_certificate_place()
-            self.statusBar().showMessage(
-                self.tr(
-                    "Haz clic en la página donde quieres la firma. Esc para cancelar. "
-                    "(Firma invisible: en Ajustes → Firma.)"
-                ),
-                STATUS_MESSAGE_MS * 3,
-            )
+            password = view._document.password if view._document is not None else None
+            fields = empty_signature_fields(page.path, password)
+            view.choose_certificate_place(fields=fields)
+            if fields:
+                text = self.tr(
+                    "El documento tiene un hueco para la firma (resaltado): haz clic dentro "
+                    "para firmar en él, o en otro sitio de la página (Intro: en el hueco). "
+                    "Esc para cancelar."
+                )
+                view.scroll_to_page(fields[0][1])
+            else:
+                text = self.tr(
+                    "Haz clic en la página donde quieres la firma (Intro: abajo a la "
+                    "derecha). Esc para cancelar. (Firma invisible: en Ajustes → Firma.)"
+                )
+            self.statusBar().showMessage(text, STATUS_MESSAGE_MS * 3)
             return True
         return self._sign_at(page, None)
 
@@ -4262,7 +4284,8 @@ class MainWindow(QMainWindow):
         png = None
         if certificate_settings.handwritten_wanted(self.settings):
             png = self.saved_signature(my_signature.SIGNATURE)
-        return self._sign_at(page, Visible(number, tuple(rect), png))
+        field = page.view.placed_field  # an empty signature field, if it was clicked
+        return self._sign_at(page, Visible(number, tuple(rect), png, field))
 
     def _sign_at(self, page: DocumentPage, visible: Visible | None) -> bool:
         signer = self._choose_signer()
@@ -4360,8 +4383,11 @@ class MainWindow(QMainWindow):
         if certificate_settings.timestamp_wanted(settings):
             server = certificate_settings.timestamp_server(settings)
 
+        self._ask_pin_over_this_window(signer)
         progress = QProgressDialog(self.tr("Firmando…"), self.tr("Parar"), 0, len(paths), self)
         progress.setWindowTitle(self.tr("Firmar varios documentos"))
+        # Nothing else is done meanwhile (closing the program, another signing…).
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(500)
 
         def step(done: int, path: Path) -> bool:
@@ -4372,14 +4398,33 @@ class MainWindow(QMainWindow):
             QApplication.processEvents()
             return not progress.wasCanceled()
 
+        passwords = {
+            page.path: page.view._document.password
+            for page in self.documents
+            if page.path is not None
+            and page.view._document is not None
+            and page.view._document.password
+        }
         cancelled = False
+        key_problem = None
         try:
             outcomes = batch_signing.sign_many(
-                paths, signer, placement, png, server, self._sign_without_timestamp, step
+                paths,
+                signer,
+                placement,
+                png,
+                server,
+                self._sign_without_timestamp,
+                step,
+                passwords=passwords,
             )
         except SigningCancelled as stopped:
             outcomes, cancelled = list(getattr(stopped, "outcomes", [])), True
-        except (SigningError, StoreError) as error:
+        except StoreError as error:  # the key, not one document: the batch stops
+            outcomes, cancelled = list(getattr(error, "outcomes", [])), True
+            key_problem = error
+            self.reporter.log.record(type(error), error, error.__traceback__, "firmar varios")
+        except SigningError as error:
             progress.close()
             self.reporter.log.record(type(error), error, error.__traceback__, "firmar varios")
             self._show_problem(
@@ -4388,6 +4433,8 @@ class MainWindow(QMainWindow):
             )
             return False
         progress.close()
+        if key_problem is not None:
+            self._show_problem(self.tr("No se ha podido firmar"), self._key_problem(key_problem))
         for outcome in outcomes:
             if outcome.result == batch_signing.FAILED:
                 self.reporter.log.record(
@@ -4407,7 +4454,15 @@ class MainWindow(QMainWindow):
             lines.append(self.tr("Se paró antes de terminar; los demás no se han tocado."))
         for outcome in outcomes:
             if outcome.result == batch_signing.PASSWORD:
-                lines.append(self.tr("· «{0}»: tiene contraseña.").format(outcome.source.name))
+                lines.append(
+                    self.tr("· «{0}»: tiene contraseña (ábrelo antes en el programa).").format(
+                        outcome.source.name
+                    )
+                )
+            elif outcome.result == batch_signing.NOT_ALLOWED:
+                lines.append(
+                    self.tr("· «{0}»: su autor no permite firmarlo.").format(outcome.source.name)
+                )
             elif outcome.result == batch_signing.FAILED:
                 lines.append(
                     self.tr("· «{0}»: no se ha podido firmar (dañado o no es un PDF).").format(
@@ -4445,13 +4500,40 @@ class MainWindow(QMainWindow):
             preferred=str(self.settings.get(CERTIFICATE_SETTING) or ""),
             last_file=str(self.settings.get(CERTIFICATE_FILE_SETTING) or ""),
         )
-        if dialog.exec() != CertificateDialog.DialogCode.Accepted or dialog.signer is None:
+        accepted = dialog.exec() == CertificateDialog.DialogCode.Accepted
+        dialog.deleteLater()  # one window less each time (it is read just below)
+        if not accepted or dialog.signer is None:
             return None
         if dialog.chosen:
             self.settings.set(CERTIFICATE_SETTING, dialog.chosen)
         if dialog.chosen_file:  # where it is, never its password
             self.settings.set(CERTIFICATE_FILE_SETTING, dialog.chosen_file)
         return dialog.signer
+
+    def _ask_pin_over_this_window(self, signer) -> None:
+        """Windows shows its PIN window over the window it is given: this one,
+        which stays open (not the closed window where the certificate was chosen)."""
+        if isinstance(signer, WindowsStoreSigner):
+            signer.window_handle = int(self.winId())
+
+    def _key_problem(self, error: StoreError) -> str:
+        """What went wrong with the key of the certificate, in plain words."""
+        if isinstance(error, WrongPin):
+            return self.tr(
+                "El PIN o la contraseña no es correcto. Cuidado: el DNIe y otras tarjetas "
+                "se bloquean después de varios intentos fallidos."
+            )
+        if isinstance(error, CardBlocked):
+            return self.tr(
+                "La tarjeta está bloqueada por demasiados PIN equivocados. El DNIe se "
+                "desbloquea en los puntos de actualización de las comisarías."
+            )
+        if isinstance(error, NoCard):
+            return self.tr("Mete la tarjeta en el lector y vuelve a firmar.")
+        return self.tr(
+            "Windows no ha dejado usar el certificado. Prueba otra vez o firma con la copia "
+            "del certificado en un archivo .p12 o .pfx."
+        )
 
     def _signed_target(self, source: Path) -> Path | None:
         """Where the signed document goes: asked, «-firmado» proposed."""
@@ -4482,32 +4564,82 @@ class MainWindow(QMainWindow):
         source, target = Path(source), Path(target)
         open_tab = self.index_of_document(target)
         in_place = open_tab >= 0 or (target.exists() and file_key(target) == file_key(source))
+        if (
+            open_tab >= 0
+            and file_key(target) != file_key(source)
+            and self.documents[open_tab].view.modified
+        ):
+            # Signing over another open document would throw its changes away.
+            self._show_problem(
+                self.tr("No se ha podido firmar"),
+                self.tr(
+                    "«{0}» está abierto con cambios sin guardar. Guárdalo o ciérralo "
+                    "antes, o guarda el documento firmado con otro nombre."
+                ).format(target.name),
+            )
+            return False
+        source_tab = self.index_of_document(source)
+        password = None
+        if source_tab >= 0 and self.documents[source_tab].view._document is not None:
+            password = self.documents[source_tab].view._document.password
         written = target
         if in_place:
             # The open file cannot be replaced while it is shown: sign beside it.
-            handle, name = tempfile.mkstemp(dir=target.parent, prefix=".firmado-", suffix=".pdf")
+            try:
+                handle, name = tempfile.mkstemp(
+                    dir=target.parent, prefix=".firmado-", suffix=".pdf"
+                )
+            except OSError:
+                self._show_problem(
+                    self.tr("No se ha podido firmar"),
+                    self.tr(
+                        "No se puede escribir en la carpeta de «{0}». Firma una copia en "
+                        "otro sitio (por ejemplo, en Documentos)."
+                    ).format(target.name),
+                )
+                return False
             os.close(handle)
             written = Path(name)
         server = ""
         if certificate_settings.timestamp_wanted(self.settings):
             server = certificate_settings.timestamp_server(self.settings)
+        self._ask_pin_over_this_window(signer)
+        self.statusBar().showMessage(self.tr("Firmando…"))
         try:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
             try:
-                sign_pdf(source, written, signer, visible, server)
+                sign_pdf(source, written, signer, visible, server, password)
             except TimestampFailed as error:
                 self.reporter.log.record(type(error), error, error.__traceback__, "sello de tiempo")
-                if not self._sign_without_timestamp():
+                QApplication.restoreOverrideCursor()
+                go_on = self._sign_without_timestamp()
+                QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+                if not go_on:
                     raise SigningCancelled() from error
-                sign_pdf(source, written, signer, visible)
+                sign_pdf(source, written, signer, visible, password=password)
+            finally:
+                QApplication.restoreOverrideCursor()
         except SigningCancelled:
             self.statusBar().showMessage(self.tr("Firma cancelada."), STATUS_MESSAGE_MS)
             self._forget_file(written if in_place else None)
+            return False
+        except StoreError as error:
+            self._forget_file(written if in_place else None)
+            self.reporter.log.record(type(error), error, error.__traceback__, "firmar")
+            self._show_problem(self.tr("No se ha podido firmar"), self._key_problem(error))
             return False
         except PasswordProtected:
             self._forget_file(written if in_place else None)
             self._show_problem(
                 self.tr("Este PDF tiene contraseña"),
-                self.tr("Todavía no se pueden firmar documentos con contraseña."),
+                self.tr("Ábrelo en el programa con su contraseña y vuelve a firmar."),
+            )
+            return False
+        except NotAllowed:
+            self._forget_file(written if in_place else None)
+            self._show_problem(
+                self.tr("No se puede firmar"),
+                self.tr("Quien hizo este PDF lo protegió para que no se pueda rellenar ni firmar."),
             )
             return False
         except SigningError as error:

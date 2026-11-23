@@ -84,8 +84,6 @@ class CertificateDialog(QDialog):
         self.list.setSpacing(4)
         self.list.itemDoubleClicked.connect(lambda _item: self.use_selected())
         self.list.currentRowChanged.connect(lambda _row: self._update_buttons())
-        self.list.itemDoubleClicked.connect(lambda _item: self.use_selected())
-        self.list.currentRowChanged.connect(lambda _row: self._update_buttons())
 
         self.buttons = QDialogButtonBox()
         self.sign_button = self.buttons.addButton(

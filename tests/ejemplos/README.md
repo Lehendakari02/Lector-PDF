@@ -11,6 +11,9 @@ PDFs que usan las pruebas automáticas. Todo el contenido es inventado, salvo
 | `texto-dificil.pdf` | Letras unidas ("ﬁ", "ﬂ"), tildes y "ñ" escritas en dos piezas, una frase que sigue en la página siguiente, entre pie y cabecera, y comillas, apóstrofos y guiones tipográficos | Buscador |
 | `formulario.pdf` | Campos de texto, casillas y lista desplegable | Rellenar formularios |
 | `con-contrasena.pdf` | Pide contraseña al abrir. La contraseña es `lector` | PDFs protegidos |
+| `restringido.pdf` | Se abre sin contraseña, pero no deja imprimir ni copiar (sí rellenar y firmar) | Firmar PDFs con permisos |
+| `no-se-firma.pdf` | Se abre sin contraseña y su autor no deja rellenarlo ni firmarlo | Respetar los permisos al firmar |
+| `contrasena-firmable.pdf` | Pide contraseña al abrir (`lector`), protegido como lo hacen la mayoría de programas | Firmar PDFs con contraseña |
 | `escaneado.pdf` | 3 páginas que son solo una imagen torcida y con ruido | Reconocer texto (OCR) |
 | `ocr-malo.pdf` | Escaneado con texto oculto lleno de fallos ("Articu1o", "ano") | Rehacer el OCR, búsqueda aproximada |
 | `firmado.pdf` | Firmado con el certificado de prueba | Ver y comprobar firmas |
@@ -21,4 +24,7 @@ propósito, solo para las pruebas.
 
 Todos menos `boe.pdf` se crean con `python tests/ejemplos/generar.py`. Solo hace
 falta ejecutarlo para cambiarlos. `texto-dificil.pdf` se crea aparte, con la función
-`make_tricky_text` de ese archivo (necesita la fuente DejaVu Serif).
+`make_tricky_text` de ese archivo (necesita la fuente DejaVu Serif). Los tres
+protegidos para firmar se crean con `python tests/ejemplos/generar_protegidos.py`,
+que necesita pikepdf (`pip install pikepdf`, solo para crearlos: el programa no lo
+usa), porque PyMuPDF guarda la protección de otra forma.

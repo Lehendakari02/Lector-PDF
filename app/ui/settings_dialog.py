@@ -395,6 +395,11 @@ class SettingsDialog(QDialog):
         self._refresh_signing()
         return page
 
+    def done(self, result: int) -> None:  # noqa: D102 - closing (also with Esc)
+        if self.server_edit.text().strip() != certificate_settings.timestamp_server(self.settings):
+            self._server_chosen()  # what was typed in the server is kept
+        super().done(result)
+
     def _set_signing(self, name: str, value) -> None:
         self.settings.set(name, value)
         self._refresh_signing()

@@ -76,7 +76,23 @@ def is_signed(path: str | Path, password: str | None = None) -> bool:
                 return False
             # The form's own list of fields, not every page: it is asked at
             # every save, and a document of hundreds of pages must not wait.
-            return _has_signed_field(doc)
+            return has_signed_field(doc)
+    except Exception:  # PyMuPDF raises several unrelated error types
+        return False
+
+
+def signatures_kept(path: str | Path, password: str | None = None) -> bool:
+    """Whether saving the signed PDF at ``path`` adds the changes at the end
+    and so keeps its signatures (see ``saving.keeps_signatures``)."""
+    import pymupdf
+
+    from app.core.saving import keeps_signatures
+
+    try:
+        with pymupdf.open(str(path), filetype="pdf") as doc:
+            if doc.needs_pass and not (password and doc.authenticate(password)):
+                return False
+            return keeps_signatures(doc)
     except Exception:  # PyMuPDF raises several unrelated error types
         return False
 
@@ -84,7 +100,7 @@ def is_signed(path: str | Path, password: str | None = None) -> bool:
 _REFERENCE = re.compile(r"(\d+)\s+0\s+R")
 
 
-def _has_signed_field(doc) -> bool:
+def has_signed_field(doc) -> bool:
     """Whether a field of the form is a signature with a value (signed)."""
     kind, value = doc.xref_get_key(doc.pdf_catalog(), "AcroForm/Fields")
     if kind == "xref":

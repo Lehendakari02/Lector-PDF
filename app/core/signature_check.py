@@ -66,6 +66,28 @@ def trusted_roots() -> list:
     return roots
 
 
+def known_authorities() -> list:
+    """The intermediate authorities this computer knows (Windows' list): many
+    signatures made with other programs do not carry them inside."""
+    from asn1crypto import x509
+
+    from app.core import windows_store
+
+    if not windows_store.is_available():
+        return []
+    try:
+        found = windows_store.store_certificates(windows_store.INTERMEDIATE_STORE)
+    except windows_store.StoreError:
+        return []
+    authorities = []
+    for der in found:
+        try:
+            authorities.append(x509.Certificate.load(der))
+        except Exception:  # noqa: S112 - one unreadable certificate must not hide the rest
+            continue
+    return authorities
+
+
 def _name(name) -> str:
     fields = name.native
     for key in ("common_name", "organization_name"):
@@ -93,6 +115,54 @@ def _after(status) -> str:
     return CHANGED
 
 
+def _looked_at_by_hand(data: bytes, signed_until: int) -> str:
+    """What was added after a signature, judged by the pages themselves, for
+    when the signing library cannot explain the changes (it is stricter than
+    Adobe: notes or filled fields saved by PyMuPDF look unexplained to it).
+
+    Same pages with the same content and size: only annotations (ANNOTATED)
+    or only form fields (FORM_FILLED) changed. Anything else: CHANGED.
+    """
+    import pymupdf
+
+    def look(doc) -> list:
+        pages = []
+        for page in doc:
+            marks = sorted(
+                (annot.type[1], tuple(round(v, 1) for v in annot.rect))
+                for annot in page.annots(types=None) or ()
+                if annot.type[0] != pymupdf.PDF_ANNOT_WIDGET
+            )
+            pages.append(
+                (
+                    page.read_contents(),
+                    tuple(page.mediabox),
+                    tuple(page.cropbox),
+                    page.rotation,
+                    marks,
+                )
+            )
+        return pages
+
+    try:
+        with (
+            pymupdf.open(stream=data[:signed_until], filetype="pdf") as signed,
+            pymupdf.open(stream=data, filetype="pdf") as now,
+        ):
+            if signed.needs_pass or now.needs_pass:
+                return CHANGED
+            before, after = look(signed), look(now)
+    except Exception:
+        return CHANGED
+    if len(before) != len(after):
+        return CHANGED
+    if any(old[:4] != new[:4] for old, new in zip(before, after, strict=True)):
+        return CHANGED
+    if any(old[4] != new[4] for old, new in zip(before, after, strict=True)):
+        return ANNOTATED
+    return FORM_FILLED
+
+
 def _pages_of_fields(path: Path) -> dict[str, int]:
     """On which page each signature can be seen (fields with a box)."""
     import pymupdf
@@ -109,21 +179,33 @@ def _pages_of_fields(path: Path) -> dict[str, int]:
     return found
 
 
-def check_signatures(path: str | Path, roots: list | None = None) -> list[SignatureReport]:
+def check_signatures(
+    path: str | Path, roots: list | None = None, intermediates: list | None = None
+) -> list[SignatureReport]:
     """Every signature of the document, in the order they were made.
 
-    ``roots``: the authorities to trust (by default, the ones of Windows).
+    ``roots``: the authorities to trust (by default, the ones of Windows);
+    ``intermediates``: others that may complete a chain (the same).
     A document without signatures gives an empty list; one that cannot be
     read raises ``OSError`` or ``ValueError``.
     """
     from pyhanko.pdf_utils.reader import PdfFileReader
-    from pyhanko.sign.validation import validate_pdf_signature
+    from pyhanko.sign.validation import KeyUsageConstraints, validate_pdf_signature
+    from pyhanko.sign.validation.status import SignatureCoverageLevel
     from pyhanko_certvalidator import ValidationContext
 
     path = Path(path)
     if roots is None:
         roots = trusted_roots()
+    if intermediates is None:
+        intermediates = known_authorities()
+    # Either mark makes a certificate good for signing, as Adobe takes it
+    # (the library asks for «non-repudiation» alone by default).
+    usage = KeyUsageConstraints(
+        key_usage={"digital_signature", "non_repudiation"}, match_all_key_usages=False
+    )
     pages = _pages_of_fields(path)
+    data = path.read_bytes()
     reports = []
     with path.open("rb") as handle:
         try:
@@ -140,9 +222,12 @@ def check_signatures(path: str | Path, roots: list | None = None) -> list[Signat
                 signer = issuer = ""
             try:
                 context = ValidationContext(
-                    trust_roots=roots, allow_fetching=False, revocation_mode="soft-fail"
+                    trust_roots=roots,
+                    other_certs=intermediates,
+                    allow_fetching=False,
+                    revocation_mode="soft-fail",
                 )
-                status = validate_pdf_signature(signature, context)
+                status = validate_pdf_signature(signature, context, key_usage_settings=usage)
             except Exception as exc:
                 reports.append(
                     SignatureReport(
@@ -152,6 +237,10 @@ def check_signatures(path: str | Path, roots: list | None = None) -> list[Signat
                 )  # fmt: skip
                 continue
             stamp = status.timestamp_validity
+            after = _after(status)
+            if after == CHANGED and status.coverage == SignatureCoverageLevel.ENTIRE_REVISION:
+                start, length = signature.byte_range[2], signature.byte_range[3]
+                after = _looked_at_by_hand(data, start + length)
             when = stamp.timestamp if stamp is not None else status.signer_reported_dt
             reports.append(
                 SignatureReport(
@@ -162,7 +251,7 @@ def check_signatures(path: str | Path, roots: list | None = None) -> list[Signat
                     timestamped=stamp is not None,
                     intact=bool(status.intact and status.valid),
                     trusted=bool(status.trusted),
-                    after=_after(status),
+                    after=after,
                     page=pages.get(field),
                 )
             )
