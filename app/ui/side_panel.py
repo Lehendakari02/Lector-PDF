@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.core import page_orders
 from app.core.outline import OutlineEntry
 from app.core.render_service import RenderedPage
 from app.ui import icons
@@ -48,7 +49,15 @@ class Tab(Enum):
 
 
 class ThumbnailList(QListWidget):
-    """Every page in small. Click one to go there."""
+    """Every page in small. Click one to go there.
+
+    They also put the pages in order: drag one (or several, picked with Ctrl
+    or Mayús) to another place, or use the right click (turn, move, take
+    away). From the keyboard: Alt+arrows move the pages picked, Supr takes
+    them away.
+    """
+
+    delete_wanted = Signal(object)  # the pages to take away, if the user agrees
 
     def __init__(self, view: PdfView, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -59,7 +68,15 @@ class ThumbnailList(QListWidget):
         self.setFlow(QListView.Flow.LeftToRight)
         self.setWrapping(True)
         self.setResizeMode(QListView.ResizeMode.Adjust)
-        self.setMovement(QListView.Movement.Static)
+        self.setMovement(QListView.Movement.Static)  # Qt moves nothing by itself
+        self.setSelectionMode(QListView.SelectionMode.ExtendedSelection)
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.setDropIndicatorShown(True)
+        self.setDragDropMode(QListView.DragDropMode.InternalMove)
+        self.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._menu)
         self.setUniformItemSizes(True)
         self.setIconSize(QSize(THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT))
         self.setGridSize(CELL)
@@ -67,6 +84,7 @@ class ThumbnailList(QListWidget):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         self._drawn: set[int] = set()
+        self._picked_after: list[int] = []  # picked again once the list is made again
         self._blank: dict[tuple[int, int], QIcon] = {}
         self._pause = QTimer(self)
         self._pause.setSingleShot(True)
@@ -93,6 +111,7 @@ class ThumbnailList(QListWidget):
             item.setToolTip(self.tr("Página {0}").format(page + 1))
             self.addItem(item)
         self.follow(self.view.current_page)
+        self._repick()
         self._pause.start()
 
     def _pages_changed(self, pages: object) -> None:
@@ -129,8 +148,12 @@ class ThumbnailList(QListWidget):
         )
 
     def follow(self, page: int) -> None:
-        """Mark the page being read, without moving the document."""
+        """Mark the page being read, without moving the document.
+
+        Several pages picked to be organised stay picked."""
         if not 0 <= page < self.count() or page == self.currentRow():
+            return
+        if len(self.selectedItems()) > 1:
             return
         self.blockSignals(True)
         self.setCurrentRow(page)
@@ -139,6 +162,102 @@ class ThumbnailList(QListWidget):
 
     def _go(self, item: QListWidgetItem) -> None:
         self.view.scroll_to_page(self.row(item))
+
+    # ---- organising the pages --------------------------------------------
+
+    def picked_pages(self) -> list[int]:
+        """The pages picked (counting from 0), in order."""
+        return sorted(self.row(item) for item in self.selectedItems())
+
+    def pick_pages(self, pages) -> None:
+        self.clearSelection()
+        for page in pages:
+            if 0 <= page < self.count():
+                self.item(page).setSelected(True)
+
+    def drop_place(self, position) -> int:
+        """Before which page the pages dropped at that point go (the number
+        of pages: at the end)."""
+        index = self.indexAt(position)
+        if not index.isValid():
+            return self.count()
+        box = self.visualRect(index)
+        return index.row() + (1 if position.x() > box.center().x() else 0)
+
+    def dropEvent(self, event) -> None:  # noqa: N802
+        if event.source() is not self:
+            event.ignore()
+            return
+        pages = self.picked_pages()
+        to = self.drop_place(event.position().toPoint())
+        # The list is not changed here (Qt would move the items by itself):
+        # the document is, and the list is made again from it.
+        event.setDropAction(Qt.DropAction.IgnoreAction)
+        event.accept()
+        self.move_pages(pages, to)
+
+    def move_pages(self, pages: list[int], to: int) -> None:
+        if not self.view.move_pages(pages, to):
+            return
+        order = page_orders.moved_order(self.count(), pages, to)
+        self._picked_after = [order.index(page) for page in pages]
+
+    def _repick(self) -> None:
+        picked, self._picked_after = self._picked_after, []
+        if picked:
+            self.pick_pages(picked)
+            self.scrollToItem(self.item(picked[0]), QListView.ScrollHint.EnsureVisible)
+
+    def move_by(self, step: int) -> None:
+        """Move the pages picked one place earlier (-1) or later (1)."""
+        pages = self.picked_pages()
+        if not pages:
+            return
+        to = pages[0] - 1 if step < 0 else pages[-1] + 2
+        if 0 <= to <= self.count():
+            self.move_pages(pages, to)
+
+    def rotate(self, by: int) -> None:
+        pages = self.picked_pages()
+        if self.view.rotate_pages(pages, by):
+            self._picked_after = pages
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        alt = event.modifiers() & Qt.KeyboardModifier.AltModifier
+        key = event.key()
+        if alt and key in (Qt.Key.Key_Left, Qt.Key.Key_Up):
+            self.move_by(-1)
+            return
+        if alt and key in (Qt.Key.Key_Right, Qt.Key.Key_Down):
+            self.move_by(1)
+            return
+        if key == Qt.Key.Key_Delete and self.picked_pages():
+            self.delete_wanted.emit(self.picked_pages())
+            return
+        super().keyPressEvent(event)
+
+    def _menu(self, position) -> None:
+        item = self.itemAt(position)
+        if item is None:
+            return
+        if not item.isSelected():
+            self.pick_pages([self.row(item)])
+        pages = self.picked_pages()
+        several = len(pages) > 1
+        menu = QMenu(self)
+        menu.addAction(self.tr("Girar a la derecha"), lambda: self.rotate(90))
+        menu.addAction(self.tr("Girar a la izquierda"), lambda: self.rotate(-90))
+        menu.addAction(self.tr("Girar 180°"), lambda: self.rotate(180))
+        menu.addSeparator()
+        menu.addAction(self.tr("Mover al principio"), lambda: self.move_pages(pages, 0))
+        menu.addAction(self.tr("Mover al final"), lambda: self.move_pages(pages, self.count()))
+        menu.addSeparator()
+        delete = menu.addAction(
+            self.tr("Eliminar páginas…") if several else self.tr("Eliminar página…"),
+            lambda: self.delete_wanted.emit(pages),
+        )
+        delete.setEnabled(len(pages) < self.count())
+        menu.exec(self.viewport().mapToGlobal(position))
 
     def _store(self, result: RenderedPage) -> None:
         if result.page >= self.count() or result.rotation != self.view.rotation:

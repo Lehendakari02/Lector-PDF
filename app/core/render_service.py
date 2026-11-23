@@ -591,7 +591,7 @@ def _worker_main(connection: Connection) -> None:
                             for page_index in pages:  # their letters are different now
                                 page_texts.pop(page_index, None)
                             checking, scanned, recognised = 0, [], []  # looked at again
-                        if hasattr(order, "page_change"):
+                        if hasattr(order, "page_change") or hasattr(order, "layout"):
                             # Pages were put or taken away: the letters read so
                             # far belong to other places now, and the index
                             # points elsewhere. The window searches again.

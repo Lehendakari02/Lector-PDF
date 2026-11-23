@@ -66,7 +66,7 @@ class TextRecognition(QObject):
         self._timer.timeout.connect(self._poll)
         view.reading_ready.connect(self._picture)
         view.reading_failed.connect(self._picture_failed)
-        view.pages_moved.connect(self._moved)
+        view.pages_renumbered.connect(self._moved)
 
     @property
     def count_done(self) -> int:
@@ -150,15 +150,16 @@ class TextRecognition(QObject):
             self.progressed.emit(self.count_done, self.total)
         self._ask_next()
 
-    def _moved(self, at: int, by: int) -> None:
-        """A page was put in or taken away: the pages after it have other numbers.
+    def _moved(self, mapping: list) -> None:
+        """Pages were put in, moved or taken away: they have other numbers
+        (``mapping``: for every page before, its number now, or None).
 
         The helper forgets the picture it was asked for; it is asked again.
         """
         for key, page in self._where.items():
-            if page is None or page < at:
+            if page is None:
                 continue
-            self._where[key] = None if by < 0 and page == at else page + by
+            self._where[key] = mapping[page] if 0 <= page < len(mapping) else None
         if self._asked is not None:
             self._queue.insert(0, self._asked)
             self._asked = None
@@ -226,7 +227,7 @@ class TextRecognition(QObject):
         for signal, slot in (
             (self.view.reading_ready, self._picture),
             (self.view.reading_failed, self._picture_failed),
-            (self.view.pages_moved, self._moved),
+            (self.view.pages_renumbered, self._moved),
         ):
             with contextlib.suppress(RuntimeError, TypeError):
                 signal.disconnect(slot)
