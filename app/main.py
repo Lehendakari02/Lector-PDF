@@ -79,9 +79,14 @@ def check_symbols() -> int:
     with pymupdf.open() as doc:
         doc.new_page()
         notes.new_text_box(0, (60, 80), "uno → dos ✓").apply(doc)
+        notes.new_text_box(0, (60, 160), "Ἀθῆναι Москва", bold=True).apply(doc)
         page = doc[0]
-        kept = doc.xref_get_key(doc.pdf_catalog(), notes.SYMBOL_FONT_KEY)[0] == "xref"
-        return 0 if kept and "→" in page.get_text() else EXIT_SYMBOLS_FAILED
+        catalog = doc.pdf_catalog()
+        kept = all(
+            doc.xref_get_key(catalog, key)[0] == "xref" for key in notes.SYMBOL_FONT_KEYS.values()
+        )
+        text = page.get_text()
+        return 0 if kept and "→" in text and "Ἀθῆναι" in text else EXIT_SYMBOLS_FAILED
 
 
 def _run_check(check, failure_code: int) -> int:

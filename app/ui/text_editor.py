@@ -83,7 +83,8 @@ def load_symbol_font() -> None:
     global _font_loaded
     if not _font_loaded:
         _font_loaded = True
-        QFontDatabase.addApplicationFont(str(symbols.font_file()))
+        for bold in (False, True):
+            QFontDatabase.addApplicationFont(str(symbols.font_file(bold)))
 
 
 class _Grip(QWidget):

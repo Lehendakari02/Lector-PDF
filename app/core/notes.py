@@ -59,7 +59,11 @@ BOLD_FONTS = {
     SERIF: ("tibo", "Times-Bold"),
     MONO: ("cobo", "Courier-Bold"),
 }
-SYMBOL_FONT_KEY = "LectorPDFSymbols"  # where the document keeps the font of the symbols
+# Where the document keeps the font of the symbols, normal and bold. The font of
+# version 0.6 and earlier (a smaller one, with other numbers for its drawings)
+# was kept under "LectorPDFSymbols": texts written with it keep it.
+SYMBOL_FONT_KEYS = {False: "LectorPDFSymbols2", True: "LectorPDFSymbols2Bold"}
+SYMBOL_FONT_KEY = SYMBOL_FONT_KEYS[False]
 WIDTH_KEY = "LectorPDFWidth"  # where the annotation keeps a width chosen by hand
 BOLD_KEY = "LectorPDFBold"
 TEXT_COLOR: Color = (0.1, 0.1, 0.1)
@@ -158,8 +162,9 @@ class AddTextBox:
             page = doc[self.page]
             if find_annotation(page, self.name) is None:
                 shown_page = page.rect  # as shown: turned pages already count
+                text = symbols.tidy(self.text)
                 lines, shown = box_layout(
-                    self.text,
+                    text,
                     self.font,
                     self.size,
                     self.origin,
@@ -168,7 +173,9 @@ class AddTextBox:
                     self.bold,
                 )
                 rect = (pymupdf.Rect(shown) * page.derotation_matrix).normalize()
-                special = symbols.has_symbols(self.text)
+                # A text with letters no font of ours has (Chinese, Arabic…) is
+                # written as the engine can, whole: better than a "?" for them.
+                special = symbols.has_symbols(text) and symbols.all_covered(text)
                 annotation = page.add_freetext_annot(
                     rect,
                     # The engine writes the plain letters; the symbols come after.
@@ -185,13 +192,13 @@ class AddTextBox:
                 # PyMuPDF leaves the line of a "callout" that was never asked for.
                 doc.xref_set_key(xref, "CL", "null")
                 # The text as it was written, not as it was cut into lines.
-                doc.xref_set_key(xref, "Contents", pymupdf.get_pdf_str(self.text))
+                doc.xref_set_key(xref, "Contents", pymupdf.get_pdf_str(text))
                 if self.width > 0:
                     doc.xref_set_key(xref, WIDTH_KEY, f"{self.width:.2f}")
                 if self.bold:
                     _make_bold(doc, xref, self.font)
                 if special:
-                    _write_symbols(doc, page, xref, lines, self.font, self.size)
+                    _write_symbols(doc, page, xref, lines, self.font, self.size, self.bold)
         except CommandError:
             raise
         except Exception as error:
@@ -262,18 +269,21 @@ def _pdf_text(piece: str) -> str:
     return f"({''.join(out)}) Tj"
 
 
-def _symbol_font(doc, page) -> int:
+def _symbol_font(doc, page, bold: bool = False) -> int:
     """The font of the symbols inside the document: put in the first time, then reused."""
     catalog = doc.pdf_catalog()
-    kept = doc.xref_get_key(catalog, SYMBOL_FONT_KEY)
+    key = SYMBOL_FONT_KEYS[bold]
+    kept = doc.xref_get_key(catalog, key)
     if kept[0] == "xref":
         return int(kept[1].split()[0])
-    xref = page.insert_font(fontname=symbols.FONT_NAME, fontfile=str(symbols.font_file()))
-    doc.xref_set_key(catalog, SYMBOL_FONT_KEY, f"{xref} 0 R")
+    xref = page.insert_font(fontname=symbols.font_name(bold), fontfile=str(symbols.font_file(bold)))
+    doc.xref_set_key(catalog, key, f"{xref} 0 R")
     return xref
 
 
-def _write_symbols(doc, page, xref: int, lines: list[str], font: str, size: float) -> None:
+def _write_symbols(
+    doc, page, xref: int, lines: list[str], font: str, size: float, bold: bool = False
+) -> None:
     """Write the lines again in the look of a text box, each symbol with its font.
 
     The engine wrote every line with one letter font and a "?" where a symbol
@@ -289,18 +299,19 @@ def _write_symbols(doc, page, xref: int, lines: list[str], font: str, size: floa
     if len(written) != len(lines):
         return  # not the look that is known: left as the engine made it
     base = f"/{FONTS[font]} {size:g} Tf"
-    special = f"/{symbols.FONT_NAME} {size:g} Tf"
+    name = symbols.font_name(bold)
+    special = f"/{name} {size:g} Tf"
     for place, line in zip(written, lines, strict=True):
         pieces = []
         for is_special, piece in symbols.runs(line):
             if is_special:
-                pieces += [special, f"<{symbols.glyphs(piece)}> Tj"]
+                pieces += [special, f"<{symbols.glyphs(piece, bold)}> Tj"]
             else:
                 pieces += [base, _pdf_text(piece)]
         stream[place] = "\n".join(pieces)
     doc.update_stream(look_xref, "\n".join(stream).encode("latin-1"))
-    font_xref = _symbol_font(doc, page)
-    doc.xref_set_key(look_xref, f"Resources/Font/{symbols.FONT_NAME}", f"{font_xref} 0 R")
+    font_xref = _symbol_font(doc, page, bold)
+    doc.xref_set_key(look_xref, f"Resources/Font/{name}", f"{font_xref} 0 R")
 
 
 def _make_bold(doc, xref: int, font: str) -> None:
@@ -411,10 +422,11 @@ def _color(values) -> Color:
 
 def text_width(text: str, font: str, size: float, bold: bool = False) -> float:
     """How wide a line is, in points. Arrows and symbols have their own font."""
+    text = symbols.tidy(text)
     if not symbols.has_symbols(text):
         return _font(font, bold).text_length(text, size)
     return sum(
-        symbols.width(piece, size) if special else _font(font, bold).text_length(piece, size)
+        symbols.width(piece, size, bold) if special else _font(font, bold).text_length(piece, size)
         for special, piece in symbols.runs(text)
     )
 

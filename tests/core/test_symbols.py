@@ -9,8 +9,10 @@ from app.core.settings import Settings
 
 
 def test_the_font_brings_every_symbol_that_can_be_chosen():
-    assert symbols.font_file().is_file()
-    assert symbols.font_file().stat().st_size < 40_000, "small: it goes inside the PDFs"
+    for bold in (False, True):
+        assert symbols.font_file(bold).is_file()
+        # It goes inside the PDFs that use it: small next to a page of a scan.
+        assert symbols.font_file(bold).stat().st_size < 160_000
     font = pymupdf.Font(fontfile=str(symbols.font_file()))
     assert all(font.has_glyph(ord(symbol)) for symbol in symbols.SYMBOLS)
     chosen = "".join(members for _, members in symbols.GROUPS)
@@ -107,7 +109,7 @@ def test_the_font_goes_into_the_document_only_once():
     files = [x for x in range(1, doc.xref_length()) if "/FontFile2" in doc.xref_object(x)]
     assert len(files) == 1
     data = doc.tobytes()
-    assert len(data) < 40_000
+    assert len(data) < 200_000  # one font, not one for each text
     again = pymupdf.open(stream=data)
     notes.new_text_box(1, (60, 300), "al volver a abrir ★").apply(again)
     files = [x for x in range(1, again.xref_length()) if "/FontFile2" in again.xref_object(x)]
@@ -162,7 +164,7 @@ def test_the_built_program_can_check_its_symbols(monkeypatch, tmp_path):
     from app.main import CHECK_SYMBOLS_FLAG, EXIT_SYMBOLS_FAILED, main
 
     assert main(["lector-pdf", CHECK_SYMBOLS_FLAG]) == 0
-    monkeypatch.setattr(symbols, "font_file", lambda: tmp_path / "no-esta.ttf")
+    monkeypatch.setattr(symbols, "font_file", lambda bold=False: tmp_path / "no-esta.ttf")
     symbols._font.cache_clear()
     try:
         assert main(["lector-pdf", CHECK_SYMBOLS_FLAG]) == EXIT_SYMBOLS_FAILED
@@ -184,3 +186,80 @@ def test_letters_of_other_languages_are_written_with_the_font_of_the_symbols():
     text = "Łódź, Ştefan, Ελλάδα → fin"
     notes.AddTextBox(0, (50, 50), text, notes.SANS, 12, (0, 0, 0), new_name()).apply(doc)
     assert doc[0].get_text().strip() == text
+
+
+def test_the_bold_font_carries_the_same_letters_as_the_normal_one():
+    normal = pymupdf.Font(fontfile=str(symbols.font_file()))
+    bold = pymupdf.Font(fontfile=str(symbols.font_file(True)))
+    assert set(normal.valid_codepoints()) == set(bold.valid_codepoints())
+    assert normal.name != bold.name
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Ἀθῆναι",  # old Greek, with its breathings and accents
+        "Ελλάδα Москва",  # Greek and Cyrillic in one text
+        "Việt Nam",  # Vietnamese
+        "H₂O, x², ½, ₽, №, ℃",  # small numbers and signs
+        "Հայաստան, საქართველო",  # Armenian, Georgian
+        "Ǆ ǅ ơ ư ə",
+    ],
+)
+@pytest.mark.parametrize("bold", [False, True])
+def test_letters_of_any_european_language_are_written_with_the_font(text, bold):
+    doc = pymupdf.open()
+    doc.new_page()
+    notes.new_text_box(0, (50, 50), text, bold=bold).apply(doc)
+    doc = pymupdf.open("pdf", doc.tobytes())  # as another reader opens it
+    page = doc[0]
+    assert page.get_text().strip() == text
+    (annotation,) = page.annots()
+    _, stream = look_of(doc, annotation)
+    assert f"/{symbols.font_name(bold)} " in stream
+    key = notes.SYMBOL_FONT_KEYS[bold]
+    assert doc.xref_get_key(doc.pdf_catalog(), key)[0] == "xref"
+
+
+def test_a_bold_text_uses_the_bold_font_of_the_symbols():
+    doc = pymupdf.open()
+    doc.new_page()
+    notes.new_text_box(0, (50, 50), "Ἀθῆναι →", bold=True).apply(doc)
+    fonts = {name for *_, name, _ in doc[0].get_fonts(full=False)} | {
+        font[3] for font in doc[0].get_fonts()
+    }
+    assert any("Bold" in name for name in fonts)
+    catalog = doc.pdf_catalog()
+    assert doc.xref_get_key(catalog, notes.SYMBOL_FONT_KEYS[True])[0] == "xref"
+    assert doc.xref_get_key(catalog, notes.SYMBOL_FONT_KEYS[False])[0] == "null"
+
+
+def test_an_accent_typed_apart_joins_its_letter():
+    assert symbols.tidy("e\u0301") == "é"
+    doc = pymupdf.open()
+    doc.new_page()
+    notes.new_text_box(0, (50, 50), "cafe\u0301 α\u0301").apply(doc)
+    assert doc[0].get_text().strip() == "café ά"
+    assert notes.text_width("e\u0301", SANS, 12) == notes.text_width("é", SANS, 12)
+
+
+def test_letters_no_font_of_ours_has_are_never_a_question_mark():
+    """Chinese or Arabic next to an arrow: the whole text goes as the engine can."""
+    assert not symbols.is_covered("東") and symbols.is_covered("→") and symbols.is_covered("ñ")
+    doc = pymupdf.open()
+    doc.new_page()
+    notes.new_text_box(0, (50, 50), "東京 → Ελλάδα").apply(doc)
+    assert doc[0].get_text().strip() == "東京 → Ελλάδα"
+
+
+def test_a_document_with_the_old_font_of_the_symbols_gets_the_new_one():
+    """Up to version 0.6 the font was smaller and its drawings had other numbers:
+    the texts already written keep it, new ones bring the new font."""
+    doc = pymupdf.open()
+    doc.new_page()
+    # Any other font stands for the old one: what counts is where it is kept.
+    old = doc[0].insert_font(fontname="LPSim", fontbuffer=pymupdf.Font("cour").buffer)
+    doc.xref_set_key(doc.pdf_catalog(), "LectorPDFSymbols", f"{old} 0 R")
+    notes.new_text_box(0, (50, 50), "uno → dos").apply(doc)
+    kept = doc.xref_get_key(doc.pdf_catalog(), notes.SYMBOL_FONT_KEY)
+    assert kept[0] == "xref" and int(kept[1].split()[0]) != old
