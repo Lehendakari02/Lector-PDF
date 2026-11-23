@@ -1708,7 +1708,7 @@ Notas de las mejoras:
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
 | 5.1 | Reordenar, rotar, eliminar arrastrando miniaturas | Reorganizo un documento | ✅ |
-| 5.2 | Unir y dividir PDFs, extraer páginas | Uno 3 PDFs en uno | ⬜ |
+| 5.2 | Unir y dividir PDFs, extraer páginas | Uno 3 PDFs en uno | ✅ |
 | 5.3 | Insertar páginas de otro PDF o imágenes | Añado una imagen como página | ⬜ |
 | 5.4 | De foto a PDF (recortar, enderezar, mejorar) | Hago una foto a un papel y queda como escaneado | ⬜ |
 | 5.5 | Exportar páginas como imagen o el documento como texto | Saco una página en PNG | ⬜ |
@@ -1734,6 +1734,20 @@ Notas de la Fase 5:
     las miniaturas, la búsqueda y el OCR siguen los números nuevos
     (`pages_renumbered`). Girar, mover y eliminar invalidan las firmas con
     certificado (avisa al guardar).
+- **5.2 Unir, dividir y extraer** (`core/combine.py`, `ui/organize_dialogs.py`).
+  Siempre crean documentos nuevos; los originales no se tocan y nada queda a
+  medias (se escribe aparte y luego se pone en su sitio).
+  - **Unir**: lista con los documentos (añadir, los abiertos, subir/bajar,
+    arrastrar). Cada uno queda como apartado del índice, con su propio índice
+    dentro. Pide la contraseña de los protegidos. El resultado se abre.
+  - **Dividir**: cada N páginas, por páginas («1-3, 4-10, 11-») o por los
+    apartados principales del índice (si el índice tiene un solo título arriba,
+    como una ley, los de dentro). Cada parte conserva su trozo del índice.
+    Nombres «nombre - parte 1.pdf» o «nombre - 01 Título I.pdf»; nunca pisa
+    archivos (añade « (2)»).
+  - **Extraer páginas**: las elegidas en las miniaturas (clic derecho) o desde
+    Ctrl+K, a un documento nuevo que se abre.
+  - Con cambios sin guardar: «Guardar y seguir» (usan el archivo guardado).
   - Regla para el resto de la fase: cada orden nueva que cambie páginas se
     añade a `_breaks_signatures` (`ui/pdf_view.py`) y define `layout`.
 
