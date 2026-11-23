@@ -1429,7 +1429,7 @@ Notas de la Fase 3:
 | 4.4 | Firmar varios documentos de una vez | Firmo 10 documentos poniendo el PIN una vez | 🔶 hecho (PR 89); falta tu prueba con el certificado FNMT (¿pide el PIN una vez?) |
 | 4.5 | Firmar con DNIe y lector de tarjetas | Firmo con el DNIe (cuando tenga lector) | 🔶 hecho (PR 90); falta tu prueba con el DNIe y un lector |
 | 4.6 | Ver y verificar firmas existentes | Abro un PDF firmado y me dice quién lo firmó y si es válido | 🔶 hecho (PR 91); falta tu prueba con PDFs firmados de verdad |
-| 4.7 | Versión 0.6 | — | 🔶 número 0.6.0 puesto (23/11/2026); falta que Julen cree la Release v0.6.0 |
+| 4.7 | Versión 0.6 | — | ✅ Release v0.6.0 publicada (23/11/2026) |
 | 4.8 | Arreglos de la revisión del código de la Fase 4 | Todo lo de la revisión arreglado y probado | 🔶 hecho (pull request de la rama `claude/project-thread-bdtogg`); falta tu prueba (apartado 4.8 de `docs/pruebas-fase-4.md`) |
 
 Notas de la Fase 4:
@@ -1587,6 +1587,12 @@ malo y trae sus ajustes con valores por defecto que sirven sin tocar nada.
 
 Lo que hay que probar en Windows está en
 [`docs/pruebas-mejoras.md`](docs/pruebas-mejoras.md).
+
+**Versión 0.7.0 (23/11/2026, decidido por Julen):** reúne los arreglos de la
+revisión de la Fase 4 (tarea 4.8: firmar en el hueco, anotar un PDF firmado sin
+romper la firma), las mejoras P.1–P.5 y el arreglo de los trazos con presión,
+para probarlo todo en su ordenador antes de la Fase 5. Falta que Julen cree la
+Release v0.7.0. (La Fase 5 será la 0.8.)
 
 Notas de las mejoras:
 - **P.1: Letras de cualquier idioma europeo en los cuadros de texto (23/11/2026).**
