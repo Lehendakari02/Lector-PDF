@@ -558,7 +558,13 @@ def _draw_pressed(doc, annotation, pressures, width: float, color: Color) -> Non
     ]
     if look[0] != "xref" or len(strokes) != len(pressures):
         return  # not the annotation that was expected: its plain look stays
-    parts = ["q", "/H gs", "{:g} {:g} {:g} rg".format(*color)]
+    look_xref = int(look[1].split()[0])
+    parts = ["q"]
+    # PyMuPDF gives the look a graphics state "H" only for a see-through stroke;
+    # naming one that is not there is an error some viewers report.
+    if doc.xref_get_key(look_xref, "Resources/ExtGState/H")[0] != "null":
+        parts.append("/H gs")
+    parts.append("{:g} {:g} {:g} rg".format(*color))
     for numbers, pressed in zip(strokes, pressures, strict=True):
         points = list(zip(numbers[0::2], numbers[1::2], strict=True))
         if len(points) != len(pressed):
@@ -579,7 +585,7 @@ def _draw_pressed(doc, annotation, pressures, width: float, color: Color) -> Non
                 f"{x + k:.2f} {y - r:.2f} {x + r:.2f} {y - k:.2f} {x + r:.2f} {y:.2f} c h"
             )
     parts += ["f", "Q", ""]
-    doc.update_stream(int(look[1].split()[0]), "\n".join(parts).encode("ascii"))
+    doc.update_stream(look_xref, "\n".join(parts).encode("ascii"))
     kept = " ".join(
         "[" + " ".join(f"{value:.2f}" for value in stroke) + "]" for stroke in pressures
     )

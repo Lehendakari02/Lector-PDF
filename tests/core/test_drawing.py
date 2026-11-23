@@ -427,6 +427,20 @@ def test_a_pressed_stroke_keeps_its_colour_and_opacity(doc):
     assert red > 200 and 100 < green < 180, "half see-through red on white"
 
 
+@pytest.mark.parametrize("opacity", [1.0, 0.5])
+def test_a_pressed_stroke_only_names_graphics_states_it_has(doc, opacity):
+    # A solid stroke has no graphics state "H": naming it anyway is an error in
+    # the file (MuPDF reports "cannot find ExtGState resource").
+    new_ink(0, [STROKE], RED, 6.0, opacity, [PRESSED]).apply(doc)
+    again = saved_again(doc)
+    (annotation,) = again[0].annots()
+    look = int(again.xref_get_key(annotation.xref, "AP/N")[1].split()[0])
+    named = b"/H gs" in again.xref_stream(look)
+    has = again.xref_get_key(look, "Resources/ExtGState/H")[0] != "null"
+    assert named == has
+    assert named == (opacity < 1.0)
+
+
 def test_pressures_that_do_not_fit_the_points_are_left_aside(doc):
     order = new_ink(0, [STROKE], RED, 4.0, 1.0, [(0.2, 0.9)])
     assert not order.pressed
