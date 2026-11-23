@@ -57,6 +57,7 @@ from app.core import (
     ocr,
     page_orders,
     pen,
+    photo_scan,
     pictures,
     reading,
     save_checks,
@@ -157,6 +158,7 @@ from app.ui.organize_dialogs import InsertWhereDialog, MergeDialog, SplitDialog
 from app.ui.page_box import PageBox
 from app.ui.password_dialog import PasswordDialog
 from app.ui.pdf_view import SIGN_TOOL, PdfView
+from app.ui.photo_scan_dialog import LOOK_SETTING, PhotoScanDialog, photo_types
 from app.ui.print_dialog import PrintChoices, PrintDialog
 from app.ui.print_run import PrintRun
 from app.ui.recognize_again_dialog import RecognizeAgainDialog
@@ -436,6 +438,9 @@ class MainWindow(QMainWindow):
         # For the tests, Insertar páginas: the files chosen and where they go.
         self.insert_files_answer: list[Path] | None = None
         self.insert_where_answer: int | None = None
+        self.photo_files_answer: list[Path] | None = None
+        # Instead of the «De foto a PDF» window: takes it and says whether to go on.
+        self.photo_scan_answer = None
         self.organize_target_answer = None
         self._then_when_saved = None  # (page, what to do) once it is saved
         self.save_as_answer = None
@@ -509,6 +514,7 @@ class MainWindow(QMainWindow):
             "split": self.split_document,
             "extract_pages": lambda: self.extract_pages(),
             "insert_pages": lambda: self.insert_pages(),
+            "photo_to_pdf": lambda: self.photo_to_pdf(),
         }
         self._mark_pending_features()
         self._build_key_commands()
@@ -1273,6 +1279,82 @@ class MainWindow(QMainWindow):
                 STATUS_MESSAGE_MS,
             )
         return done
+
+    def photo_to_pdf(self, files: list[Path] | None = None) -> bool:
+        """«De foto a PDF»: photos of paper, straightened and cleaned, as the
+        pages of a new PDF, which is opened (and then offers to recognise the
+        text, as any scanned document)."""
+        if files is None:
+            files = self.photo_files_answer
+        if files is None:
+            folder = str(self.current_document.path.parent) if self.current_document.path else ""
+            chosen, _filter = QFileDialog.getOpenFileNames(
+                self,
+                self.tr("Elegir las fotos de los documentos"),
+                folder,
+                self.tr("Imágenes ({0})").format(photo_types()),
+            )
+            files = [Path(name) for name in chosen]
+        if not files:
+            return False
+        look = self.settings.get(LOOK_SETTING, photo_scan.DOCUMENT)
+        if look not in photo_scan.LOOKS:
+            look = photo_scan.DOCUMENT
+        dialog = PhotoScanDialog(self, [Path(name) for name in files], look)
+        if dialog.problems:
+            self._show_problem(
+                self.tr("Alguna foto no se puede abrir"),
+                self.tr("No se pueden leer como imagen: {0}.").format(", ".join(dialog.problems)),
+            )
+        if not dialog.photos:
+            dialog.deleteLater()
+            return False
+        if self.photo_scan_answer is not None:
+            go_on = self.photo_scan_answer(dialog)
+        else:
+            go_on = dialog.exec() == PhotoScanDialog.DialogCode.Accepted
+        photos, look = dialog.photos, dialog.look
+        dialog.deleteLater()
+        if not go_on or not photos:
+            return False
+        self.settings.set(LOOK_SETTING, look)
+        target = self._organize_target(
+            free_name_beside(photos[0].path, self.tr("Escaneado")),
+            self.tr("Guardar el PDF de las fotos como"),
+        )
+        if target is None:
+            return False
+        progress = QProgressDialog(self)
+        progress.setWindowTitle(self.tr("De foto a PDF"))
+        progress.setCancelButtonText(self.tr("Cancelar"))
+        progress.setRange(0, len(photos))
+        progress.setMinimumDuration(400)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+
+        def step(done: int, total: int) -> bool:
+            progress.setLabelText(
+                self.tr("Preparando la página {0} de {1}…").format(done + 1, total)
+            )
+            progress.setValue(done)
+            QApplication.processEvents()
+            return not progress.wasCanceled()
+
+        try:
+            photo_scan.write_pdf(photos, target, look, step)
+        except photo_scan.PhotoError as error:
+            progress.close()
+            if not progress.wasCanceled():
+                self._combine_failed(error, "de foto a PDF")
+            return False
+        progress.close()
+        self.open_document(target)
+        self.statusBar().showMessage(
+            self.tr("PDF creado con {0} páginas: «{1}».").format(len(photos), target.name)
+            if len(photos) != 1
+            else self.tr("PDF creado con 1 página: «{0}».").format(target.name),
+            STATUS_MESSAGE_MS,
+        )
+        return True
 
     def extract_pages(self, pages: list[int] | None = None) -> bool:
         """«Extraer páginas»: the pages picked (or the one being read) into a

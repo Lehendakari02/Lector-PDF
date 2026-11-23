@@ -332,8 +332,8 @@ FEATURES: list[Feature] = [
         "photo_to_pdf",
         ORGANIZE,
         "De foto a PDF",
-        "Convertir fotos de documentos en un PDF",
-        "escanear",
+        "Convertir fotos de documentos en un PDF que parece escaneado",
+        "escanear escáner foto móvil cámara imagen enderezar recortar",
     ),
     _f(
         "export", ORGANIZE, "Exportar", "Guardar páginas como imagen o como texto", "imagen png jpg"
