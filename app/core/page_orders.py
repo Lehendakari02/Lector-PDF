@@ -1,4 +1,5 @@
-"""Organising the pages of a document: turning, moving and taking them away.
+"""Organising the pages of a document: turning, moving, taking them away and
+putting in pages of other documents or pictures.
 
 Each one is an order like the others (it can be undone, redone and written in
 the recovery journal). They change which page is where, so each one says how
@@ -146,7 +147,7 @@ class MovePages:
         changed = [place for place, old in enumerate(order) if place != old]
         if changed:
             try:
-                doc.select(order)
+                _rearrange(doc, order)
             except Exception as error:
                 raise CommandError(f"cannot move the pages: {error}") from error
         return changed
@@ -157,6 +158,51 @@ class MovePages:
     @classmethod
     def from_dict(cls, data: dict) -> "MovePages":
         return cls(_clean_pages(data["pages"]), int(data["to"]))
+
+
+def _staying(order: list[int]) -> set[int]:
+    """The longest run of pages already in the right order: they stay put."""
+    tails: list[int] = []  # place in ``order`` of the smallest tail of each length
+    before = [-1] * len(order)
+    for place, old in enumerate(order):
+        low, high = 0, len(tails)
+        while low < high:
+            middle = (low + high) // 2
+            if order[tails[middle]] < old:
+                low = middle + 1
+            else:
+                high = middle
+        before[place] = tails[low - 1] if low else -1
+        if low == len(tails):
+            tails.append(place)
+        else:
+            tails[low] = place
+    staying, place = set(), tails[-1] if tails else -1
+    while place != -1:
+        staying.add(order[place])
+        place = before[place]
+    return staying
+
+
+def _rearrange(doc, order: list[int]) -> None:
+    """Put the pages in ``order`` (the old number of each new place) moving
+    as few pages as possible, one by one.
+
+    Not ``Document.select``: MuPDF's ``pdf_rearrange_pages`` reads memory it
+    has already freed in documents with a structure tree (seen with valgrind
+    on the BOE sample), which on Windows kills the helper process."""
+    staying = _staying(order)
+    current = list(range(len(order)))
+    for old in order:  # first the pages that move go to the end, in their new order
+        if old not in staying:
+            doc.move_page(current.index(old), -1)
+            current.remove(old)
+            current.append(old)
+    for place, old in enumerate(order):  # then each one to its place
+        if old not in staying:
+            doc.move_page(current.index(old), place)
+            current.remove(old)
+            current.insert(place, old)
 
 
 def move_pages(pages, to: int) -> MovePages:
@@ -327,6 +373,138 @@ def delete_pages(pages) -> DeletePages:
     return DeletePages(_clean_pages(pages))
 
 
+# ---- putting pages in -----------------------------------------------------
+
+A4 = (595.0, 842.0)
+IMAGE_TYPES = ("png", "jpg", "jpeg", "tif", "tiff", "bmp", "gif", "webp")
+
+
+class SourceNeedsPassword(CommandError):
+    """A PDF to take pages from asks for a password."""
+
+    def __init__(self, path) -> None:
+        super().__init__(f"{path} asks for a password")
+        self.path = path
+
+
+@dataclass(frozen=True)
+class InsertPages:
+    """Pages of other documents (``kept``, a PDF with them) put at place
+    ``at``: the first of them becomes that page."""
+
+    at: int
+    kept: bytes
+    sizes: tuple[Size, ...]  # of the pages put, as shown
+
+    def pages(self) -> list[int]:
+        return list(range(self.at, self.at + len(self.sizes)))
+
+    def layout(self, sizes: list[Size], undone: bool) -> tuple[Mapping, list[Size]]:
+        count = len(self.sizes)
+        if undone:
+            mapping: Mapping = [
+                page if page < self.at else (None if page < self.at + count else page - count)
+                for page in range(len(sizes))
+            ]
+            return mapping, sizes[: self.at] + sizes[self.at + count :]
+        mapping = [page if page < self.at else page + count for page in range(len(sizes))]
+        return mapping, sizes[: self.at] + list(self.sizes) + sizes[self.at :]
+
+    def apply(self, doc) -> list[int]:
+        import pymupdf
+
+        if not 0 <= self.at <= doc.page_count:
+            raise CommandError(f"no place {self.at} for pages")
+        try:
+            with pymupdf.open("pdf", self.kept) as source:
+                if source.page_count != len(self.sizes):
+                    raise CommandError("the pages to put are not all there")
+                doc.insert_pdf(source, start_at=self.at)
+        except CommandError:
+            raise
+        except Exception as error:
+            raise CommandError(f"cannot put the pages: {error}") from error
+        return list(range(self.at, doc.page_count))
+
+    def undo(self, doc) -> list[int]:
+        last = self.at + len(self.sizes) - 1
+        if last >= doc.page_count or len(self.sizes) >= doc.page_count:
+            raise CommandError("the pages put are not there")
+        doc.delete_pages(from_page=self.at, to_page=last)
+        return list(range(self.at, doc.page_count))
+
+    def to_dict(self) -> dict:
+        return {
+            "what": "insert_pages",
+            "at": self.at,
+            "kept": base64.b64encode(self.kept).decode("ascii"),
+            "sizes": [list(size) for size in self.sizes],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "InsertPages":
+        return cls(
+            int(data["at"]),
+            base64.b64decode(data["kept"]),
+            tuple((float(w), float(h)) for w, h in data["sizes"]),
+        )
+
+
+def is_image(path) -> bool:
+    from pathlib import Path
+
+    return Path(path).suffix.lower().lstrip(".") in IMAGE_TYPES
+
+
+def _image_page(result, path) -> None:
+    """A page the size of an A4 sheet (turned if the picture is wider than
+    tall) with the picture filling it, as a scanner would."""
+    import pymupdf
+
+    with pymupdf.open(path) as picture:
+        rect = picture[0].rect
+    width, height = A4 if rect.height >= rect.width else (A4[1], A4[0])
+    page = result.new_page(width=width, height=height)
+    page.insert_image(page.rect, filename=str(path), keep_proportion=True)
+
+
+def insert_pages(at: int, sources) -> InsertPages:
+    """The order that puts at ``at`` the pages of ``sources``: each one is a
+    path (a PDF, all its pages; or a picture, one page) or a (path, password)
+    pair, or (path, password, pages) to take only those pages (from 0)."""
+    import pymupdf
+
+    result = pymupdf.open()
+    try:
+        for source in sources:
+            parts = list(source) if isinstance(source, tuple) else [source]
+            path, password, chosen = (parts + [None, None])[:3]
+            if is_image(path):
+                try:
+                    _image_page(result, path)
+                except Exception as error:
+                    raise CommandError(f"{path} cannot be read: {error}") from error
+                continue
+            try:
+                doc = pymupdf.open(path, filetype="pdf")
+            except Exception as error:
+                raise CommandError(f"{path} cannot be read: {error}") from error
+            with doc:
+                if doc.needs_pass and not (password and doc.authenticate(password)):
+                    raise SourceNeedsPassword(path)
+                pages = list(range(doc.page_count)) if chosen is None else list(chosen)
+                for page in pages:
+                    if 0 <= page < doc.page_count:
+                        result.insert_pdf(doc, from_page=page, to_page=page)
+        if result.page_count == 0:
+            raise CommandError("no pages to put")
+        sizes = tuple((page.rect.width, page.rect.height) for page in result)
+        kept = result.tobytes(garbage=3, deflate=True)
+    finally:
+        result.close()
+    return InsertPages(int(at), kept, sizes)
+
+
 def _field_roots(doc, pages) -> set[int]:
     """The form fields (the top of each, by number) with a box on those pages."""
     import pymupdf
@@ -401,3 +579,4 @@ def _entry_back(entry: list) -> list:
 register_reader("rotate_pages", RotatePages.from_dict)
 register_reader("move_pages", MovePages.from_dict)
 register_reader("delete_pages", DeletePages.from_dict)
+register_reader("insert_pages", InsertPages.from_dict)

@@ -58,6 +58,8 @@ class ThumbnailList(QListWidget):
     """
 
     delete_wanted = Signal(object)  # the pages to take away, if the user agrees
+    extract_wanted = Signal(object)  # the pages to put in a new document
+    insert_wanted = Signal(int)  # put pages of other documents at that place
 
     def __init__(self, view: PdfView, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -252,6 +254,12 @@ class ThumbnailList(QListWidget):
         menu.addAction(self.tr("Mover al principio"), lambda: self.move_pages(pages, 0))
         menu.addAction(self.tr("Mover al final"), lambda: self.move_pages(pages, self.count()))
         menu.addSeparator()
+        menu.addAction(
+            self.tr("Extraer a un documento nuevo…"), lambda: self.extract_wanted.emit(pages)
+        )
+        menu.addAction(
+            self.tr("Insertar páginas después…"), lambda: self.insert_wanted.emit(pages[-1] + 1)
+        )
         delete = menu.addAction(
             self.tr("Eliminar páginas…") if several else self.tr("Eliminar página…"),
             lambda: self.delete_wanted.emit(pages),

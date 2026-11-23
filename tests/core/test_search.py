@@ -393,3 +393,45 @@ def test_a_pasted_word_split_at_a_line_end_is_found_joined():
     assert len(find_in_page(page, "procedi- miento administrativo")) == 1
     assert len(find_in_page(page, "procedi-\nmiento")) == 1
     assert find_in_page(page, "procedi- xx") == []
+
+
+class _FakePage:
+    """A page whose font says its letters are five lines tall (as Cambria
+    does in some documents made with Word)."""
+
+    rotation = 0
+
+    def get_text(self, _kind, flags=0):
+        def chars(text, x, base):
+            return [
+                {
+                    "c": letter,
+                    "bbox": (x + 6 * n, base - 40, x + 6 * (n + 1), base + 20),
+                    "origin": (x + 6 * n, base),
+                }
+                for n, letter in enumerate(text)
+            ]
+
+        lines = [
+            {
+                "spans": [
+                    {
+                        "ascender": 3.1,
+                        "descender": -2.5,
+                        "size": 11.0,
+                        "chars": chars(text, 50, base),
+                    }
+                ]
+            }
+            for text, base in (("uno", 100), ("dos", 114), ("tres", 128))
+        ]
+        return {"blocks": [{"lines": lines}]}
+
+
+def test_letters_of_a_font_with_wrong_measures_are_one_line_tall():
+    text = read_page_text(_FakePage())
+    assert text.chars == "unodostres"
+    tops = [text.boxes[i * 4 + 1] for i in range(len(text.chars))]
+    bottoms = [text.boxes[i * 4 + 3] for i in range(len(text.chars))]
+    assert max(bottom - top for top, bottom in zip(tops, bottoms, strict=True)) < 13
+    assert bottoms[2] <= tops[3], "the first line does not reach the second"

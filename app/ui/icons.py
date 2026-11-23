@@ -210,6 +210,13 @@ ICONS: dict[str, str] = {
         '<path d="M5 4v3a5 5 0 0 0 5 5 2 2 0 0 1 2 2v6M19 4v3a5 5 0 0 1-5 5 2 2 0 0 0-2 2"/>'
         '<path d="M9 17.5l3 3 3-3"/>'
     ),
+    "insert_pages": (
+        '<rect x="4" y="3.5" width="12" height="15" rx="2"/><path d="M19 9v8M15 13h8"/>'
+    ),
+    "extract_pages": (
+        '<rect x="3.5" y="3.5" width="11" height="14" rx="2"/>'
+        '<path d="M13 13h7.5M17.5 10l3 3-3 3"/>'
+    ),
     "split": (
         '<path d="M12 4v4a3 3 0 0 1-3 3 4 4 0 0 0-4 4v5M12 8a3 3 0 0 0 3 3 4 4 0 0 1 4 4v5"/>'
         '<path d="M2.5 17.5L5 20l2.5-2.5M16.5 17.5L19 20l2.5-2.5"/>'

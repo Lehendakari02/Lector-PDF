@@ -395,7 +395,7 @@ def test_the_wheel_over_the_text_still_moves_the_page(window, opened):
     editor.cancel()
 
 
-def test_with_the_tool_in_hand_a_click_on_an_earlier_text_opens_it_again(
+def test_with_the_tool_in_hand_a_click_picks_an_earlier_text_and_another_opens_it(
     window, opened, wait_until
 ):
     view, _ = opened()
@@ -404,14 +404,18 @@ def test_with_the_tool_in_hand_a_click_on_an_earlier_text_opens_it_again(
     click(view, 300, 500)  # keeps the first and starts the second
     view.note_panel.edit.setPlainText("el segundo")
     settle(view, wait_until)
-    click(view, 70, 300)  # back on the first one
+    click(view, 70, 300)  # back on the first one: it is picked
     settle(view, wait_until)
+    assert view.note_panel is None
+    assert view.picked_item() is not None and view.picked_item().text == "el primero"
+    click(view, 70, 300)  # a second click opens it to write
     again = view.note_panel
     assert isinstance(again, TextEditor) and again.existing
     assert again.edit.toPlainText() == "el primero"
     again.edit.setPlainText("el primero, corregido")
     click(view, 310, 500)  # and on to the second one
     settle(view, wait_until)
+    click(view, 310, 500)
     assert view.note_panel.existing and view.note_panel.edit.toPlainText() == "el segundo"
     view.note_panel.cancel()
     settle(view, wait_until)
