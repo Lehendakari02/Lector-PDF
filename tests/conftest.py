@@ -75,3 +75,52 @@ def full_form(tmp_path, sample):
         _add_options(doc, doc[0])
         doc.save(path)
     return path
+
+
+# ---- a made-up photo of a sheet of paper (De foto a PDF) -------------------
+
+# The sheet in the made-up photo: slanted, as a phone sees it.
+SHEET = [(300.0, 120.0), (880.0, 170.0), (940.0, 860.0), (250.0, 820.0)]
+LINES = 10
+
+
+def _along(a, b, share):
+    return (a[0] + (b[0] - a[0]) * share, a[1] + (b[1] - a[1]) * share)
+
+
+def _make_photo(path, shadow=True):
+    """A photo of a sheet with ten lines of "writing" lying on a dark table,
+    darker towards one corner, saved as a JPEG."""
+    import pymupdf
+
+    doc = pymupdf.open()
+    page = doc.new_page(width=1200, height=1000)
+    page.draw_rect(page.rect, color=None, fill=(0.35, 0.25, 0.15))
+    top_left, top_right, bottom_right, bottom_left = SHEET
+    shape = page.new_shape()
+    shape.draw_polyline([*SHEET, top_left])
+    shape.finish(fill=(0.95, 0.94, 0.9), color=None, closePath=True)
+    for line in range(LINES):
+        share = 0.1 + line * 0.08
+        left = _along(top_left, bottom_left, share)
+        right = _along(top_right, bottom_right, share)
+        shape.draw_line(_along(left, right, 0.1), _along(left, right, 0.9))
+    shape.finish(color=(0.1, 0.1, 0.1), width=6)
+    shape.commit()
+    if shadow:  # less light on the right: a grey veil, stronger to the right
+        for step in range(12):
+            box = pymupdf.Rect(600 + step * 50, 0, 1200, 1000)
+            page.draw_rect(box, color=None, fill=(0, 0, 0), fill_opacity=0.03)
+    page.get_pixmap().save(path, jpg_quality=90)
+    doc.close()
+    return path
+
+
+@pytest.fixture
+def photo_of_paper():
+    """Make a photo of a slanted sheet with lines of writing on a dark table:
+    ``photo_of_paper(path, shadow=True)``. ``.sheet`` are its corners in the
+    photo and ``.lines`` how many lines it has."""
+    _make_photo.sheet = SHEET
+    _make_photo.lines = LINES
+    return _make_photo

@@ -73,3 +73,18 @@ PDF. Ve marcando lo que funcione y dime lo que no.
 1. Abre el tema 8: ya no avisa de páginas escaneadas.
 2. Selecciona una frase arrastrando: coge solo esa línea, no varias. Subraya:
    el subrayado tiene la altura de la línea.
+
+## Tarea 5.4 – De foto a PDF
+
+1. Haz con el móvil dos o tres fotos de hojas de papel encima de una mesa,
+   algo torcidas, y pásalas al ordenador.
+2. Modo Organizar → **De foto a PDF**. Elige las fotos. En cada una salen las
+   cuatro esquinas de la hoja: comprueba que caen sobre las del papel. Si no,
+   arrástralas (también con el dedo o el lápiz). A la derecha ves cómo quedará.
+3. Prueba **Girar a la derecha**, **Toda la foto** y **Buscar la hoja**.
+4. Cambia el **Aspecto**: Documento, Gris, Blanco y negro y Foto sin retocar.
+   En «Documento» el papel sale blanco, sin sombras, y las letras oscuras.
+5. **Crear PDF**: propone «Escaneado.pdf» junto a las fotos. Se abre y ofrece
+   reconocer el texto. Reconócelo y busca una palabra.
+6. Vuelve a abrir De foto a PDF: recuerda el aspecto que elegiste.
+7. Abre el PDF en **Adobe** y en **Edge**: se ve igual.

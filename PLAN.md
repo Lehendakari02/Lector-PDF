@@ -1752,7 +1752,7 @@ Notas de las mejoras:
 | 5.1 | Reordenar, rotar, eliminar arrastrando miniaturas | Reorganizo un documento | ✅ |
 | 5.2 | Unir y dividir PDFs, extraer páginas | Uno 3 PDFs en uno | ✅ |
 | 5.3 | Insertar páginas de otro PDF o imágenes | Añado una imagen como página | ✅ |
-| 5.4 | De foto a PDF (recortar, enderezar, mejorar) | Hago una foto a un papel y queda como escaneado | ⬜ |
+| 5.4 | De foto a PDF (recortar, enderezar, mejorar) | Hago una foto a un papel y queda como escaneado | ✅ |
 | 5.5 | Exportar páginas como imagen o el documento como texto | Saco una página en PNG | ⬜ |
 | 5.6 | Tapar datos de verdad | Tapo mi DNI y no se puede recuperar copiando el texto | ⬜ |
 | 5.7 | Comprimir, poner/quitar contraseña | El PDF ocupa menos / pide contraseña | ⬜ |
@@ -1797,6 +1797,29 @@ Notas de la Fase 5:
   imagen es una hoja A4 (tumbada si la foto es apaisada) con la foto entera.
   Pide la contraseña de los PDF protegidos. Deshacer las quita; invalidan las
   firmas con certificado (avisa al guardar).
+- **5.4 De foto a PDF** (`core/photo_scan.py`, `ui/photo_scan_dialog.py`).
+  Modo Organizar → «De foto a PDF» (o Ctrl+K «escanear»): se eligen fotos y
+  cada una será una página de un PDF nuevo, que se abre (y, como cualquier
+  escaneado, ofrece reconocer el texto).
+  - **Encontrar la hoja**: la mancha clara más grande de la foto; sus
+    esquinas, las puntas de la mancha. Si no sale (hoja clara en mesa clara),
+    se pregunta al buscador de documentos de MuPDF, y si tampoco, la foto
+    entera. Las esquinas se arrastran (ratón, dedo, lápiz) o se mueven con el
+    teclado (Tab elige la esquina, flechas, Mayús más deprisa); nunca dejan
+    que la hoja se doble.
+  - **Enderezar**: MuPDF estira las cuatro esquinas a un rectángulo
+    (`fz_warp_pixmap`). Si la forma se parece a un A4 (12 %), sale A4 exacto:
+    vista de lado, una hoja parece más corta. Girar a izquierda/derecha. La
+    foto se lee girada como dijo el móvil (EXIF).
+  - **Aspecto** (se recuerda): *Documento* (recomendado: papel blanco sin
+    sombras, letras oscuras, colores conservados), *Gris*, *Blanco y negro*
+    (pequeño, como una fotocopia) y *Foto sin retocar*. Para quitar sombras se
+    mide la luz del papel en una copia pequeña (lo más claro de cada zona,
+    así no cuentan las letras) y se divide la foto entre ella; la división la
+    hace MuPDF dibujando con el modo de mezcla «sobreexponer color», así que
+    no hace falta ninguna librería de imagen nueva y tarda décimas.
+  - Páginas de 595 puntos de ancho (A4); JPEG para color y gris, PNG para
+    blanco y negro. Se escribe aparte y luego se pone en su sitio.
 - **Arreglo pedido por Julen (23/11):** con un marcador o con «Texto» en la
   mano, un clic en tu propio texto lo coge (como en PowerPoint) y arrastrándolo
   se mueve; un segundo clic, doble clic o Intro lo abre para escribir.
