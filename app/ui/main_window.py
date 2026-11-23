@@ -48,6 +48,7 @@ from PySide6.QtWidgets import (
 
 from app import APP_NAME, BUILD_LABEL, __version__
 from app.core import (
+    batch_signing,
     certificate_settings,
     my_data,
     my_signature,
@@ -116,10 +117,11 @@ from app.core.tool_keys import FAVOURITE_KEYS, TOOL_KEYS, tool_keys_wanted
 from app.core.updates import Release
 from app.core.versions import FOLDER_NAME as VERSIONS_FOLDER
 from app.core.versions import Version, VersionError, Versions
-from app.core.windows_store import SigningCancelled
+from app.core.windows_store import SigningCancelled, StoreError
 from app.ui import color_naming, icons
 from app.ui import theme as theme_module
 from app.ui.about_dialog import AboutDialog
+from app.ui.batch_sign_dialog import BatchSignDialog
 from app.ui.color_menu import ColorMenu
 from app.ui.command_palette import CommandPalette
 from app.ui.document_page import DocumentPage
@@ -382,6 +384,8 @@ class MainWindow(QMainWindow):
         self.sign_target_answer = None
         # For the tests: whether to sign without a timestamp when the server fails.
         self.timestamp_failed_answer: bool | None = None
+        # For the tests: the documents and the placement «Firmar varios» answers.
+        self.sign_many_answer = None
         self._sign_when_saved: DocumentPage | None = None
         self.save_as_answer = None
         self.new_stamp_answer: str | None = None  # the tests answer without asking
@@ -397,6 +401,7 @@ class MainWindow(QMainWindow):
             "open": self.choose_and_open,
             "search": self.show_search,
             "sign_certificate": self.sign_with_certificate,
+            "sign_many": self.sign_many,
             "ocr": self.recognize_text,
             "ocr_again": self.recognize_again,
             "zoom_in": lambda: self.pdf_view.zoom_in(),
@@ -1195,6 +1200,12 @@ class MainWindow(QMainWindow):
         self.print_action.triggered.connect(lambda _checked=False: self.print_document())
         self.addAction(self.print_action)
         file_menu.addAction(self.print_action)
+        self.sign_many_action = QAction(self.tr("&Firmar varios documentos…"), self)
+        self.sign_many_action.setStatusTip(
+            self.tr("Firmar con certificado muchos documentos de una vez")
+        )
+        self.sign_many_action.triggered.connect(lambda _checked=False: self.sign_many())
+        file_menu.addAction(self.sign_many_action)
         file_menu.addSeparator()
         self.versions_action = QAction(self.tr("Versiones &anteriores…"), self)
         self.versions_action.setStatusTip(
@@ -4274,6 +4285,100 @@ class MainWindow(QMainWindow):
         self._sign_when_saved = None
         if worked and page is self.current_document:
             QTimer.singleShot(0, self.sign_with_certificate)
+
+    def sign_many(self) -> bool:
+        """«Firmar varios documentos»: the same certificate, the PIN once (when
+        the key allows it), a «-firmado» copy of each beside it."""
+        settings = self.settings
+        if self.sign_many_answer is not None:
+            paths, placement = self.sign_many_answer
+        else:
+            dialog = BatchSignDialog(
+                self,
+                open_documents=[
+                    (page.path, page.view.modified)
+                    for page in self.documents
+                    if page.path is not None
+                ],
+                page=certificate_settings.batch_page(settings),
+                corner=certificate_settings.batch_corner(settings),
+                visible=certificate_settings.visible_wanted(settings),
+            )
+            if dialog.exec() != BatchSignDialog.DialogCode.Accepted:
+                return False
+            paths, placement = dialog.paths, dialog.placement
+        if not paths:
+            return False
+        if placement is not None:
+            settings.set(certificate_settings.BATCH_PAGE_SETTING, placement.page)
+            settings.set(certificate_settings.BATCH_CORNER_SETTING, placement.corner)
+        signer = self._choose_signer()
+        if signer is None:
+            return False
+        png = None
+        if placement is not None and certificate_settings.handwritten_wanted(settings):
+            png = self.saved_signature(my_signature.SIGNATURE)
+        server = ""
+        if certificate_settings.timestamp_wanted(settings):
+            server = certificate_settings.timestamp_server(settings)
+
+        progress = QProgressDialog(self.tr("Firmando…"), self.tr("Parar"), 0, len(paths), self)
+        progress.setWindowTitle(self.tr("Firmar varios documentos"))
+        progress.setMinimumDuration(500)
+
+        def step(done: int, path: Path) -> bool:
+            progress.setValue(done)
+            progress.setLabelText(
+                self.tr("Firmando «{0}» ({1} de {2})…").format(path.name, done + 1, len(paths))
+            )
+            QApplication.processEvents()
+            return not progress.wasCanceled()
+
+        cancelled = False
+        try:
+            outcomes = batch_signing.sign_many(
+                paths, signer, placement, png, server, self._sign_without_timestamp, step
+            )
+        except SigningCancelled as stopped:
+            outcomes, cancelled = list(getattr(stopped, "outcomes", [])), True
+        except (SigningError, StoreError) as error:
+            progress.close()
+            self.reporter.log.record(type(error), error, error.__traceback__, "firmar varios")
+            self._show_problem(
+                self.tr("No se ha podido firmar"),
+                self.tr("No se ha podido usar el certificado. Ningún documento se ha tocado."),
+            )
+            return False
+        progress.close()
+        for outcome in outcomes:
+            if outcome.result == batch_signing.FAILED:
+                self.reporter.log.record(
+                    SigningError, SigningError(outcome.details), None, "firmar varios"
+                )
+        self._tell_batch(outcomes, len(paths), cancelled)
+        return any(outcome.result == batch_signing.SIGNED for outcome in outcomes)
+
+    def _tell_batch(self, outcomes, asked: int, cancelled: bool) -> None:
+        signed = [outcome for outcome in outcomes if outcome.result == batch_signing.SIGNED]
+        message = self.tr("Firmados {0} de {1} documentos.").format(len(signed), asked)
+        self.statusBar().showMessage(message, STATUS_MESSAGE_MS)
+        lines = [message]
+        if signed:
+            lines.append(self.tr("Cada uno está en su misma carpeta, como «…-firmado.pdf»."))
+        if cancelled or len(outcomes) < asked:
+            lines.append(self.tr("Se paró antes de terminar; los demás no se han tocado."))
+        for outcome in outcomes:
+            if outcome.result == batch_signing.PASSWORD:
+                lines.append(self.tr("· «{0}»: tiene contraseña.").format(outcome.source.name))
+            elif outcome.result == batch_signing.FAILED:
+                lines.append(
+                    self.tr("· «{0}»: no se ha podido firmar (dañado o no es un PDF).").format(
+                        outcome.source.name
+                    )
+                )
+        self.batch_summary = "\n".join(lines)  # the tests read it
+        if self.show_problem_dialogs:
+            QMessageBox.information(self, self.tr("Firmar varios documentos"), self.batch_summary)
 
     def _sign_without_timestamp(self) -> bool:
         if self.timestamp_failed_answer is not None:

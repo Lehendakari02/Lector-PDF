@@ -311,3 +311,63 @@ def test_without_the_timestamp_server_signing_without_it_is_offered(
     with target.open("rb") as handle:
         assert len(PdfFileReader(handle).embedded_signatures) == 1
     assert TimestampFailed  # the kind of failure that offers it
+
+
+# ---- signing several documents at once (task 4.4) ----
+
+
+def test_several_documents_are_signed_with_one_choice_of_certificate(window, sample, tmp_path):
+    import shutil
+
+    from app.core.batch_signing import BOTTOM_LEFT, FIRST, Placement
+
+    window.show_problem_dialogs = False
+    paths = []
+    for number in range(3):
+        path = tmp_path / f"nómina {number + 1}.pdf"
+        shutil.copy(sample("formulario.pdf"), path)
+        paths.append(path)
+    locked = tmp_path / "cerrado.pdf"
+    shutil.copy(sample("con-contrasena.pdf"), locked)
+    chosen = []
+    window.signer_answer = load_p12_signer(sample("certificado-prueba.p12"), "prueba")
+    original = window._choose_signer
+    window._choose_signer = lambda: chosen.append(1) or original()
+    window.sign_many_answer = ([*paths, locked], Placement(FIRST, BOTTOM_LEFT))
+    assert window.feature_actions["sign_many"].isEnabled()
+    window.feature_actions["sign_many"].trigger()
+    assert chosen == [1], "the certificate is chosen once"
+    for path in paths:
+        with path.with_name(f"{path.stem}-firmado.pdf").open("rb") as handle:
+            assert len(PdfFileReader(handle).embedded_signatures) == 1
+    assert "Firmados 3 de 4" in window.batch_summary
+    assert "«cerrado.pdf»: tiene contraseña" in window.batch_summary
+    assert window.settings.get(certificate_settings.BATCH_PAGE_SETTING) == FIRST
+    assert window.settings.get(certificate_settings.BATCH_CORNER_SETTING) == BOTTOM_LEFT
+    assert len(window.documents) <= 1, "the signed copies are not all opened"
+
+
+def test_the_batch_window_lists_documents_once_and_tells_unsaved_ones(qt_app, tmp_path):
+    from app.core.batch_signing import FIRST, TOP_RIGHT
+    from app.ui.batch_sign_dialog import BatchSignDialog
+
+    one, two = tmp_path / "uno.pdf", tmp_path / "dos.pdf"
+    dialog = BatchSignDialog(
+        open_documents=[(one, False), (two, True)], page=FIRST, corner=TOP_RIGHT
+    )
+    assert not dialog.sign_button.isEnabled()
+    dialog.add_open()
+    dialog.add([one, tmp_path / "foto.jpg"])
+    assert dialog.paths == [one, two], "each once, only PDFs"
+    assert dialog.sign_button.text() == "Firmar 2 documentos"
+    assert "cambios sin guardar" in dialog.list.item(1).text()
+    assert dialog.note.isVisibleTo(dialog)
+    assert dialog.placement.page == FIRST and dialog.placement.corner == TOP_RIGHT
+    dialog.where_box.setCurrentIndex(dialog.where_box.findData("invisible"))
+    assert dialog.placement is None and not dialog.corner_box.isEnabled()
+    dialog.list.item(1).setSelected(True)
+    dialog.remove_selected()
+    assert dialog.paths == [one] and dialog.sign_button.text() == "Firmar"
+    assert not dialog.note.isVisibleTo(dialog)
+    remembered_invisible = BatchSignDialog(visible=False)
+    assert remembered_invisible.placement is None

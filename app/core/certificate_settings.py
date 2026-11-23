@@ -9,6 +9,7 @@ Whatever is stored is read with care: a value that is not one of the choices
 counts as the default.
 """
 
+from app.core.batch_signing import BOTTOM_RIGHT, CORNERS, LAST, PAGES
 from app.core.settings import Settings
 from app.core.signing import DEFAULT_TIMESTAMP_SERVER
 
@@ -21,6 +22,9 @@ HANDWRITTEN_SETTING = "firma/manuscrita"
 # only a fingerprint of the document is sent).
 TIMESTAMP_SETTING = "firma/sello_tiempo"
 TIMESTAMP_SERVER_SETTING = "firma/servidor_sello"
+# Signing several documents at once: the page and the corner used last time.
+BATCH_PAGE_SETTING = "firma/varios_pagina"
+BATCH_CORNER_SETTING = "firma/varios_esquina"
 
 
 def visible_wanted(settings: Settings) -> bool:
@@ -40,3 +44,13 @@ def timestamp_server(settings: Settings) -> str:
     if isinstance(value, str) and value.strip().lower().startswith(("http://", "https://")):
         return value.strip()
     return DEFAULT_TIMESTAMP_SERVER
+
+
+def batch_page(settings: Settings) -> str:
+    value = settings.get(BATCH_PAGE_SETTING, LAST)
+    return value if value in PAGES else LAST
+
+
+def batch_corner(settings: Settings) -> str:
+    value = settings.get(BATCH_CORNER_SETTING, BOTTOM_RIGHT)
+    return value if value in CORNERS else BOTTOM_RIGHT

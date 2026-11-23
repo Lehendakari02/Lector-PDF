@@ -59,3 +59,19 @@ funcione y dime lo que no.
      propiedades de la firma, sale "La firma incluye un sello de hora".
    - Con el sello activado, desconecta internet y firma: avisa y ofrece
      "Firmar sin sello de tiempo".
+
+## Tarea 4.4 – Firmar varios documentos de una vez
+
+1. Copia 10 PDF cualesquiera en una carpeta.
+2. **Archivo → Firmar varios documentos…** → Añadir documentos… → elige los 10.
+3. Deja "Visible, en la última página" y "Abajo a la derecha" y pulsa
+   **Firmar 10 documentos**. Elige tu certificado.
+4. **Lo importante:** dime cuántas veces te pide Windows el PIN o la
+   contraseña. Lo ideal es una; con algunos certificados Windows lo pide en
+   cada firma y eso no lo decide el programa.
+5. Al terminar dice "Firmados 10 de 10" y en la carpeta hay diez
+   «…-firmado.pdf». Abre un par: el recuadro está abajo a la derecha de la
+   última página. Súbelos a VALIDe.
+6. Repite con tu archivo .pfx: la contraseña se pone una sola vez.
+7. Mete en la lista un PDF con contraseña: dice que ese no se ha podido y
+   firma los demás.
