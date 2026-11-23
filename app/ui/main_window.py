@@ -52,6 +52,7 @@ from app.core import (
     batch_signing,
     certificate_settings,
     combine,
+    export,
     my_data,
     my_signature,
     ocr,
@@ -154,7 +155,13 @@ from app.ui.margin_dialog import MarginChoice, MarginDialog
 from app.ui.margin_dialog import remember as remember_margin
 from app.ui.margin_dialog import remembered as remembered_margin
 from app.ui.my_data_dialog import MyDataDialog, datum_names
-from app.ui.organize_dialogs import InsertWhereDialog, MergeDialog, SplitDialog
+from app.ui.organize_dialogs import (
+    IMAGES,
+    ExportDialog,
+    InsertWhereDialog,
+    MergeDialog,
+    SplitDialog,
+)
 from app.ui.page_box import PageBox
 from app.ui.password_dialog import PasswordDialog
 from app.ui.pdf_view import SIGN_TOOL, PdfView
@@ -186,6 +193,7 @@ def signed_name(path: Path) -> Path:
     return path.with_name(f"{path.stem}-firmado.pdf")
 
 
+EXPORT_SETTING = "exportar"  # what «Exportar» took out last time
 CERTIFICATE_SETTING = "firma/certificado"  # the certificate of Windows used last
 CERTIFICATE_FILE_SETTING = "firma/archivo"  # the certificate file used last
 DATE_SETTING = "firma/fecha"  # whether the date is written under the signature
@@ -446,6 +454,10 @@ class MainWindow(QMainWindow):
         self.insert_files_answer: list[Path] | None = None
         self.insert_where_answer: int | None = None
         self.photo_files_answer: list[Path] | None = None
+        # Instead of the «Exportar» window: takes it and says whether to go on;
+        # and instead of asking where: takes the proposal, gives the file or folder.
+        self.export_answer = None
+        self.export_target_answer = None
         # Instead of the «De foto a PDF» window: takes it and says whether to go on.
         self.photo_scan_answer = None
         self.organize_target_answer = None
@@ -522,6 +534,7 @@ class MainWindow(QMainWindow):
             "extract_pages": lambda: self.extract_pages(),
             "insert_pages": lambda: self.insert_pages(),
             "photo_to_pdf": lambda: self.photo_to_pdf(),
+            "export": lambda: self.export_pages(),
         }
         self._mark_pending_features()
         self._build_key_commands()
@@ -1366,6 +1379,134 @@ class MainWindow(QMainWindow):
             STATUS_MESSAGE_MS,
         )
         return True
+
+    def export_pages(self, choice: dict | None = None) -> bool:
+        """«Exportar»: pages as pictures (PNG or JPG) or the text as a text
+        file. Uses the saved file: with changes, offers to save them first."""
+        page = self.current_document
+        view = self.pdf_view
+        if view.page_count == 0 or page.path is None:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return False
+        if choice is None:
+            picked = (
+                self.side_panel.thumbnails.picked_pages()
+                if self.side_dock.isVisible() and self.side_panel.tab is Tab.THUMBNAILS
+                else []
+            )
+            remembered = self.settings.get(EXPORT_SETTING)
+            dialog = ExportDialog(
+                self,
+                view.page_count,
+                max(0, view.current_page),
+                picked,
+                remembered if isinstance(remembered, dict) else None,
+            )
+            if self.export_answer is not None:
+                go_on = self.export_answer(dialog)
+                if go_on and not dialog.pages:
+                    go_on = False
+            else:
+                go_on = dialog.exec() == ExportDialog.DialogCode.Accepted
+            choice = {**dialog.remembered(), "pages": dialog.pages}
+            dialog.deleteLater()
+            if not go_on:
+                return False
+            self.settings.set(EXPORT_SETTING, {k: v for k, v in choice.items() if k != "pages"})
+        if not self._with_saved_file(
+            page, self.tr("Exportar"), lambda c=choice: self.export_pages(c)
+        ):
+            return False
+        pages = list(choice["pages"])
+        stem = page.path.stem
+        images = choice["what"] == IMAGES
+        if images:
+            names = export.image_names(stem, pages, view.page_count, choice["kind"])
+            if len(pages) == 1:
+                suggested = combine.free_name(page.path.with_name(names[0]))
+                target = self._export_target(
+                    suggested,
+                    self.tr("Guardar la página como imagen"),
+                    self.tr("Imágenes (*.{0})").format(choice["kind"]),
+                )
+                targets = [target] if target else []
+            else:
+                folder = self._export_target(page.path.parent, self.tr("Carpeta para las imágenes"))
+                targets = [folder / name for name in names] if folder else []
+            if not targets:
+                return False
+        else:
+            suffix = (
+                ""
+                if len(pages) in (1, view.page_count)
+                else f" - {pages_text(pages, self.tr).lower()}"
+            )
+            suggested = combine.free_name(page.path.with_name(f"{stem}{suffix}.txt"))
+            target = self._export_target(
+                suggested, self.tr("Guardar el texto como"), self.tr("Texto (*.txt)")
+            )
+            if target is None:
+                return False
+            if target.suffix.lower() != ".txt":
+                target = target.with_name(target.name + ".txt")
+        progress = QProgressDialog(self)
+        progress.setWindowTitle(self.tr("Exportar"))
+        progress.setCancelButtonText(self.tr("Cancelar"))
+        progress.setRange(0, len(pages))
+        progress.setMinimumDuration(400)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+
+        def step(done: int, total: int) -> bool:
+            progress.setLabelText(self.tr("Página {0} de {1}…").format(min(done + 1, total), total))
+            progress.setValue(done)
+            QApplication.processEvents()
+            return not progress.wasCanceled()
+
+        source = self._source_of(page)
+        try:
+            if images:
+                written = export.export_images(
+                    source,
+                    pages,
+                    targets,
+                    choice["kind"],
+                    choice["resolution"],
+                    choice["annotations"],
+                    step,
+                )
+                empty: list[int] = []
+            else:
+                text_file, empty = export.export_text(source, pages, target, step)
+                written = [text_file]
+        except combine.CombineError as error:
+            progress.close()
+            if not progress.wasCanceled():
+                self._combine_failed(error, "exportar")
+            return False
+        progress.close()
+        self.last_export = written
+        if images and len(written) > 1:
+            message = self.tr("{0} imágenes guardadas en «{1}».").format(
+                len(written), written[0].parent.name
+            )
+        else:
+            message = self.tr("Guardado «{0}».").format(written[0].name)
+        if empty:
+            message += " " + self.tr(
+                "{0} no tienen texto: son imágenes. Reconoce el texto antes de exportarlo."
+            ).format(pages_text(empty, self.tr))
+        self.statusBar().showMessage(message, STATUS_MESSAGE_MS)
+        return True
+
+    def _export_target(self, suggested: Path, title: str, kinds: str | None = None) -> Path | None:
+        """Where the export goes: a file (``kinds`` given) or a folder."""
+        if self.export_target_answer is not None:
+            chosen = self.export_target_answer(suggested)
+        elif kinds is None:
+            chosen = QFileDialog.getExistingDirectory(self, title, str(suggested))
+        else:
+            chosen, _filter = QFileDialog.getSaveFileName(self, title, str(suggested), kinds)
+        return Path(chosen).absolute() if chosen else None
 
     def extract_pages(self, pages: list[int] | None = None) -> bool:
         """«Extraer páginas»: the pages picked (or the one being read) into a

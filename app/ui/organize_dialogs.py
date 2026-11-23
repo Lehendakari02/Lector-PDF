@@ -1,10 +1,13 @@
-"""«Unir» and «Dividir»: which documents go together, and how one is cut."""
+"""«Unir», «Dividir», «Insertar páginas» and «Exportar»: which documents go
+together, how one is cut, where pages go and what is taken out."""
 
 from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QButtonGroup,
+    QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -22,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.core.combine import EVERY, OUTLINE, RANGES, every, parse_ranges
+from app.core.export import IMAGE_KINDS, JPEG, PNG, RESOLUTIONS
 
 PATH_ROLE = Qt.ItemDataRole.UserRole
 
@@ -365,3 +369,168 @@ class InsertWhereDialog(QDialog):
             if button.isChecked():
                 return int(button.property("at"))
         return self.count
+
+
+IMAGES = "imagenes"
+TEXT = "texto"
+
+
+class ExportDialog(QDialog):
+    """What to take out of the document and which pages. After ``exec()``
+    returns ``Accepted``: ``what`` (IMAGES or TEXT), ``pages`` (counting
+    from 0), ``kind``, ``resolution`` and ``annotations``."""
+
+    def __init__(
+        self,
+        parent: QWidget | None,
+        count: int,
+        current: int,
+        picked: list[int],
+        remembered: dict | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(self.tr("Exportar"))
+        self.count = count
+        self.picked = sorted(picked)
+        remembered = remembered or {}
+
+        self.as_images = QRadioButton(self.tr("Las páginas como &imagen"))
+        self.as_text = QRadioButton(self.tr("El &texto, en un archivo de texto"))
+        (self.as_text if remembered.get("what") == TEXT else self.as_images).setChecked(True)
+
+        self.kind_box = QComboBox()
+        self.kind_box.setAccessibleName(self.tr("Formato de la imagen"))
+        self.kind_box.addItem(self.tr("PNG (nítida, para documentos)"), PNG)
+        self.kind_box.addItem(self.tr("JPG (ocupa menos, para fotos)"), JPEG)
+        self.kind_box.setCurrentIndex(max(0, self.kind_box.findData(remembered.get("kind", PNG))))
+        self.resolution_box = QComboBox()
+        self.resolution_box.setAccessibleName(self.tr("Resolución"))
+        names = {
+            96: self.tr("Pantalla (96 ppp)"),
+            150: self.tr("Normal (150 ppp)"),
+            300: self.tr("Alta, para imprimir (300 ppp)"),
+        }
+        for resolution in RESOLUTIONS:
+            self.resolution_box.addItem(names[resolution], resolution)
+        self.resolution_box.setCurrentIndex(
+            max(0, self.resolution_box.findData(remembered.get("resolution", 150)))
+        )
+        self.annotations_box = QCheckBox(
+            self.tr("Con mis &anotaciones (subrayados, notas, dibujos)")
+        )
+        self.annotations_box.setChecked(bool(remembered.get("annotations", True)))
+        image_options = QGridLayout()
+        kind_label = QLabel(self.tr("&Formato:"))
+        kind_label.setBuddy(self.kind_box)
+        resolution_label = QLabel(self.tr("&Resolución:"))
+        resolution_label.setBuddy(self.resolution_box)
+        image_options.addWidget(kind_label, 0, 0)
+        image_options.addWidget(self.kind_box, 0, 1)
+        image_options.addWidget(resolution_label, 1, 0)
+        image_options.addWidget(self.resolution_box, 1, 1)
+        image_options.addWidget(self.annotations_box, 2, 0, 1, 2)
+        image_options.setContentsMargins(24, 0, 0, 0)
+        self.image_options = QWidget()
+        self.image_options.setLayout(image_options)
+        self.as_images.toggled.connect(self.image_options.setEnabled)
+        self.image_options.setEnabled(self.as_images.isChecked())
+
+        self.current_page = QRadioButton(
+            self.tr("La página que estás leyendo ({0})").format(current + 1)
+        )
+        self.current_page.setProperty("pages", [current])
+        self.picked_pages = QRadioButton(
+            self.tr("Las {0} páginas elegidas en las miniaturas").format(len(self.picked))
+        )
+        self.picked_pages.setProperty("pages", self.picked)
+        self.picked_pages.setVisible(len(self.picked) > 1)
+        self.all_pages = QRadioButton(self.tr("Todas ({0})").format(count))
+        self.all_pages.setProperty("pages", list(range(count)))
+        self.these_pages = QRadioButton(self.tr("Estas:"))
+        self.ranges_edit = QLineEdit()
+        self.ranges_edit.setPlaceholderText(self.tr("por ejemplo 1-3, 7"))
+        self.ranges_edit.setAccessibleName(self.tr("Páginas que se exportan"))
+        self.ranges_edit.textEdited.connect(lambda _text: self.these_pages.setChecked(True))
+        (self.picked_pages if len(self.picked) > 1 else self.current_page).setChecked(True)
+        self.problem = QLabel()
+        self.problem.setWordWrap(True)
+        self.problem.setStyleSheet("color: palette(link);")
+        pages_grid = QGridLayout()
+        pages_grid.addWidget(self.current_page, 0, 0, 1, 2)
+        pages_grid.addWidget(self.picked_pages, 1, 0, 1, 2)
+        pages_grid.addWidget(self.all_pages, 2, 0, 1, 2)
+        pages_grid.addWidget(self.these_pages, 3, 0)
+        pages_grid.addWidget(self.ranges_edit, 3, 1)
+        pages_grid.setColumnStretch(1, 1)
+        what_group = QButtonGroup(self)
+        what_group.addButton(self.as_images)
+        what_group.addButton(self.as_text)
+        pages_group = QButtonGroup(self)
+        for button in (self.current_page, self.picked_pages, self.all_pages, self.these_pages):
+            pages_group.addButton(button)
+
+        buttons = QDialogButtonBox()
+        buttons.addButton(self.tr("Exportar"), QDialogButtonBox.ButtonRole.AcceptRole)
+        buttons.addButton(self.tr("Cancelar"), QDialogButtonBox.ButtonRole.RejectRole)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel(self.tr("¿Qué quieres sacar?")))
+        layout.addWidget(self.as_images)
+        layout.addWidget(self.image_options)
+        layout.addWidget(self.as_text)
+        layout.addSpacing(8)
+        layout.addWidget(QLabel(self.tr("¿De qué páginas?")))
+        layout.addLayout(pages_grid)
+        layout.addWidget(self.problem)
+        layout.addWidget(buttons)
+
+    @property
+    def what(self) -> str:
+        return TEXT if self.as_text.isChecked() else IMAGES
+
+    @property
+    def kind(self) -> str:
+        kind = self.kind_box.currentData()
+        return kind if kind in IMAGE_KINDS else PNG
+
+    @property
+    def resolution(self) -> int:
+        return int(self.resolution_box.currentData())
+
+    @property
+    def annotations(self) -> bool:
+        return self.annotations_box.isChecked()
+
+    @property
+    def pages(self) -> list[int]:
+        """The pages chosen, counting from 0 (empty if what is written is wrong)."""
+        if self.these_pages.isChecked():
+            try:
+                parts = parse_ranges(self.ranges_edit.text(), self.count)
+            except ValueError:
+                return []
+            return sorted({page for part in parts for page in part})
+        for button in (self.current_page, self.picked_pages, self.all_pages):
+            if button.isChecked():
+                return list(button.property("pages"))
+        return []
+
+    def remembered(self) -> dict:
+        """The choices to offer again next time."""
+        return {
+            "what": self.what,
+            "kind": self.kind,
+            "resolution": self.resolution,
+            "annotations": self.annotations,
+        }
+
+    def accept(self) -> None:
+        if not self.pages:
+            self.problem.setText(
+                self.tr("Escribe las páginas así: 1-3, 7 (del 1 al {0}).").format(self.count)
+            )
+            self.ranges_edit.setFocus()
+            return
+        super().accept()

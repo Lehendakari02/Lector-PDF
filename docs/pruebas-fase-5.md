@@ -88,3 +88,19 @@ PDF. Ve marcando lo que funcione y dime lo que no.
    reconocer el texto. Reconócelo y busca una palabra.
 6. Vuelve a abrir De foto a PDF: recuerda el aspecto que elegiste.
 7. Abre el PDF en **Adobe** y en **Edge**: se ve igual.
+
+## Tarea 5.5 – Exportar páginas como imagen o el texto
+
+1. Modo Organizar → **Exportar**. Deja «Las páginas como imagen», PNG, Normal
+   y «La página que estás leyendo». Propone «nombre - página 05.png» junto al
+   PDF. Ábrela: se ve como en el programa, con tus subrayados.
+2. Repite sin «Con mis anotaciones»: la imagen sale limpia.
+3. Elige varias páginas en las miniaturas y exporta: pide una carpeta y deja
+   una imagen por página, ordenadas por número.
+4. Exporta «El texto» de todas las páginas: un .txt con «— Página N —» antes
+   de cada una. Las palabras partidas con guion al final de línea salen
+   enteras.
+5. En un escaneado sin reconocer, exporta el texto: avisa de qué páginas no
+   tienen texto.
+6. Con cambios sin guardar, exporta: pregunta «Guardar y seguir».
+7. Vuelve a abrir Exportar: recuerda lo que elegiste.
