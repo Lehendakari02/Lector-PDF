@@ -51,7 +51,7 @@ LOOK_NAMES = {
     photo_scan.BLACK_WHITE: "Blanco y negro",
     photo_scan.PHOTO: "Foto sin retocar",
 }
-LOOK_SETTING = "photo_scan/look"
+LOOK_SETTING = "foto_a_pdf/aspecto"
 CORNER_NAMES = (
     "arriba a la izquierda",
     "arriba a la derecha",

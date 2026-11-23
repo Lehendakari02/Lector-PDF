@@ -1753,7 +1753,7 @@ Notas de las mejoras:
 | 5.2 | Unir y dividir PDFs, extraer páginas | Uno 3 PDFs en uno | ✅ |
 | 5.3 | Insertar páginas de otro PDF o imágenes | Añado una imagen como página | ✅ |
 | 5.4 | De foto a PDF (recortar, enderezar, mejorar) | Hago una foto a un papel y queda como escaneado | ✅ |
-| 5.5 | Exportar páginas como imagen o el documento como texto | Saco una página en PNG | ⬜ |
+| 5.5 | Exportar páginas como imagen o el documento como texto | Saco una página en PNG | ✅ |
 | 5.6 | Tapar datos de verdad | Tapo mi DNI y no se puede recuperar copiando el texto | ⬜ |
 | 5.7 | Comprimir, poner/quitar contraseña | El PDF ocupa menos / pide contraseña | ⬜ |
 | 5.8 | Comparar dos versiones de un documento | Veo qué ha cambiado entre dos versiones de una ley | ⬜ |
@@ -1820,6 +1820,15 @@ Notas de la Fase 5:
     no hace falta ninguna librería de imagen nueva y tarda décimas.
   - Páginas de 595 puntos de ancho (A4); JPEG para color y gris, PNG para
     blanco y negro. Se escribe aparte y luego se pone en su sitio.
+- **5.5 Exportar** (`core/export.py`, `ExportDialog` en
+  `ui/organize_dialogs.py`). Modo Organizar → «Exportar»: las páginas como
+  imagen (PNG nítida o JPG pequeña; 96, 150 o 300 ppp; con o sin las
+  anotaciones) o el texto en un .txt (UTF-8, palabras partidas con guion
+  unidas, «— Página N —» delante de cada página). Páginas: la que se lee, las
+  elegidas en las miniaturas, todas o «1-3, 7». Una imagen se guarda donde se
+  diga; varias, en una carpeta, «nombre - página 03.png». Nunca pisa archivos.
+  Usa el archivo guardado (con cambios, «Guardar y seguir»). Avisa de las
+  páginas sin texto (escaneadas sin reconocer). Recuerda lo elegido.
 - **Arreglo pedido por Julen (23/11):** con un marcador o con «Texto» en la
   mano, un clic en tu propio texto lo coge (como en PowerPoint) y arrastrándolo
   se mueve; un segundo clic, doble clic o Intro lo abre para escribir.
