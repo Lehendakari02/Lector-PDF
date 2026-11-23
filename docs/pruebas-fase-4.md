@@ -90,3 +90,16 @@ Necesitas un lector de tarjetas y el PIN del DNIe.
 4. Prueba "Firmar varios documentos" con el DNIe: dime cuántas veces pide el
    PIN.
 5. Si el DNIe no aparece en la lista ni con Actualizar, dímelo: hay un plan B.
+
+## Tarea 4.6 – Ver y comprobar firmas
+
+1. Abre un PDF firmado por ti (de las pruebas anteriores): abajo dice que
+   está firmado.
+2. Rellenar y firmar → **Comprobar firmas**: debe decir ✔ "Firma válida",
+   tu nombre, "AC FNMT Usuarios" (o la del DNIe) y la fecha.
+3. Abre algún PDF firmado que te haya llegado de fuera (una nómina, un
+   certificado de la administración…) y compara con lo que dice Adobe.
+4. Añade una nota a un PDF firmado, guárdalo y comprueba: sigue ✔ y dice
+   que después se añadieron notas.
+5. Si en algún caso sale ⚠ o ✖ y Adobe o VALIDe dicen que está bien, dime
+   cuál.
