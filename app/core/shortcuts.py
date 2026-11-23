@@ -50,6 +50,7 @@ DEFAULTS: dict[str, tuple[str, ...]] = {
     "mode_3": ("Ctrl+3",),
     "mode_4": ("Ctrl+4",),
     "fullscreen": ("F11",),
+    "reading_cursor": ("F7",),
     "go_to_page": ("Ctrl+G",),
     "bookmark": ("Ctrl+M",),
     "rotate_view": ("Ctrl+R",),

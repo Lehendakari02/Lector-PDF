@@ -29,6 +29,7 @@ from app.core import (
     file_association,
     ocr,
     pen,
+    reading,
     save_settings,
     tab_sleep,
 )
@@ -206,6 +207,34 @@ class SettingsDialog(QDialog):
         sleep_row.addStretch(1)
         layout.addLayout(sleep_row)
 
+        # ---- accessibility ----
+        layout.addWidget(self._heading(self.tr("Accesibilidad")))
+        self.reading_cursor_box = QCheckBox(
+            self.tr("Leer la página con el &cursor de lectura (F7)")
+        )
+        self.reading_cursor_box.setToolTip(
+            self.tr(
+                "Como en Edge y Chrome: con las flechas te mueves por el texto de la "
+                "página, con Mayús seleccionas (y con R lo resaltas). Pasar de la última "
+                "línea lleva a la página siguiente."
+            )
+        )
+        self.reading_cursor_box.setChecked(reading.cursor_chosen(self.settings))
+        self.reading_cursor_box.toggled.connect(self._reading_cursor_chosen)
+        layout.addWidget(self.reading_cursor_box)
+        self.screen_reader_box = QCheckBox(
+            self.tr("Activarlo solo si uso un &lector de pantalla (NVDA, JAWS, Narrador)")
+        )
+        self.screen_reader_box.setToolTip(
+            self.tr(
+                "Así el lector de pantalla lee el texto del documento línea a línea, "
+                "palabra a palabra o entero, como en Adobe Reader."
+            )
+        )
+        self.screen_reader_box.setChecked(reading.with_screen_reader(self.settings))
+        self.screen_reader_box.toggled.connect(self._screen_reader_chosen)
+        layout.addWidget(self.screen_reader_box)
+
         # ---- new versions ----
         layout.addWidget(self._heading(self.tr("Versiones nuevas")))
         self.updates_box = QCheckBox(self.tr("&Avisarme cuando haya una versión nueva"))
@@ -250,6 +279,14 @@ class SettingsDialog(QDialog):
             + self.tabs.tabBar().sizeHint().height()
             + 8
         )
+
+    def _reading_cursor_chosen(self, on: bool) -> None:
+        self.settings.set(reading.CURSOR_SETTING, on)
+        self.window_.apply_pen_settings()
+
+    def _screen_reader_chosen(self, on: bool) -> None:
+        self.settings.set(reading.WITH_SCREEN_READER_SETTING, on)
+        self.window_.apply_pen_settings()
 
     def _sleep_chosen(self, on: bool) -> None:
         self.settings.set(tab_sleep.SLEEP_SETTING, on)

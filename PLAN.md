@@ -1571,7 +1571,7 @@ malo y trae sus ajustes con valores por defecto que sirven sin tocar nada.
 | P.2 | "Dormir" las pestañas que llevan rato sin verse, como Edge, con un tope de memoria; ajuste para apagarlo | Con 20 temas abiertos el programa gasta mucho menos; al volver a una pestaña dormida aparece en su página en un momento | 🔶 hecho; falta tu prueba con muchos temas abiertos |
 | P.3 | Zoom alto dibujado por trozos (solo lo que se ve), como Adobe y los mapas | Al 800 % una letra pequeña se ve nítida, sin esperas ni gastar cientos de MB | 🔶 hecho; falta tu prueba en tu Windows |
 | P.4 | Elegir la tecla de cada herramienta y función, como los controles de un videojuego | En Ajustes → Teclado cambio la tecla de Subrayar, me avisa si choca con otra y "Restablecer" vuelve a las de siempre | 🔶 hecho; falta tu prueba |
-| P.5 | El lector de pantalla (NVDA) lee el texto de las páginas, como en Adobe, Edge y Chrome | Con NVDA, entro en el documento y me lee la página; me muevo por líneas con las flechas | ⬜ |
+| P.5 | El lector de pantalla (NVDA) lee el texto de las páginas, como en Adobe, Edge y Chrome | Con NVDA, entro en el documento y me lee la página; me muevo por líneas con las flechas | 🔶 hecho; falta tu prueba |
 
 Lo que hay que probar en Windows está en
 [`docs/pruebas-mejoras.md`](docs/pruebas-mejoras.md).
@@ -1655,6 +1655,36 @@ Notas de las mejoras:
   - La casilla "Una tecla para cada herramienta" pasa a esta pestaña como
     "Teclas sueltas en el documento" (el mismo ajuste), junto con la de las
     flechas al escribir.
+- **P.5: El lector de pantalla lee las páginas: el cursor de lectura (23/11/2026).**
+  - Un lector de pantalla no puede leer el dibujo de una página: necesita las
+    palabras. Adobe, Edge y Chrome se las dan como un texto. Aquí lo hace el
+    **cursor de lectura** (`app/ui/page_reader.py`): un texto invisible sobre
+    la página con el texto de esa página en orden de lectura (las líneas de
+    un párrafo unidas, las palabras partidas con guion enteras, como al
+    copiar; `app/core/reading.py`). NVDA lo lee como cualquier texto de
+    Windows: línea a línea con las flechas, palabra a palabra con Ctrl,
+    "leer todo" (NVDA+flecha abajo)…; al cambiar de página dice «Página 2 de
+    39».
+  - Es también el **"caret browsing" de Edge, Chrome y Firefox (F7)**, útil
+    sin lector de pantalla: con las flechas se mueve una barra roja fina por
+    el texto, con Mayús se selecciona (y la selección sale en la página, así
+    que **R** la resalta, **S** la subraya, Ctrl+C la copia). Pasar de la
+    última línea lleva a la página siguiente; Av Pág y Re Pág cambian de
+    página. Un clic lo pone donde se pulsa. La página se desplaza sola a lo
+    que se lee.
+  - **Se activa solo cuando hay un lector de pantalla** (NVDA, JAWS,
+    Narrador), también si se abre con el programa ya en marcha, y se
+    recuerda si se activa con F7 (en Edge hay que activarlo a mano cada vez
+    que se quiere; Adobe solo lo hace con lector de pantalla). Ajustes →
+    General → Accesibilidad tiene las dos casillas; F7 se puede cambiar en
+    Ajustes → Teclado (`reading_cursor`). Desactivarlo con F7 mientras hay un
+    lector de pantalla también quita que vuelva solo.
+  - Páginas escaneadas sin texto: dice «La página 3 no tiene texto: es una
+    imagen» y propone Reconocer texto. Tras reconocerlo, se lee.
+  - Por qué así y no "a mano": la pieza de Qt para dar texto a un lector de
+    pantalla no está completa en PySide6 (faltan las partes que leen por
+    palabras y líneas). Un texto de Qt de verdad, invisible, las trae todas
+    hechas y probadas.
 
 ## Fase 5 – Organizar y convertir
 | # | Tarea | Terminado cuando… | Estado |
