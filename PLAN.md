@@ -23,8 +23,8 @@ Al acabar cada fase se publica una versión descargable en *Releases*.
 | 0.8 | Prueba de concepto: firma con certificado del almacén de Windows (FNMT) con pyHanko | Firmo un PDF con mi certificado instalado y Adobe/VALIDe lo dan por válido; si no sale, tengo explicadas las alternativas | 🔄 construido; falta tu prueba con el certificado real |
 | 0.9 | Prueba de concepto: OCR con Tesseract incluido en el `.exe` | Reconozco una página escaneada en español sin instalar nada aparte; sé cuánto crece el instalador | ✅ |
 
-La lista de lo que hay que probar en Windows al acabar la fase está en
-[`docs/pruebas-fase-0.md`](docs/pruebas-fase-0.md).
+Lo que queda por probar en Windows (de las fases 0 a 4 y de las mejoras) está
+en [`docs/pruebas-pendientes.md`](docs/pruebas-pendientes.md).
 
 **Medidas de la tarea 0.2** (programa casi vacío, 11/11/2026; crecerá con las funciones):
 instalador 42 MB; versión portátil 59 MB en `.zip`. La portátil es una carpeta en `.zip`
@@ -1430,7 +1430,7 @@ Notas de la Fase 3:
 | 4.5 | Firmar con DNIe y lector de tarjetas | Firmo con el DNIe (cuando tenga lector) | 🔶 hecho (PR 90); falta tu prueba con el DNIe y un lector |
 | 4.6 | Ver y verificar firmas existentes | Abro un PDF firmado y me dice quién lo firmó y si es válido | 🔶 hecho (PR 91); falta tu prueba con PDFs firmados de verdad |
 | 4.7 | Versión 0.6 | — | ✅ Release v0.6.0 publicada (23/11/2026) |
-| 4.8 | Arreglos de la revisión del código de la Fase 4 | Todo lo de la revisión arreglado y probado | 🔶 hecho (pull request de la rama `claude/project-thread-bdtogg`); falta tu prueba (apartado 4.8 de `docs/pruebas-fase-4.md`) |
+| 4.8 | Arreglos de la revisión del código de la Fase 4 | Todo lo de la revisión arreglado y probado | 🔶 hecho (pull request de la rama `claude/project-thread-bdtogg`); falta tu prueba (`docs/pruebas-pendientes.md`) |
 
 Notas de la Fase 4:
 - **4.1: Firmar con el certificado instalado en Windows (22/11/2026).**
@@ -1570,6 +1570,48 @@ PDF protegido). Resultados y fallos se apuntan aquí.
   marcarlo como error de la página). Ahora solo se nombra si existe
   (`drawing._draw_pressed`). Los PDF ya guardados se siguen viendo bien en
   este programa y en Edge.
+- **Resultado (23/11/2026, hecho por Claude en el ordenador de Julen con la
+  0.7.0):** todo bien. Firma FNMT válida en Adobe; firma en el hueco de un
+  contrato (con clic y con Intro) sin campo nuevo; subrayar y guardar un PDF
+  firmado no pregunta y la firma sigue válida («cambios permitidos»); un margen
+  en un PDF firmado avisa; el PDF protegido firmado sigue sin dejar imprimir;
+  firma invisible con sello de tiempo; firmar varios (3 de 3, sin pedir PIN,
+  abajo a la derecha de la última página); anotaciones, colores, trazo con
+  presión, formas, sellos, firma manuscrita, margen, hoja de rayas, marcador,
+  capa de OCR y enlace a otro PDF se ven igual en Adobe; una nota hecha en
+  Adobe se borra en el programa; el formulario relleno se ve y se edita en
+  Adobe; texto griego y ruso (también en negrita) igual en Adobe; un PDF
+  abierto a la vez en Adobe avisa al guardar y no se pierde nada.
+- **También probado en el programa:** saltar a página y a artículo
+  (`art. 14`, `disposición transitoria quinta`, `art. 900` dice que no está),
+  buscar sin tildes con la vista girada, la ñ no es n, copiar texto,
+  pestañas, modo lectura, Ctrl+K, imprimir (la ventana y sus avisos),
+  «Buscar versiones nuevas», índice y miniaturas, marcador con Ctrl+M, modo
+  repaso, ver al lado, exportar resumen, versiones anteriores, enlace que abre
+  la ley al lado, zoom al 600 % nítido, cursor de lectura (F7), lista de
+  teclas, y al cerrar y abrir vuelven las pestañas.
+- **Detalles pequeños vistos, arreglados (23/11/2026, Julen dijo que sí):**
+  - al deshacer todo hasta como estaba guardado ya vuelve a poner «Guardado»
+    y al cerrar no pregunta (`PdfView` cuenta los pasos desde lo guardado);
+  - el recuadro de la firma visible tiene fondo blanco y se lee bien aunque
+    caiga sobre texto (`signing.appearance`);
+  - el programa recuerda el tamaño y el sitio de la ventana, también si
+    estaba maximizada (ajuste `ventana`).
+- **Barra de herramientas que se desliza (23/11/2026, pedido por Julen):**
+  cuando las herramientas de un modo no caben, ya no se esconden tras una
+  flechita que abre una segunda fila: siguen en una sola fila que se desliza
+  hacia los lados, con una flecha clara a cada lado (mantenerla pulsada sigue
+  deslizando), la rueda del ratón y el dedo. Con Tab, la herramienta a la que
+  se llega se pone a la vista (`app/ui/tool_strip.py`).
+- **Documentos de pruebas:** las listas de las fases 0 a 4 y de las mejoras
+  se juntan en `docs/pruebas-pendientes.md`, solo con lo que falta. La de la
+  Fase 5 sigue aparte.
+- **Sin probar (necesitan a Julen o algo que no hay):** lápiz y pantalla
+  táctil, NVDA, DNIe y lector de tarjetas, poner PIN o contraseñas (.pfx, PDF
+  con contraseña), cerrar a la fuerza con el Administrador de tareas, Edge,
+  exportar a Word, imprimir en papel, casillas Sí/No en Adobe (no había
+  formulario con ellas), crear Mis datos o la firma manuscrita (son datos de
+  Julen) y biblioteca del temario.
 
 ## Mejoras pendientes de fases anteriores (antes de la Fase 5)
 Decididas por Julen el 23/11/2026: se hacen todas, una tarea por pull request,
@@ -1585,8 +1627,8 @@ malo y trae sus ajustes con valores por defecto que sirven sin tocar nada.
 | P.4 | Elegir la tecla de cada herramienta y función, como los controles de un videojuego | En Ajustes → Teclado cambio la tecla de Subrayar, me avisa si choca con otra y "Restablecer" vuelve a las de siempre | 🔶 hecho; falta tu prueba |
 | P.5 | El lector de pantalla (NVDA) lee el texto de las páginas, como en Adobe, Edge y Chrome | Con NVDA, entro en el documento y me lee la página; me muevo por líneas con las flechas | 🔶 hecho; falta tu prueba |
 
-Lo que hay que probar en Windows está en
-[`docs/pruebas-mejoras.md`](docs/pruebas-mejoras.md).
+Lo que queda por probar en Windows está en
+[`docs/pruebas-pendientes.md`](docs/pruebas-pendientes.md).
 
 **Versión 0.7.0 (23/11/2026, decidido por Julen):** reúne los arreglos de la
 revisión de la Fase 4 (tarea 4.8: firmar en el hueco, anotar un PDF firmado sin

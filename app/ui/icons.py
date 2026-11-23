@@ -255,6 +255,8 @@ ICONS: dict[str, str] = {
     "previous": '<path d="M6 14.5l6-6 6 6"/>',
     "menu": '<path d="M4.5 7h15M4.5 12h15M4.5 17h15"/>',
     "more": '<path d="M6 7l5 5-5 5M13 7l5 5-5 5"/>',
+    "scroll_left": '<path d="M14.5 5.5L8 12l6.5 6.5"/>',
+    "scroll_right": '<path d="M9.5 5.5L16 12l-6.5 6.5"/>',
     "next": '<path d="M6 9.5l6 6 6-6"/>',
 }
 

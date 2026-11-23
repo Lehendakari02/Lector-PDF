@@ -265,3 +265,64 @@ def test_the_bars_leave_most_of_a_laptop_screen_to_the_document(window, sample, 
     qt_app.processEvents()
     taken = window.height() - window.pdf_view.viewport().height()
     assert taken <= 200, f"the bars take {taken} px"
+
+
+def test_the_window_comes_back_as_it_was(qt_app, tmp_path):
+    path = tmp_path / "ajustes.json"
+    first = MainWindow(Settings(path))
+    first.show()
+    first.resize(760, 720)  # fits the small test screen
+    qt_app.processEvents()
+    first.close()
+    assert Settings(path).get("ventana")
+
+    second = MainWindow(Settings(path))
+    assert (second.width(), second.height()) == (760, 720)
+    second.close()
+
+
+def test_a_damaged_window_place_is_ignored(qt_app, settings):
+    settings.set("ventana", "esto no vale")
+    window = MainWindow(settings)
+    assert (window.width(), window.height()) == (1240, 800)
+    window.close()
+
+
+def test_the_tools_slide_sideways_when_the_window_is_narrow(window, qt_app):
+    """No hidden second row: one row that slides, with an arrow at each side."""
+    from app.ui.features import Mode
+
+    strip = window.tool_strip
+    window.set_mode(Mode.STUDY)
+    window.resize(760, 720)
+    qt_app.processEvents()
+    qt_app.processEvents()
+    toolbar = window.mode_toolbars[Mode.STUDY]
+    assert toolbar.width() >= toolbar.sizeHint().width()  # every tool in the row
+    assert strip.overflows()
+    assert strip.left_button.isVisible() and strip.right_button.isVisible()
+    assert not strip.left_button.isEnabled()  # already at the start
+    strip.bar.setValue(strip.bar.maximum())
+    assert strip.left_button.isEnabled() and not strip.right_button.isEnabled()
+    strip.slide(-1)
+    strip._animation.setCurrentTime(strip._animation.duration())
+    assert strip.bar.value() < strip.bar.maximum()
+
+
+def test_a_tool_reached_with_the_keyboard_comes_into_view(window, qt_app):
+    from app.ui.features import Mode
+
+    window.set_mode(Mode.STUDY)
+    window.resize(760, 720)
+    qt_app.processEvents()
+    qt_app.processEvents()
+    strip = window.tool_strip
+    toolbar = window.mode_toolbars[Mode.STUDY]
+    last = toolbar.widgetForAction(
+        [a for a in toolbar.actions() if not a.isSeparator() and a.isVisible()][-1]
+    )
+    from PySide6.QtCore import QEvent
+    from PySide6.QtGui import QFocusEvent
+
+    strip.eventFilter(last, QFocusEvent(QEvent.Type.FocusIn))
+    assert strip.bar.value() > 0

@@ -636,6 +636,13 @@ class PdfView(QAbstractScrollArea):
         self._changes = 0  # changes made to the document since it was opened
         self._saved_changes = 0  # how many of them are in the file
         self._breaking_change = 0  # the last one that breaks signatures
+        # Where the history stands (one step per change done, one back per
+        # change undone) and where it stood when the file was last written.
+        # None: that state cannot be reached any more (a new change after
+        # undoing past it). Undoing everything back to what is in the file
+        # leaves the document not modified, as in Word.
+        self._depth = 0
+        self._saved_depth: int | None = 0
         self._saves: dict[int, int] = {}  # save number -> changes it carries
         # Things of other programs taken away since the last save that are too
         # big to keep a copy of: saving would make them impossible to undo.
@@ -778,10 +785,19 @@ class PdfView(QAbstractScrollArea):
         if sketch is not None:  # it stays painted until its page is drawn again
             self._settling.setdefault(sketch[0], []).append(sketch)
         undone = how in ("undo", RECOVER_UNDO)
+        was_modified = self.modified
         if undone:
             self._redo.append(order)
+            self._depth -= 1
         else:
             self._undo.append(order)
+            if (
+                how in ("do", RECOVER)
+                and self._saved_depth is not None
+                and (self._saved_depth > self._depth)
+            ):
+                self._saved_depth = None  # what is in the file is not in the history any more
+            self._depth += 1
             if how == "do":
                 self._redo.clear()  # a new change: the undone ones are gone
         if self.journal is not None and how not in (RECOVER, RECOVER_UNDO):
@@ -812,7 +828,7 @@ class PdfView(QAbstractScrollArea):
                 self._want_text(self.reader.page)
         if _too_big_to_undo_after_saving(order):
             self._lost_on_save += -1 if undone else 1
-        self.mark_modified(breaking=_breaks_signatures(order))
+        self.mark_modified(breaking=_breaks_signatures(order), was=was_modified)
         self._request_pages()
         self.history_changed.emit()
         self.pages_changed.emit(list(pages))
@@ -973,24 +989,28 @@ class PdfView(QAbstractScrollArea):
     @property
     def modified(self) -> bool:
         """True while the document has changes that are not in its file."""
-        return self._changes != self._saved_changes
+        return self._depth != self._saved_depth
 
     @property
     def saving(self) -> bool:
         return bool(self._saves)
 
-    def mark_modified(self, breaking: bool = True) -> None:
-        """Called after every change made to the document.
+    def mark_modified(self, breaking: bool = True, was: bool | None = None) -> None:
+        """Called after every change made to the document (done or undone).
 
         ``breaking``: the change touches what a signature with a certificate
         covers. A change whose kind is not known counts as one.
+        ``was``: whether the document was modified before this change (the
+        history has already moved by then).
         """
-        was = self.modified
+        if was is None:  # a change outside the history: the file differs now
+            was = self.modified
+            self._saved_depth = None
         self._changes += 1
         if breaking:
             self._breaking_change = self._changes
-        if not was:
-            self.modified_changed.emit(True)
+        if was != self.modified:
+            self.modified_changed.emit(self.modified)
 
     def save(self, target: str | Path | None = None, keep_version: tuple | None = None) -> int:
         """Save the document in its file, or in ``target`` ("Save as").
@@ -1010,6 +1030,7 @@ class PdfView(QAbstractScrollArea):
             # answered so far was asked before this save, so it is in the file,
             # even one still on its way when Guardar was pressed.
             self._saved_changes = self._changes
+            self._saved_depth = self._depth
             self._lost_on_save = 0
             if self.journal is not None:
                 self.journal.saved(self.journal.count, path)  # it leaves the journal
@@ -1032,6 +1053,8 @@ class PdfView(QAbstractScrollArea):
             self.annotations_shown_changed.emit(True)
         self.set_review(False)
         self._changes = self._saved_changes = self._breaking_change = 0
+        self._depth = 0
+        self._saved_depth = 0
         self._lost_on_save = 0
         self._place_asked = self._place_shown = None
         self._saves.clear()
