@@ -56,6 +56,7 @@ class StoreCertificate:
     for_signing: bool  # False for certificates meant only for other uses
     der: bytes
     personal: bool = True  # False for the ones Windows makes for the computer itself
+    dnie: bool = False  # one of the two certificates of the Spanish identity card
 
     @property
     def usable(self) -> bool:
@@ -71,6 +72,11 @@ def describe(der: bytes) -> StoreCertificate:
     certificate = x509.Certificate.load(der)
     usage = certificate.key_usage_value
     for_signing = usage is None or bool({"digital_signature", "non_repudiation"} & usage.native)
+    dnie = _is_dnie(certificate)
+    if dnie and usage is not None:
+        # The DNIe carries two: «(AUTENTICACIÓN)», to identify oneself on web
+        # sites, and «(FIRMA)», the one for signing (non-repudiation).
+        for_signing = "non_repudiation" in usage.native
     return StoreCertificate(
         thumbprint=hashlib.sha1(der, usedforsecurity=False).hexdigest(),
         name=_display_name(certificate.subject),
@@ -80,7 +86,16 @@ def describe(der: bytes) -> StoreCertificate:
         for_signing=for_signing,
         der=der,
         personal=not _belongs_to_the_computer(certificate),
+        dnie=dnie,
     )
+
+
+def _is_dnie(certificate: x509.Certificate) -> bool:
+    """Issued by the authority of the DNIe (the Spanish police)."""
+    issuer = certificate.issuer.native
+    names = [issuer.get("common_name", ""), issuer.get("organization_name", "")]
+    text = " ".join(name if isinstance(name, str) else " ".join(name) for name in names).upper()
+    return "AC DNIE" in text or "DIRECCION GENERAL DE LA POLICIA" in text
 
 
 _GUID = re.compile(r"[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}", re.IGNORECASE)
