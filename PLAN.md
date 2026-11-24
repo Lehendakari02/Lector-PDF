@@ -1634,7 +1634,7 @@ Lo que queda por probar en Windows está en
 revisión de la Fase 4 (tarea 4.8: firmar en el hueco, anotar un PDF firmado sin
 romper la firma), las mejoras P.1–P.5 y el arreglo de los trazos con presión,
 para probarlo todo en su ordenador antes de la Fase 5. Falta que Julen cree la
-Release v0.7.0. (La Fase 5 será la 0.8.)
+Release v0.7.0. (La Fase 5 no salió como 0.8: va directamente en la 1.0, tarea 5.9.)
 
 Notas de las mejoras:
 - **P.1: Letras de cualquier idioma europeo en los cuadros de texto (23/11/2026).**
@@ -1758,7 +1758,7 @@ Notas de las mejoras:
 | 5.7 | Comprimir, poner/quitar contraseña | El PDF ocupa menos / pide contraseña | ✅ |
 | 5.8 | Comparar dos versiones de un documento | Veo qué ha cambiado entre dos versiones de una ley | ✅ |
 | 5.8b | Ayuda dentro del programa (F1), pedida por Julen el 24/11 | Busco «foto» en la ayuda, leo cómo se hace y «Hazlo ahora» me lleva a la función | ✅ |
-| 5.9 | Versión 1.0 | — | ⬜ |
+| 5.9 | Versión 1.0 | — | 🔶 el programa dice 1.0.0; falta que Julen cree la Release v1.0.0 |
 
 Notas de la Fase 5:
 - **5.1 Ordenar, girar y eliminar páginas.** En las miniaturas (panel lateral):
@@ -1896,7 +1896,16 @@ Notas de la Fase 5:
     el texto antes. Con contraseña, la pide.
   - Limitación: las cabeceras y pies que cambian (número de página, fecha del
     BOE) salen como diferencias si cambian entre versiones.
-- **Para seguir (24/11):** 5.1 a 5.8 terminadas. Falta 5.9 (Versión 1.0). Desde ahora, una tarea por hilo (lo pidió Julen para
+- **5.9 Versión 1.0 (24/11/2026).** El programa dice 1.0.0. Reúne todo lo
+  de la Fase 5 (5.1 a 5.8b) y los arreglos desde la 0.7.0. Las 64 funciones
+  del buscador (Ctrl+K) ya hacen algo: ninguna dice «todavía no está
+  disponible». Se pone al día `README.md`. La Fase 6 (cambiar el texto
+  original) llegará después como 1.1. Las pruebas a mano de la Fase 5 siguen
+  en `docs/pruebas-fase-5.md` y las de antes en `docs/pruebas-pendientes.md`.
+  Falta que Julen cree la Release v1.0.0 (título «Lector-PDF 1.0»).
+  Las pruebas en Windows ya tardan unos 14 minutos y se cortaban a los 15
+  (también en `main` tras la 5.8): el límite sube a 30 (`pruebas.yml`).
+- **Para seguir (24/11):** Fase 5 terminada (5.1 a 5.9). Lo siguiente es la Fase 6. Desde ahora, una tarea por hilo (lo pidió Julen para
   gastar menos). Reglas que siguen valiendo: cada orden nueva que cambie
   páginas va en `_breaks_signatures` (`ui/pdf_view.py`); nunca
   `Document.select` (usar `page_orders._rearrange`); lo que escribe un PDF
