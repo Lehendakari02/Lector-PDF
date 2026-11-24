@@ -76,6 +76,8 @@ def test_every_tool_has_a_name_a_description_and_a_big_button(window):
 
 
 def test_a_tool_that_is_not_built_yet_says_so(window):
+    # Every function is built now: one is made to look unbuilt.
+    del window.feature_handlers["compare"]
     window.feature_actions["compare"].trigger()
     assert "Comparar" in window.statusBar().currentMessage()
     assert "todavía no está disponible" in window.statusBar().currentMessage()
@@ -85,7 +87,7 @@ def test_going_to_a_function_switches_to_its_mode(window):
     compare = next(feature for feature in FEATURES if feature.id == "compare")
     window.go_to_feature(compare)
     assert window.mode is Mode.ORGANIZE
-    assert "Comparar" in window.statusBar().currentMessage()
+    assert "Abre primero un documento" in window.statusBar().currentMessage()
 
 
 def window_colour(qt_app) -> int:

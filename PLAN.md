@@ -1756,7 +1756,7 @@ Notas de las mejoras:
 | 5.5 | Exportar páginas como imagen o el documento como texto | Saco una página en PNG | ✅ |
 | 5.6 | Tapar datos de verdad | Tapo mi DNI y no se puede recuperar copiando el texto | ✅ |
 | 5.7 | Comprimir, poner/quitar contraseña | El PDF ocupa menos / pide contraseña | ✅ |
-| 5.8 | Comparar dos versiones de un documento | Veo qué ha cambiado entre dos versiones de una ley | ⬜ |
+| 5.8 | Comparar dos versiones de un documento | Veo qué ha cambiado entre dos versiones de una ley | ✅ |
 | 5.9 | Versión 1.0 | — | ⬜ |
 
 Notas de la Fase 5:
@@ -1874,9 +1874,28 @@ Notas de la Fase 5:
     (`protection_apart`): así lo protegido aquí se firma con certificado.
   - En un documento firmado, las dos avisan de que en la copia las firmas ya
     no valen.
-- **Para seguir (24/11):** 5.1 a 5.7 terminadas. Falta 5.8 (Comparar dos
-  versiones: texto añadido, quitado o cambiado, p. ej. una ley modificada) y
-  5.9 (Versión 1.0). Desde ahora, una tarea por hilo (lo pidió Julen para
+- **5.8 Comparar dos versiones** (`core/compare.py`, `ui/compare_window.py`).
+  Modo Organizar → **Comparar**: con la versión nueva abierta, se elige la
+  anterior. Se comparan en un proceso aparte (con «Cancelar») y las dos se ven
+  **una al lado de la otra** (anterior a la derecha), con una ventanita con la
+  lista de diferencias: «Cambiado: «treinta» por «cuarenta»», «Añadido: …»,
+  «Quitado: …», con la página y las palabras de alrededor. Elegir una (clic,
+  flechas, «Anterior»/«Siguiente») la marca en las dos versiones y las lleva
+  allí. «Intercambiar» por si la anterior era la otra. Al cerrar la lista se
+  quitan las marcas.
+  - Se compara palabra a palabra el texto en orden de lectura. No cuenta como
+    cambio dónde se parten las líneas o las páginas, una palabra partida con
+    guion ni el tipo de comillas o rayas; sí cuentan una letra, una tilde, una
+    mayúscula o una coma. Dos cambios con solo una palabra igual en medio se
+    muestran como uno («treinta días hábiles» → «cuarenta días naturales»).
+  - Rápido con leyes largas: primero se alinean las palabras que salen una
+    sola vez en cada parte (como el «patience diff» de git) y solo los trozos
+    pequeños que quedan se comparan con `difflib`. 500 páginas, menos de 2 s.
+  - Un documento sin texto (escaneado sin reconocer) lo dice y pide reconocer
+    el texto antes. Con contraseña, la pide.
+  - Limitación: las cabeceras y pies que cambian (número de página, fecha del
+    BOE) salen como diferencias si cambian entre versiones.
+- **Para seguir (24/11):** 5.1 a 5.8 terminadas. Falta 5.9 (Versión 1.0). Desde ahora, una tarea por hilo (lo pidió Julen para
   gastar menos). Reglas que siguen valiendo: cada orden nueva que cambie
   páginas va en `_breaks_signatures` (`ui/pdf_view.py`); nunca
   `Document.select` (usar `page_orders._rearrange`); lo que escribe un PDF

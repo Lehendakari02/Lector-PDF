@@ -14,6 +14,9 @@ from pathlib import Path
 COMPRESS = "compress"
 PROTECT = "protect"
 UNPROTECT = "unprotect"
+# «Comparar» reads two documents here too: `path` is the old version and
+# `target` the new one (nothing is written), `extra` the password of the new.
+COMPARE = "compare"
 
 
 def run(what: str, path: str, password: str | None, target: str, extra: str | None):
@@ -25,6 +28,8 @@ def run(what: str, path: str, password: str | None, target: str, extra: str | No
     from app.core.protection import protect, unprotect
 
     source = Source(Path(path), password)
+    if what == COMPARE:
+        return _compare(source, Source(Path(target), extra))
     before = Path(path).stat().st_size if Path(path).exists() else 0
     try:
         if what == COMPRESS:
@@ -41,6 +46,24 @@ def run(what: str, path: str, password: str | None, target: str, extra: str | No
         return ("not_smaller", small.before, small.after)
     except NeedsPassword:
         return ("needs_password",)
+    except CombineError as error:
+        return ("failed", str(error))
+    except Exception as error:  # nothing may stop the answer from arriving
+        return ("failed", f"{type(error).__name__}: {error}")
+
+
+def _compare(old, new) -> tuple:
+    """("compared", Comparison), ("needs_password", path), ("no_text", path)
+    or ("failed", description)."""
+    from app.core.combine import CombineError, NeedsPassword
+    from app.core.compare import NoText, compare_files
+
+    try:
+        return ("compared", compare_files(old, new))
+    except NeedsPassword as locked:
+        return ("needs_password", str(locked.path))
+    except NoText as empty:
+        return ("no_text", str(empty.path))
     except CombineError as error:
         return ("failed", str(error))
     except Exception as error:  # nothing may stop the answer from arriving
