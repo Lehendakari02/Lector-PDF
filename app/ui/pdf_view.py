@@ -64,6 +64,7 @@ from app.core import (
     pen,
     pictures,
     places,
+    redaction,
     sheets,
 )
 from app.core.batch_signing import Placement, corner_box
@@ -162,6 +163,9 @@ SIGN_TOOL = "sign"  # one's signature (or initials) goes where the page is click
 # Where a signature with a certificate goes: a click says it and nothing is
 # put on the page (``certificate_place`` tells the window).
 PLACE_TOOL = "certificate"
+# «Tapar datos»: a box dragged on the page is covered for real.
+REDACT_TOOL = "redact"
+REDACT_COLOR = (0.0, 0.0, 0.0)
 TOOLS = (
     *MARKUP_KINDS,
     NOTE,
@@ -172,6 +176,7 @@ TOOLS = (
     STAMP_TOOL,
     SIGN_TOOL,
     PLACE_TOOL,
+    REDACT_TOOL,
 )
 DATE_SIZE = 10.0  # points: the date put under a signature
 ERASER_REACH = 5.0  # screen units around the pointer that the eraser takes
@@ -2042,6 +2047,8 @@ class PdfView(QAbstractScrollArea):
             kind, color, width, opacity = self._sketch_style(self._sketch[1])
             pressed = (self._sketch_pressures,) if self._sketch_pressures else ()
             look = (self.shape_fill, self.shape_dashed) if kind != INK else (False, False)
+            if self._sketch[1] == REDACT_TOOL:
+                look = (True, False)  # the black box it will be
             waiting.append(
                 (self._sketch[0], kind, [self._sketch[2]], color, width, opacity, pressed, look)
             )
@@ -2189,6 +2196,8 @@ class PdfView(QAbstractScrollArea):
         """Kind, colour, thickness and opacity of what a tool draws now."""
         if tool == DRAW:
             return INK, self.draw_color, self.draw_width, self.draw_opacity
+        if tool == REDACT_TOOL:
+            return drawing.BOX, REDACT_COLOR, 1.0, 0.6
         return self.shape_kind, self.shape_color, self.shape_width, self.shape_opacity
 
     def _shown_point(self, page: int, point: tuple[float, float]) -> tuple[float, float]:
@@ -2959,6 +2968,37 @@ class PdfView(QAbstractScrollArea):
             return False
         return self._do(page_orders.delete_pages(pages))
 
+    def cover_areas(self, areas) -> bool:
+        """Cover these boxes for real: ((page, (x0, y0, x1, y1)), …), in points
+        of the page as seen. Deshacer brings them back until it is closed."""
+        areas = [(page, box) for page, box in areas if 0 <= page < self.page_count]
+        if self._document is None or not areas:
+            return False
+        return self._do(redaction.cover_areas(areas))
+
+    def cover_selection(self) -> bool:
+        """Cover the selected text for real. False if there is none (or its
+        letters are not read yet)."""
+        chosen = self.selection()
+        if chosen is None:
+            return False
+        areas = []
+        for page in range(chosen[0][0], chosen[1][0] + 1):
+            if page not in self._texts:
+                return False
+            areas += [(page, tuple(box)) for box in self._selection_rects(page)]
+        if not self.cover_areas(areas):
+            return False
+        self.clear_selection()
+        return True
+
+    def cover_text(self, query: str) -> bool:
+        """Cover every place where this text is written. If it is not in the
+        document, ``edit_failed`` says so."""
+        if self._document is None or not query.strip():
+            return False
+        return self._do(redaction.cover_text(query.strip()))
+
     def put_text_box(
         self, page: int, x: float, y: float, text: str, width: float = 0.0, **look
     ) -> bool:
@@ -3282,6 +3322,12 @@ class PdfView(QAbstractScrollArea):
         page, tool, points = self._sketch
         self._sketch = None
         pressures, self._sketch_pressures = self._sketch_pressures, None
+        if tool == REDACT_TOOL:
+            if len(points) == 2 and not self._is_tap(page, points):
+                (x0, y0), (x1, y1) = points
+                self.cover_areas([(page, (min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)))])
+            self.viewport().update()
+            return
         if self._is_tap(page, points):
             # A tap, not a stroke: on something already drawn or written, it
             # picks it (to move it, change it or take it away with Supr).
@@ -3884,7 +3930,7 @@ class PdfView(QAbstractScrollArea):
                 if self.put_picture(*point):
                     self.use_picture(None)  # one signature per click on the button
             return
-        if self._markup_tool in (DRAW, SHAPE_TOOL):
+        if self._markup_tool in (DRAW, SHAPE_TOOL, REDACT_TOOL):
             point = self._point_on_page(position)
             if point is not None:
                 self.clear_selection()
@@ -4307,7 +4353,7 @@ class PdfView(QAbstractScrollArea):
             shape = Qt.CursorShape.CrossCursor if on_page else Qt.CursorShape.ArrowCursor
             self.viewport().setCursor(shape)
             return
-        if self._markup_tool in (DRAW, SHAPE_TOOL, ERASER):
+        if self._markup_tool in (DRAW, SHAPE_TOOL, ERASER, REDACT_TOOL):
             handle = self._handle_under(position) if self._markup_tool == SHAPE_TOOL else None
             if handle is not None:
                 self.viewport().setCursor(self._handle_cursor(handle))
@@ -4586,6 +4632,7 @@ def _breaks_signatures(order) -> bool:
             page_orders.MovePages,
             page_orders.DeletePages,
             page_orders.InsertPages,
+            redaction.CoverData,
         ),
     )
 

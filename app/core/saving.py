@@ -65,8 +65,13 @@ def _kind_of(error: OSError, target: Path) -> str:
 
 def keeps_signatures(doc) -> bool:
     """Whether ``doc`` is signed with a certificate and can be saved adding the
-    changes at the end, which keeps its signatures."""
+    changes at the end, which keeps its signatures. Never after covering data:
+    the version kept at the start of the file would still have it."""
+    from app.core.redaction import has_covered
     from app.core.save_checks import has_signed_field
+
+    if has_covered(doc):
+        return False
 
     try:
         return bool(

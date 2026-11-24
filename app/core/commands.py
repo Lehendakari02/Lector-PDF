@@ -221,6 +221,7 @@ def command_from_dict(data: dict) -> Command:
     import app.core.notes  # noqa: F401
     import app.core.page_orders  # noqa: F401
     import app.core.pictures  # noqa: F401
+    import app.core.redaction  # noqa: F401
     import app.core.sheets  # noqa: F401
     import app.core.text_layer  # noqa: F401
 
