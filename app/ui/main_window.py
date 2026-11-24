@@ -136,7 +136,7 @@ from app.core.updates import Release
 from app.core.versions import FOLDER_NAME as VERSIONS_FOLDER
 from app.core.versions import Version, VersionError, Versions
 from app.core.windows_store import CardBlocked, NoCard, SigningCancelled, StoreError, WrongPin
-from app.ui import color_naming, icons
+from app.ui import color_naming, help_topics, icons
 from app.ui import theme as theme_module
 from app.ui.about_dialog import AboutDialog
 from app.ui.batch_sign_dialog import BatchSignDialog
@@ -155,6 +155,7 @@ from app.ui.features import (
     features_of,
     translate,
 )
+from app.ui.help_window import HelpWindow, TipBanner
 from app.ui.key_names import KeyCommand, key_hint
 from app.ui.library_window import LibraryWindow
 from app.ui.link_dialog import LinkDialog
@@ -231,6 +232,7 @@ MARKERS_SETTING = "rotuladores"  # colour and opacity of each marking tool
 FAVOURITES_SETTING = "favoritas"  # the favourite tools, in the order of their bar
 TOOLBAR_NAMES, TOOLBAR_ICONS = "nombres", "iconos"
 TOP_SEARCH_WIDTH = 280
+TOP_SEARCH_MIN_WIDTH = 200  # in a narrow window it gives up some width first
 SIDE_PANEL_SETTING = "panel_lateral"  # "", "miniaturas", "indice" or "anotaciones"
 SUMMARY_FORMAT_SETTING = "resumen/formato"  # "pdf" or "docx": the last one chosen
 SHEET_SETTING = "hoja_nueva"  # the kind of sheet Insertar hoja puts: the last one chosen
@@ -371,6 +373,12 @@ class MainWindow(QMainWindow):
         central_layout.setSpacing(0)
         self.update_banner = UpdateBanner()
         central_layout.addWidget(self.update_banner)
+        self.tip_banner = TipBanner()
+        self.tip_banner.show_wanted.connect(self.open_help)
+        self.tip_banner.another_wanted.connect(self.offer_another_tip)
+        self.tip_banner.never_wanted.connect(self._no_more_tips)
+        central_layout.addWidget(self.tip_banner)
+        self.help_window: HelpWindow | None = None
         central_layout.addWidget(self.document_tabs)
         # Two documents at once: the one in front on the left, another beside it.
         self.beside = BesideArea()
@@ -682,6 +690,7 @@ class MainWindow(QMainWindow):
             ("bookmark", self.bookmark_action, view_group),
             ("rotate_view", self.rotate_view_action, view_group),
             ("side_panel", self.side_panel_action, view_group),
+            ("help", self.help_action, self.tr("Ayuda")),
             ("finder", self.finder_action, self.tr("Ayuda")),
             ("check_updates", self.check_updates_action, self.tr("Ayuda")),
             ("copy_report", self.copy_report_action, self.tr("Ayuda")),
@@ -820,7 +829,9 @@ class MainWindow(QMainWindow):
         self.search_box.addAction(
             icons.icon("search", icons.MUTED), QLineEdit.ActionPosition.LeadingPosition
         )
-        self.search_box.setFixedWidth(TOP_SEARCH_WIDTH)
+        self.search_box.setMaximumWidth(TOP_SEARCH_WIDTH)
+        self.search_box.setMinimumWidth(TOP_SEARCH_MIN_WIDTH)
+        self.search_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.search_box.setMinimumHeight(BAR_BUTTON_HEIGHT)
         self.search_box.textEdited.connect(self._top_search_typed)
         self.search_box.returnPressed.connect(self._top_search_enter)
@@ -838,15 +849,30 @@ class MainWindow(QMainWindow):
         self.finder_button.setMinimumHeight(BAR_BUTTON_HEIGHT)
         self.finder_button.clicked.connect(self.open_command_palette)
 
+        self.help_button = QPushButton()
+        self.help_button.setObjectName("finderButton")
+        self.help_button.setIcon(icons.icon("help", icons.MUTED))
+        self.help_button.setIconSize(QSize(18, 18))
+        self.help_button.setAccessibleName(self.tr("Ayuda"))
+        self.help_button.setToolTip(
+            self.tr("Ayuda: qué hace el programa y cómo se usa cada función (F1)")
+        )
+        self.help_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.help_button.setMinimumSize(BAR_BUTTON_HEIGHT, BAR_BUTTON_HEIGHT)
+        self.help_button.clicked.connect(lambda _checked=False: self.open_help())
+
         bar = QWidget()
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(4, 0, 4, 0)
         layout.setSpacing(6)
         layout.addWidget(self.menu_button)
         layout.addWidget(self.mode_tabs)
-        layout.addStretch()
-        layout.addWidget(self.search_box)
+        layout.addStretch(1)
+        # The search box takes the free room first (up to its width), and gives
+        # it back first when the window is narrow.
+        layout.addWidget(self.search_box, 100)
         layout.addWidget(self.finder_button)
+        layout.addWidget(self.help_button)
 
         holder = self.mode_bar = QToolBar(self.tr("Modos"))
         holder.setObjectName("modeBar")
@@ -2645,6 +2671,12 @@ class MainWindow(QMainWindow):
             self.paper_actions[paper] = action
 
         help_menu = self.menuBar().addMenu(self.tr("A&yuda"))
+        self.help_action = QAction(self.tr("&Manual de ayuda…"), self)
+        self.help_action.setStatusTip(self.tr("Qué hace el programa y cómo se usa cada función"))
+        self.help_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
+        self.help_action.triggered.connect(lambda _checked=False: self.open_help())
+        help_menu.addAction(self.help_action)
+
         self.finder_action = QAction(self.tr("Buscar una función…"), self)
         self.finder_action.setShortcut(QKeySequence("Ctrl+K"))
         self.finder_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
@@ -2724,6 +2756,7 @@ class MainWindow(QMainWindow):
                 ("Ctrl+K", self.tr("Buscar cualquier función por su nombre")),
                 ("Ctrl+F", self.tr("Buscar palabras dentro del documento")),
                 ("Ctrl+1 … 4", self.tr("Cambiar de modo: leer, estudiar, firmar, organizar")),
+                ("F1", self.tr("Ayuda: qué sabe hacer el programa y cómo")),
             )
         ):
             key = QLabel(keys)
@@ -4048,8 +4081,69 @@ class MainWindow(QMainWindow):
 
     def open_command_palette(self) -> None:
         palette = CommandPalette(self)
-        if palette.exec() and palette.chosen is not None:
+        if not palette.exec():
+            return
+        if palette.help_wanted is not None:  # F1: how is it used?
+            self.open_help(palette.help_wanted.id)
+        elif palette.help_query is not None:  # nothing found: look in the help
+            self.open_help(query=palette.help_query)
+        elif palette.chosen is not None:
             self.go_to_feature(palette.chosen)
+
+    # ---- help ----
+
+    def open_help(self, topic_id: str | None = None, query: str | None = None) -> None:
+        """The help window (F1), at a page or with a search already typed."""
+        if self.help_window is None:
+            self.help_window = HelpWindow(
+                self, self._key_of_topic, self._topic_can_run, self._run_topic
+            )
+        window = self.help_window
+        if query is not None:
+            window.query.setText(query)
+        elif topic_id is not None:
+            window.show_topic(topic_id)
+        window.show()
+        window.raise_()
+        window.activateWindow()
+        window.query.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _key_of_topic(self, topic: help_topics.Topic) -> str | None:
+        command_id = topic.feature or topic.command
+        if command_id is None or command_id not in self.key_commands:
+            return None
+        keys = shortcuts.keys_of(self.settings, command_id)
+        return key_hint(keys[0]) if keys else None
+
+    def _topic_can_run(self, topic: help_topics.Topic) -> bool:
+        if topic.feature is not None:
+            return topic.feature in self.feature_handlers
+        return topic.command in self.key_commands
+
+    def _run_topic(self, topic: help_topics.Topic) -> None:
+        if topic.feature is not None:
+            self.go_to_feature(self._feature_named(topic.feature))
+        elif topic.command in self.key_commands:
+            self.key_commands[topic.command].action.trigger()
+
+    def offer_tip(self) -> None:
+        """The tip of the day, once a day, when the program opens."""
+        tip = help_topics.tip_for_today(self.settings)
+        if tip is not None:
+            self.tip_banner.offer(tip)
+
+    def offer_another_tip(self) -> None:
+        self.tip_banner.offer(help_topics.next_tip(self.settings))
+
+    def _no_more_tips(self) -> None:
+        self.settings.set(help_topics.TIPS_SETTING, False)
+        self.statusBar().showMessage(
+            self.tr(
+                "No saldrán más trucos. Se vuelven a activar en Ajustes → General → "
+                "Al abrir el programa."
+            ),
+            STATUS_MESSAGE_MS,
+        )
 
     def go_to_feature(self, feature: Feature) -> None:
         """Switch to the mode of ``feature``, point at its button and run it."""

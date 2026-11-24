@@ -453,11 +453,12 @@ QLineEdit#paletteQuery {{
 }}
 QListWidget#paletteResults {{ border: none; }}
 QLabel#paletteHint, QLabel#paletteEmpty {{ color: {c.muted}; font-size: 9pt; }}
-QFrame#updateBanner, QFrame#ocrBanner {{
+QFrame#updateBanner, QFrame#ocrBanner, QFrame#tipBanner {{
     background: {c.accent_soft}; border-bottom: 1px solid {c.border};
 }}
 QLabel#updateMessage, QLabel#bannerMessage {{ color: {c.text}; font-weight: 600; }}
-QFrame#updateBanner QPushButton, QFrame#ocrBanner QPushButton {{ padding: 4px 12px; }}
+QFrame#updateBanner QPushButton, QFrame#ocrBanner QPushButton,
+QFrame#tipBanner QPushButton {{ padding: 4px 12px; }}
 QPushButton#bannerMainButton {{
     background: {c.accent}; color: {c.on_accent}; border-color: {c.accent}; font-weight: 600;
 }}
