@@ -47,6 +47,7 @@ EXIT_UPDATE_FAILED = 7
 CHECK_SYMBOLS_FLAG = "--check-symbols"
 EXIT_SYMBOLS_FAILED = 8
 UPDATE_CHECK_DELAY_MS = 4000  # after starting: first let the user see their documents
+TIP_DELAY_MS = 2500  # the tip of the day, once the documents are on screen
 
 
 def check_signing(source: str, certificate_file: str, password: str) -> int:
@@ -276,6 +277,7 @@ def main(argv: list[str] | None = None) -> int:
         window.warm_up()  # the next document will open without waiting
         threading.Thread(target=clean_leftovers, args=(data_dir(),), daemon=True).start()
         QTimer.singleShot(UPDATE_CHECK_DELAY_MS, window.updater.check)
+        QTimer.singleShot(TIP_DELAY_MS, window.offer_tip)  # "¿Sabías que…?"
 
     if autoclose and opened:
         window.pdf_view.first_page_shown.connect(qt_app.quit)

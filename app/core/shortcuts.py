@@ -60,6 +60,7 @@ DEFAULTS: dict[str, tuple[str, ...]] = {
     "zoom_out": ("Ctrl+-",),
     "search": ("Ctrl+F",),
     "finder": ("Ctrl+K",),
+    "help": ("F1",),
     # The tools of Estudiar, one letter each, and the favourite tools, a digit.
     **{feature_id: (key,) for feature_id, key in TOOL_KEYS.items()},
     **{f"favourite_{index}": (key,) for index, key in enumerate(FAVOURITE_KEYS, start=1)},

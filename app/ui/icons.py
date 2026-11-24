@@ -42,6 +42,11 @@ ICONS: dict[str, str] = {
         '<path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'
     ),
     "search": _MAGNIFIER,
+    "help": (
+        '<circle cx="12" cy="12" r="9"/>'
+        '<path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/>'
+        '<path d="M12 17.2v.1"/>'
+    ),
     "zoom_in": _MAGNIFIER + '<path d="M11 8.5v5M8.5 11h5"/>',
     "zoom_out": _MAGNIFIER + '<path d="M8.5 11h5"/>',
     "fit_comfortable": (
