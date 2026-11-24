@@ -14,7 +14,7 @@ saving.
 """
 
 import base64
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from app.core.commands import CommandError, register_reader
 
@@ -252,40 +252,10 @@ class DeletePages:
 
     def prepared(self, doc) -> "DeletePages":
         """The same order, with a copy of what it takes away."""
-        import pymupdf
-
         pages = _clean_pages(self.pages_, doc.page_count)
         if len(pages) >= doc.page_count:
             raise CommandError("a document cannot be left without pages")
-        taken = set(pages)
-        try:
-            copy = pymupdf.open()
-            for page in pages:
-                copy.insert_pdf(doc, from_page=page, to_page=page)
-            kept = copy.tobytes(garbage=3, deflate=True)
-            copy.close()
-            links = []
-            for number in range(doc.page_count):
-                for link in doc[number].get_links():
-                    if number in taken or link.get("page") in taken:
-                        links.append((number, _plain(link)))
-            outline = doc.get_toc(simple=False)
-            points_there = any(entry[2] - 1 in taken for entry in outline)
-            fields = tuple(
-                tuple(widget.field_name or "" for widget in doc[page].widgets() or ())
-                for page in pages
-            )
-        except Exception as error:
-            raise CommandError(f"cannot keep a copy of the pages: {error}") from error
-        return replace(
-            self,
-            pages_=pages,
-            kept=kept,
-            sizes=tuple((doc[page].rect.width, doc[page].rect.height) for page in pages),
-            links=tuple(links),
-            outline=tuple(map(_plain, outline)) if points_there else (),
-            fields=fields,
-        )
+        return copy_of_pages(doc, pages)
 
     def apply(self, doc) -> list[int]:
         pages = _clean_pages(self.pages_, doc.page_count)
@@ -367,6 +337,42 @@ class DeletePages:
             tuple(data.get("outline") or ()),
             tuple(tuple(str(name) for name in names) for names in data.get("fields") or ()),
         )
+
+
+def copy_of_pages(doc, pages) -> DeletePages:
+    """A copy of ``pages`` as they are, with what points to them (links,
+    outline entries) and the names of their fields: the order that takes them
+    away, ready to put them back. Also used to undo covering data."""
+    import pymupdf
+
+    pages = _clean_pages(pages, doc.page_count)
+    taken = set(pages)
+    try:
+        copy = pymupdf.open()
+        for page in pages:
+            copy.insert_pdf(doc, from_page=page, to_page=page)
+        kept = copy.tobytes(garbage=3, deflate=True)
+        copy.close()
+        links = []
+        for number in range(doc.page_count):
+            for link in doc[number].get_links():
+                if number in taken or link.get("page") in taken:
+                    links.append((number, _plain(link)))
+        outline = doc.get_toc(simple=False)
+        points_there = any(entry[2] - 1 in taken for entry in outline)
+        fields = tuple(
+            tuple(widget.field_name or "" for widget in doc[page].widgets() or ()) for page in pages
+        )
+    except Exception as error:
+        raise CommandError(f"cannot keep a copy of the pages: {error}") from error
+    return DeletePages(
+        pages_=pages,
+        kept=kept,
+        sizes=tuple((doc[page].rect.width, doc[page].rect.height) for page in pages),
+        links=tuple(links),
+        outline=tuple(map(_plain, outline)) if points_there else (),
+        fields=fields,
+    )
 
 
 def delete_pages(pages) -> DeletePages:

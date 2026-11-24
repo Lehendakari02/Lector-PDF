@@ -104,3 +104,22 @@ PDF. Ve marcando lo que funcione y dime lo que no.
    tienen texto.
 6. Con cambios sin guardar, exporta: pregunta «Guardar y seguir».
 7. Vuelve a abrir Exportar: recuerda lo que elegiste.
+
+## Tarea 5.6 – Tapar datos de verdad
+
+1. Abre un PDF con tu nombre o tu DNI escrito (una copia, por si acaso).
+   Modo Organizar → **Tapar datos**. La primera vez explica que se borra de
+   verdad; pulsa «Entendido».
+2. Arrastra un recuadro sobre el DNI: queda una caja negra. Ctrl+Z lo
+   recupera; Ctrl+Y lo vuelve a tapar.
+3. Selecciona una frase con el ratón → flecha de **Tapar datos** → «Tapar el
+   texto seleccionado».
+4. Flecha → «Buscar y tapar en todo el documento…» → escribe el DNI: se tapa
+   en todas las páginas a la vez. Con un texto que no está, lo dice.
+5. Guarda con **Guardar como**, cierra y abre el nuevo en **Adobe** y en
+   **Edge**: las cajas negras están, y al seleccionar o buscar el DNI no
+   aparece nada. Copia y pega la zona tapada en el Bloc de notas: no sale.
+6. Sobre una firma o una foto: la parte tapada de la imagen sale negra
+   también en Adobe.
+7. En un PDF firmado con certificado: tapar avisa al guardar de que la firma
+   deja de valer.

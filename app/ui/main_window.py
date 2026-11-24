@@ -24,6 +24,7 @@ from PySide6.QtGui import (
 from PySide6.QtPrintSupport import QPrinter, QPrinterInfo
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QDialog,
     QFileDialog,
     QFrame,
@@ -164,7 +165,7 @@ from app.ui.organize_dialogs import (
 )
 from app.ui.page_box import PageBox
 from app.ui.password_dialog import PasswordDialog
-from app.ui.pdf_view import SIGN_TOOL, PdfView
+from app.ui.pdf_view import REDACT_TOOL, SIGN_TOOL, PdfView
 from app.ui.photo_scan_dialog import LOOK_SETTING, PhotoScanDialog, photo_types
 from app.ui.print_dialog import PrintChoices, PrintDialog
 from app.ui.print_run import PrintRun
@@ -194,6 +195,7 @@ def signed_name(path: Path) -> Path:
 
 
 EXPORT_SETTING = "exportar"  # what «Exportar» took out last time
+COVER_WARNING_SETTING = "tapar/avisar"  # whether «Tapar datos» explains itself first
 CERTIFICATE_SETTING = "firma/certificado"  # the certificate of Windows used last
 CERTIFICATE_FILE_SETTING = "firma/archivo"  # the certificate file used last
 DATE_SETTING = "firma/fecha"  # whether the date is written under the signature
@@ -457,6 +459,10 @@ class MainWindow(QMainWindow):
         # Instead of the «Exportar» window: takes it and says whether to go on;
         # and instead of asking where: takes the proposal, gives the file or folder.
         self.export_answer = None
+        # Instead of asking: whether to go on after the «Tapar datos» warning,
+        # and the text «Buscar y tapar» covers.
+        self.cover_warning_answer: bool | None = None
+        self.cover_text_answer: str | None = None
         self.export_target_answer = None
         # Instead of the «De foto a PDF» window: takes it and says whether to go on.
         self.photo_scan_answer = None
@@ -535,6 +541,7 @@ class MainWindow(QMainWindow):
             "insert_pages": lambda: self.insert_pages(),
             "photo_to_pdf": lambda: self.photo_to_pdf(),
             "export": lambda: self.export_pages(),
+            "redact": lambda: self.cover_data(),
         }
         self._mark_pending_features()
         self._build_key_commands()
@@ -864,6 +871,7 @@ class MainWindow(QMainWindow):
         self._build_sheet_menu()
         self._build_recognition_menu()
         self._build_rotate_menu()
+        self._build_cover_menu()
         self._build_favourites_bar()
         self.set_toolbar_icons_only(
             self.settings.get(TOOLBAR_SETTING) == TOOLBAR_ICONS, remember=False
@@ -964,6 +972,133 @@ class MainWindow(QMainWindow):
         button.setMenu(menu)
         button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
         button.setProperty("withMenu", True)
+
+    def _build_cover_menu(self) -> None:
+        """Tapar datos takes the box in hand; the arrow offers the other ways."""
+        menu = QMenu(self)
+        menu.setObjectName("coverMenu")
+        menu.addAction(self.tr("Tapar una zona (arrastrando)")).triggered.connect(
+            lambda _checked=False: self.cover_data(area=True)
+        )
+        menu.addAction(self.tr("Tapar el texto seleccionado")).triggered.connect(
+            lambda _checked=False: self.cover_data(selection=True)
+        )
+        menu.addAction(self.tr("Buscar y tapar en todo el documento…")).triggered.connect(
+            lambda _checked=False: self.cover_found_text()
+        )
+        action = self.feature_actions["redact"]
+        button = self.mode_toolbars[Mode.ORGANIZE].widgetForAction(action)
+        button.setMenu(menu)
+        button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        button.setProperty("withMenu", True)
+
+    def _cover_warned(self) -> bool:
+        """The first time in each document, «Tapar datos» says what it does."""
+        page = self.current_document
+        if getattr(page, "cover_warned", False) or not self.settings.get(
+            COVER_WARNING_SETTING, True
+        ):
+            return True
+        if self.cover_warning_answer is not None:
+            go_on = self.cover_warning_answer
+        else:
+            box = QMessageBox(self)
+            box.setIcon(QMessageBox.Icon.Warning)
+            box.setWindowTitle(self.tr("Tapar datos"))
+            box.setText(
+                self.tr(
+                    "Lo que tapes se borra de verdad: el texto, la parte de las imágenes "
+                    "y lo dibujado debajo, y también las notas y los enlaces que lo toquen. "
+                    "Nadie podrá copiarlo ni encontrarlo."
+                )
+            )
+            box.setInformativeText(
+                self.tr(
+                    "Mientras el documento esté abierto, Deshacer (Ctrl+Z) lo recupera. "
+                    "Si lo guardas y lo cierras, ya no. Para no perder el original, usa "
+                    "Guardar como."
+                )
+            )
+            again = QCheckBox(self.tr("No volver a avisar"))
+            box.setCheckBox(again)
+            go = box.addButton(self.tr("Entendido"), QMessageBox.ButtonRole.AcceptRole)
+            box.addButton(self.tr("Cancelar"), QMessageBox.ButtonRole.RejectRole)
+            box.setDefaultButton(go)
+            box.exec()
+            go_on = box.clickedButton() is go
+            if go_on and again.isChecked():
+                self.settings.set(COVER_WARNING_SETTING, False)
+        if go_on:
+            page.cover_warned = True
+        return go_on
+
+    def cover_data(self, area: bool = False, selection: bool = False) -> bool:
+        """«Tapar datos»: with text selected, it is covered; without, the box
+        is taken in hand (drag on the page to cover; Esc or the button again
+        to leave it)."""
+        view = self.pdf_view
+        if view.page_count == 0:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return False
+        if selection or (view.has_selection and not area):
+            if not view.has_selection:
+                self.statusBar().showMessage(
+                    self.tr("Selecciona primero el texto que quieres tapar."), STATUS_MESSAGE_MS
+                )
+                return False
+            if not self._cover_warned() or not view.cover_selection():
+                return False
+            self.statusBar().showMessage(
+                self.tr("Texto tapado. Deshacer (Ctrl+Z) lo recupera."), STATUS_MESSAGE_MS
+            )
+            return True
+        if view.markup_tool == REDACT_TOOL and not area:
+            view.set_markup_tool("")
+            self._refresh_edit_actions()
+            return False
+        if not self._cover_warned():
+            self._refresh_edit_actions()
+            return False
+        view.clear_selection()
+        view.set_markup_tool(REDACT_TOOL)
+        self.statusBar().showMessage(
+            self.tr("Arrastra sobre lo que quieras tapar (Esc: dejarlo)."), STATUS_MESSAGE_MS
+        )
+        self._refresh_edit_actions()
+        return True
+
+    def cover_found_text(self, query: str | None = None) -> bool:
+        """«Buscar y tapar»: every place where a text is written (a DNI, a
+        bank account…) is covered at once."""
+        view = self.pdf_view
+        if view.page_count == 0:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return False
+        if query is None:
+            query = self.cover_text_answer
+        if query is None:
+            query, ok = QInputDialog.getText(
+                self,
+                self.tr("Buscar y tapar"),
+                self.tr(
+                    "Escribe lo que quieres tapar en todo el documento "
+                    "(por ejemplo, tu DNI o tu número de cuenta):"
+                ),
+            )
+            if not ok:
+                return False
+        query = query.strip()
+        if not query or not self._cover_warned():
+            return False
+        if not view.cover_text(query):
+            return False
+        self.statusBar().showMessage(
+            self.tr("«{0}» tapado en todo el documento. Deshacer (Ctrl+Z) lo recupera.").format(
+                query
+            ),
+            STATUS_MESSAGE_MS,
+        )
+        return True
 
     # ---- organising pages --------------------------------------------------
 
@@ -2628,6 +2763,9 @@ class MainWindow(QMainWindow):
         signing = self.feature_actions["sign_drawn"]
         signing.setCheckable(True)
         signing.setChecked(view.markup_tool == SIGN_TOOL)
+        covering = self.feature_actions["redact"]
+        covering.setCheckable(True)
+        covering.setChecked(view.markup_tool == REDACT_TOOL)
         typing = self.feature_actions["type_text"]
         typing.setCheckable(True)
         typing.setChecked(view.markup_tool == TEXT_BOX)
@@ -2826,6 +2964,8 @@ class MainWindow(QMainWindow):
     def _edit_failed(self, details: str) -> None:
         if "no text" in details:
             message = self.tr("No se ha podido hacer el cambio: ahí no hay texto que marcar.")
+        elif "text is not in the document" in details:
+            message = self.tr("Ese texto no está en el documento: no se ha tapado nada.")
         elif "not in this document" in details:
             # Something of another program taken away and then saved: it is no
             # longer in the file. The copy kept before saving still has it.

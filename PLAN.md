@@ -1754,7 +1754,7 @@ Notas de las mejoras:
 | 5.3 | Insertar páginas de otro PDF o imágenes | Añado una imagen como página | ✅ |
 | 5.4 | De foto a PDF (recortar, enderezar, mejorar) | Hago una foto a un papel y queda como escaneado | ✅ |
 | 5.5 | Exportar páginas como imagen o el documento como texto | Saco una página en PNG | ✅ |
-| 5.6 | Tapar datos de verdad | Tapo mi DNI y no se puede recuperar copiando el texto | ⬜ |
+| 5.6 | Tapar datos de verdad | Tapo mi DNI y no se puede recuperar copiando el texto | ✅ |
 | 5.7 | Comprimir, poner/quitar contraseña | El PDF ocupa menos / pide contraseña | ⬜ |
 | 5.8 | Comparar dos versiones de un documento | Veo qué ha cambiado entre dos versiones de una ley | ⬜ |
 | 5.9 | Versión 1.0 | — | ⬜ |
@@ -1829,6 +1829,25 @@ Notas de la Fase 5:
   diga; varias, en una carpeta, «nombre - página 03.png». Nunca pisa archivos.
   Usa el archivo guardado (con cambios, «Guardar y seguir»). Avisa de las
   páginas sin texto (escaneadas sin reconocer). Recuerda lo elegido.
+- **5.6 Tapar datos de verdad** (`core/redaction.py`). Modo Organizar →
+  «Tapar datos»: se arrastra un recuadro sobre lo que se quiere tapar (queda
+  en la mano para el siguiente; Esc lo deja). La flecha ofrece «Tapar el
+  texto seleccionado» y «Buscar y tapar en todo el documento…» (un DNI, una
+  cuenta: todas las veces que aparece, de una vez). Con texto seleccionado,
+  el botón lo tapa directamente.
+  - Se borra de verdad (redacción de MuPDF): las letras debajo (también las
+    invisibles del OCR), la parte de las imágenes (pintada de negro), las
+    líneas y formas cubiertas, y las notas, enlaces y campos que tocan la
+    caja (pueden decir lo mismo). Queda una caja negra.
+  - Deshacer lo recupera mientras el documento esté abierto: antes de tapar
+    se guarda una copia de esas páginas (como al eliminar páginas).
+  - La primera vez en cada documento explica qué hace y propone «Guardar
+    como» para conservar el original (se puede quitar el aviso).
+  - Un documento con algo tapado se escribe siempre entero, nunca «añadiendo
+    al final» como uno firmado: la versión del principio seguiría teniendo
+    lo tapado. La firma con certificado deja de valer (avisa al guardar).
+  - Las «Versiones anteriores» del programa (en este ordenador) guardan cómo
+    estaba antes de guardar, para poder volver.
 - **Arreglo pedido por Julen (23/11):** con un marcador o con «Texto» en la
   mano, un clic en tu propio texto lo coge (como en PowerPoint) y arrastrándolo
   se mueve; un segundo clic, doble clic o Intro lo abre para escribir.
