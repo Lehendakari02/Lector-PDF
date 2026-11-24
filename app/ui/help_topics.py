@@ -665,8 +665,34 @@ _HOW: dict[str, tuple[tuple[str, ...], tuple[str, ...], str]] = {
         ),
         "tachar ocultar censurar dni cuenta privado",
     ),
-    "compress": ((), (), "reducir tamaño peso ocupa menos"),
-    "password": ((), (), "proteger clave cifrar"),
+    "compress": (
+        (
+            "Pulsa «Comprimir» y elige el nivel: Normal (se ve exactamente igual) o "
+            "Fuerte (las fotos y los escaneados en color ocupan menos).",
+            "Se crea una copia «nombre (comprimido).pdf» junto al documento; el original "
+            "no cambia.",
+        ),
+        (
+            "Te dice cuánto ocupaba y cuánto ocupa ahora. Si apenas reduce, no crea la "
+            "copia y te lo dice.",
+            "Si el PDF tenía contraseña, la copia la conserva.",
+        ),
+        "reducir tamaño peso ocupa menos correo enviar adjuntar grande",
+    ),
+    "password": (
+        (
+            "Pulsa «Contraseña». Si el PDF no tiene, escribe la nueva dos veces.",
+            "Si ya tiene, elige «Quitar la contraseña» o «Cambiarla por otra».",
+            "Se crea una copia junto al documento («con contraseña» o «sin "
+            "contraseña»); el original no cambia.",
+        ),
+        (
+            "Si olvidas la contraseña, nadie podrá abrir la copia: apúntala.",
+            "La abren Adobe, Edge, Chrome y cualquier lector, y después se puede firmar "
+            "con certificado.",
+        ),
+        "proteger clave cifrar quitar contraseña bloquear",
+    ),
     "compare": ((), (), "diferencias cambios versiones ley modificada"),
 }
 

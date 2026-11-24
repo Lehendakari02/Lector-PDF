@@ -1923,8 +1923,8 @@ Notas de la Fase 5:
     (recuperar tras un apagón, versiones anteriores, pestañas, teclas, lápiz,
     lector de pantalla…). **Regla para lo que venga:** cada función nueva lleva
     su página en `help_topics.py`; una prueba falla si una función que ya
-    funciona no tiene pasos. Las que aún no existen (comparar, y comprimir y
-    contraseña hasta la 5.7) dicen «Todavía no está disponible».
+    funciona no tiene pasos. Las que aún no existen (Comparar, hasta la 5.8) dicen «Todavía no
+    está disponible».
   - La tecla F1 se puede cambiar en Ajustes → Teclado («Manual de ayuda»).
 
 ## Fase 6 – Editar el texto original
