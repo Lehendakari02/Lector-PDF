@@ -123,3 +123,23 @@ PDF. Ve marcando lo que funcione y dime lo que no.
    también en Adobe.
 7. En un PDF firmado con certificado: tapar avisa al guardar de que la firma
    deja de valer.
+
+## Tarea 5.7 – Comprimir y contraseña
+
+1. Abre un PDF escaneado o con fotos. Modo Organizar → **Comprimir**. Dice
+   cuánto ocupa. Elige «Normal»: propone «nombre (comprimido).pdf» junto al
+   original y al terminar dice «de X a Y». Ábrelo: se ve igual.
+2. Repite con «Fuerte»: ocupa bastante menos. Amplía una foto: se ve bien,
+   aunque con menos detalle al ampliar mucho.
+3. Comprime un PDF que ya ocupa poco: dice que apenas cambiaría y no crea
+   copia.
+4. **Contraseña** en un PDF sin ella: escribe una contraseña dos veces (prueba
+   a escribirlas distintas: lo dice). Crea «nombre (con contraseña).pdf».
+   Ábrelo en el programa, en **Adobe** y en **Edge**: piden la contraseña.
+5. Abre esa copia con su contraseña → **Contraseña** → «Quitar la
+   contraseña»: la copia nueva se abre sin pedir nada.
+6. Firma con tu **certificado** la copia con contraseña: se firma, y en
+   **Adobe** la firma es válida (y sigue pidiendo la contraseña).
+7. Comprime la copia con contraseña: la comprimida también la pide.
+8. Durante una compresión larga, pulsa «Cancelar»: se para y no queda ningún
+   archivo a medias.

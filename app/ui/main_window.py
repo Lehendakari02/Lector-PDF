@@ -8,7 +8,7 @@ import time
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 
-from PySide6.QtCore import QByteArray, QEvent, QSize, Qt, QTimer, QUrl, Signal, qVersion
+from PySide6.QtCore import QByteArray, QEvent, QEventLoop, QSize, Qt, QTimer, QUrl, Signal, qVersion
 from PySide6.QtGui import (
     QAccessible,
     QAction,
@@ -53,7 +53,9 @@ from app.core import (
     batch_signing,
     certificate_settings,
     combine,
+    compress,
     export,
+    file_work,
     my_data,
     my_signature,
     ocr,
@@ -61,6 +63,7 @@ from app.core import (
     pen,
     photo_scan,
     pictures,
+    protection,
     reading,
     save_checks,
     save_settings,
@@ -158,9 +161,11 @@ from app.ui.margin_dialog import remembered as remembered_margin
 from app.ui.my_data_dialog import MyDataDialog, datum_names
 from app.ui.organize_dialogs import (
     IMAGES,
+    CompressDialog,
     ExportDialog,
     InsertWhereDialog,
     MergeDialog,
+    ProtectDialog,
     SplitDialog,
 )
 from app.ui.page_box import PageBox
@@ -195,6 +200,7 @@ def signed_name(path: Path) -> Path:
 
 
 EXPORT_SETTING = "exportar"  # what «Exportar» took out last time
+COMPRESS_SETTING = "comprimir/nivel"  # the level «Comprimir» used last time
 COVER_WARNING_SETTING = "tapar/avisar"  # whether «Tapar datos» explains itself first
 CERTIFICATE_SETTING = "firma/certificado"  # the certificate of Windows used last
 CERTIFICATE_FILE_SETTING = "firma/archivo"  # the certificate file used last
@@ -467,6 +473,12 @@ class MainWindow(QMainWindow):
         # Instead of the «De foto a PDF» window: takes it and says whether to go on.
         self.photo_scan_answer = None
         self.organize_target_answer = None
+        # Instead of the «Comprimir» and «Contraseña» windows: takes it and
+        # says whether to go on.
+        self.compress_answer = None
+        self.protect_answer = None
+        self.last_file_work: tuple | None = None  # the answer of the last copy written
+        self._file_work: file_work.FileWork | None = None
         self._then_when_saved = None  # (page, what to do) once it is saved
         self.save_as_answer = None
         self.new_stamp_answer: str | None = None  # the tests answer without asking
@@ -542,6 +554,8 @@ class MainWindow(QMainWindow):
             "photo_to_pdf": lambda: self.photo_to_pdf(),
             "export": lambda: self.export_pages(),
             "redact": lambda: self.cover_data(),
+            "compress": lambda: self.compress_document(),
+            "password": lambda: self.change_password(),
         }
         self._mark_pending_features()
         self._build_key_commands()
@@ -1632,6 +1646,167 @@ class MainWindow(QMainWindow):
             ).format(pages_text(empty, self.tr))
         self.statusBar().showMessage(message, STATUS_MESSAGE_MS)
         return True
+
+    def compress_document(self, level: str | None = None) -> bool:
+        """«Comprimir»: a copy of the document that takes less space. Uses
+        the saved file: with changes, offers to save them first."""
+        page = self.current_document
+        if self.pdf_view.page_count == 0 or page.path is None:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return False
+        if not self._with_saved_file(
+            page, self.tr("Comprimir"), lambda lv=level: self.compress_document(lv)
+        ):
+            return False
+        source = self._source_of(page)
+        if level is None:
+            remembered = self.settings.get(COMPRESS_SETTING)
+            dialog = CompressDialog(
+                self,
+                compress.size_text(page.path.stat().st_size),
+                save_checks.is_signed(source.path, source.password),
+                remembered if remembered in compress.LEVELS else compress.NORMAL,
+            )
+            if self.compress_answer is not None:
+                go_on = self.compress_answer(dialog)
+            else:
+                go_on = dialog.exec() == CompressDialog.DialogCode.Accepted
+            level = dialog.level
+            dialog.deleteLater()
+            if not go_on:
+                return False
+            self.settings.set(COMPRESS_SETTING, level)
+        target = self._organize_target(
+            free_name_beside(page.path, self.tr("{0} (comprimido)").format(page.path.stem)),
+            self.tr("Guardar la copia comprimida como"),
+        )
+        if target is None:
+            return False
+        return self._write_copy_apart(
+            file_work.COMPRESS, source, target, level, self.tr("Comprimiendo…")
+        )
+
+    def change_password(self, password: str | None = None) -> bool:
+        """«Contraseña»: a copy with a password, or without the one it has
+        (``password`` "" takes it off). Uses the saved file."""
+        page = self.current_document
+        if self.pdf_view.page_count == 0 or page.path is None:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return False
+        if not self._with_saved_file(
+            page, self.tr("Contraseña"), lambda p=password: self.change_password(p)
+        ):
+            return False
+        source = self._source_of(page)
+        try:
+            state = protection.state_of(source.path)
+        except protection.ProtectionError as error:
+            self._combine_failed(error, "contraseña")
+            return False
+        if state == "restricted":
+            self._show_problem(
+                self.tr("Contraseña"),
+                self.tr(
+                    "Quien hizo este documento lo protegió para que no se pueda imprimir, "
+                    "copiar o cambiar del todo. Esa protección solo la puede quitar quien "
+                    "la puso, con su contraseña de autor."
+                ),
+            )
+            return False
+        if password is None:
+            dialog = ProtectDialog(
+                self, state == "password", save_checks.is_signed(source.path, source.password)
+            )
+            if self.protect_answer is not None:
+                go_on = self.protect_answer(dialog)
+                if go_on:
+                    dialog.accept()
+                    go_on = dialog.result() == ProtectDialog.DialogCode.Accepted
+            else:
+                go_on = dialog.exec() == ProtectDialog.DialogCode.Accepted
+            password = dialog.password
+            dialog.deleteLater()
+            if not go_on:
+                return False
+        if password:
+            stem = self.tr("{0} (con contraseña)").format(page.path.stem)
+            title = self.tr("Guardar la copia con contraseña como")
+        else:
+            stem = self.tr("{0} (sin contraseña)").format(page.path.stem)
+            title = self.tr("Guardar la copia sin contraseña como")
+        target = self._organize_target(free_name_beside(page.path, stem), title)
+        if target is None:
+            return False
+        what = file_work.PROTECT if password else file_work.UNPROTECT
+        return self._write_copy_apart(what, source, target, password, self.tr("Creando la copia…"))
+
+    def _write_copy_apart(
+        self, what: str, source: combine.Source, target: Path, extra: str | None, label: str
+    ) -> bool:
+        """Write the copy in a process of its own, with a window that says it
+        is working and can stop it; then say how it went."""
+        if self._file_work is not None and not self._file_work.finished:
+            return False
+        if target.resolve() == source.path.resolve():
+            self._show_problem(
+                self.tr("No se ha podido terminar"),
+                self.tr("La copia no puede ir encima del documento. Elige otro nombre."),
+            )
+            return False
+        work = file_work.FileWork(what, source.path, source.password, target, extra)
+        self._file_work = work
+        progress = QProgressDialog(label, self.tr("Cancelar"), 0, 0, self)
+        progress.setWindowTitle(
+            self.tr("Comprimir") if what == file_work.COMPRESS else self.tr("Contraseña")
+        )
+        progress.setMinimumDuration(400)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        # Waited for here, not in an event loop of its own: such a loop ends at
+        # once if the application was ever told to quit.
+        answer = work.answer()
+        while answer is None and not progress.wasCanceled():
+            QApplication.processEvents(QEventLoop.ProcessEventsFlag.AllEvents, 50)
+            time.sleep(0.02)
+            answer = work.answer()
+        if answer is None:  # «Cancelar»
+            self.last_file_work = ("cancelled",)
+            work.stop()
+            progress.close()
+            self.statusBar().showMessage(
+                self.tr("Cancelado: no se ha creado la copia."), STATUS_MESSAGE_MS
+            )
+            return False
+        work.stop()
+        progress.close()
+        self.last_file_work = answer
+        if answer[0] == "done":
+            _done, written, before, after = answer
+            if what == file_work.COMPRESS:
+                message = self.tr("Copia comprimida «{0}»: de {1} a {2}.").format(
+                    Path(written).name, compress.size_text(before), compress.size_text(after)
+                )
+            elif what == file_work.PROTECT:
+                message = self.tr("Copia con contraseña guardada: «{0}».").format(
+                    Path(written).name
+                )
+            else:
+                message = self.tr("Copia sin contraseña guardada: «{0}».").format(
+                    Path(written).name
+                )
+            self.statusBar().showMessage(message, STATUS_MESSAGE_MS)
+            return True
+        if answer[0] == "not_smaller":
+            self._show_problem(
+                self.tr("Comprimir"),
+                self.tr(
+                    "Este documento ya ocupa casi lo mínimo ({0}): comprimido apenas "
+                    "cambiaría, así que no se ha creado la copia."
+                ).format(compress.size_text(answer[1])),
+            )
+            return False
+        error = combine.CombineError(answer[-1] if answer[0] == "failed" else "needs password")
+        self._combine_failed(error, "comprimir" if what == file_work.COMPRESS else "contraseña")
+        return False
 
     def _export_target(self, suggested: Path, title: str, kinds: str | None = None) -> Path | None:
         """Where the export goes: a file (``kinds`` given) or a folder."""

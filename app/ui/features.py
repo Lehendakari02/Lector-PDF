@@ -346,10 +346,18 @@ FEATURES: list[Feature] = [
         "ocultar censurar",
     ),
     _f(
-        "compress", ORGANIZE, "Comprimir", "Hacer que el archivo ocupe menos", "reducir tamaño peso"
+        "compress",
+        ORGANIZE,
+        "Comprimir",
+        "Una copia del documento que ocupa menos",
+        "reducir tamaño peso enviar correo",
     ),
     _f(
-        "password", ORGANIZE, "Contraseña", "Poner o quitar la contraseña del PDF", "proteger clave"
+        "password",
+        ORGANIZE,
+        "Contraseña",
+        "Una copia con contraseña, o sin la que tiene",
+        "proteger clave cifrar quitar cambiar",
     ),
     _f("compare", ORGANIZE, "Comparar", "Ver qué ha cambiado entre dos versiones", "diferencias"),
 ]

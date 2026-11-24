@@ -1,5 +1,6 @@
-"""«Unir», «Dividir», «Insertar páginas» and «Exportar»: which documents go
-together, how one is cut, where pages go and what is taken out."""
+"""«Unir», «Dividir», «Insertar páginas», «Exportar», «Comprimir» and
+«Contraseña»: which documents go together, how one is cut, where pages go,
+what is taken out, how much it is packed and with which password."""
 
 from pathlib import Path
 
@@ -25,7 +26,9 @@ from PySide6.QtWidgets import (
 )
 
 from app.core.combine import EVERY, OUTLINE, RANGES, every, parse_ranges
+from app.core.compress import NORMAL, STRONG
 from app.core.export import IMAGE_KINDS, JPEG, PNG, RESOLUTIONS
+from app.core.protection import MIN_LENGTH
 
 PATH_ROLE = Qt.ItemDataRole.UserRole
 
@@ -533,4 +536,185 @@ class ExportDialog(QDialog):
             )
             self.ranges_edit.setFocus()
             return
+        super().accept()
+
+
+class CompressDialog(QDialog):
+    """How much to compress. After ``exec()`` returns ``Accepted``: ``level``
+    (NORMAL or STRONG)."""
+
+    def __init__(
+        self, parent: QWidget | None, size: str, signed: bool, level: str = NORMAL
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(self.tr("Comprimir"))
+        explanation = QLabel(
+            self.tr(
+                "Ahora ocupa {0}. Se crea una copia que ocupa menos; el documento no cambia."
+            ).format(size)
+        )
+        explanation.setWordWrap(True)
+        self.normal = QRadioButton(self.tr("&Normal: todo se ve exactamente igual"))
+        self.strong = QRadioButton(
+            self.tr("&Fuerte: las fotos y las páginas escaneadas pierden algo de nitidez")
+        )
+        strong_note = QLabel(
+            self.tr(
+                "Se quedan a 150 ppp: se leen e imprimen bien, pero al ampliar mucho se "
+                "nota. Es la que más reduce en documentos escaneados."
+            )
+        )
+        strong_note.setWordWrap(True)
+        strong_note.setContentsMargins(24, 0, 0, 0)
+        (self.strong if level == STRONG else self.normal).setChecked(True)
+        group = QButtonGroup(self)
+        group.addButton(self.normal)
+        group.addButton(self.strong)
+        self.signed_note = QLabel(
+            self.tr(
+                "Este documento está firmado con certificado: en la copia las firmas ya "
+                "no serán válidas. Si hay que enviarlo firmado, comprímelo antes de firmar."
+            )
+        )
+        self.signed_note.setWordWrap(True)
+        self.signed_note.setStyleSheet("color: palette(link);")
+        self.signed_note.setVisible(signed)
+        buttons = QDialogButtonBox()
+        buttons.addButton(self.tr("Comprimir"), QDialogButtonBox.ButtonRole.AcceptRole)
+        buttons.addButton(self.tr("Cancelar"), QDialogButtonBox.ButtonRole.RejectRole)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout = QVBoxLayout(self)
+        layout.addWidget(explanation)
+        layout.addWidget(self.normal)
+        layout.addWidget(self.strong)
+        layout.addWidget(strong_note)
+        layout.addWidget(self.signed_note)
+        layout.addWidget(buttons)
+
+    @property
+    def level(self) -> str:
+        return STRONG if self.strong.isChecked() else NORMAL
+
+
+class ProtectDialog(QDialog):
+    """Put a password on the document, or take it off or change it if it has
+    one. After ``exec()`` returns ``Accepted``: ``password`` (the new one, or
+    "" to take it off)."""
+
+    def __init__(self, parent: QWidget | None, has_password: bool, signed: bool) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(self.tr("Contraseña"))
+        self.has_password = has_password
+        self.take_off = QRadioButton(self.tr("&Quitar la contraseña"))
+        self.change = QRadioButton(self.tr("&Cambiarla por otra"))
+        group = QButtonGroup(self)
+        group.addButton(self.take_off)
+        group.addButton(self.change)
+        self.take_off.setChecked(True)
+        self.take_off.setVisible(has_password)
+        self.change.setVisible(has_password)
+        if has_password:
+            intro = self.tr(
+                "Este documento pide contraseña al abrirlo. Se crea una copia con lo que "
+                "elijas; el documento no cambia."
+            )
+        else:
+            intro = self.tr(
+                "Se crea una copia que pide esta contraseña al abrirla (en cualquier "
+                "programa); el documento no cambia. Quien la sepa puede hacer de todo con "
+                "la copia: leerla, imprimirla, rellenarla y firmarla."
+            )
+        explanation = QLabel(intro)
+        explanation.setWordWrap(True)
+        self.first = QLineEdit()
+        self.first.setEchoMode(QLineEdit.EchoMode.Password)
+        self.first.setAccessibleName(self.tr("Contraseña nueva"))
+        self.second = QLineEdit()
+        self.second.setEchoMode(QLineEdit.EchoMode.Password)
+        self.second.setAccessibleName(self.tr("Repite la contraseña"))
+        self.show_box = QCheckBox(self.tr("&Mostrar lo que escribo"))
+        self.show_box.toggled.connect(self._show)
+        fields = QGridLayout()
+        first_label = QLabel(self.tr("Contraseña &nueva:"))
+        first_label.setBuddy(self.first)
+        second_label = QLabel(self.tr("&Repítela:"))
+        second_label.setBuddy(self.second)
+        fields.addWidget(first_label, 0, 0)
+        fields.addWidget(self.first, 0, 1)
+        fields.addWidget(second_label, 1, 0)
+        fields.addWidget(self.second, 1, 1)
+        fields.addWidget(self.show_box, 2, 1)
+        if has_password:
+            fields.setContentsMargins(24, 0, 0, 0)
+        self.fields = QWidget()
+        self.fields.setLayout(fields)
+        self.fields.setEnabled(not has_password)
+        self.change.toggled.connect(self.fields.setEnabled)
+        self.change.toggled.connect(lambda on: on and self.first.setFocus())
+        for edit in (self.first, self.second):
+            edit.textEdited.connect(lambda _text: self.change.setChecked(True))
+        warning = QLabel(
+            self.tr(
+                "Apúntala en un sitio seguro: si se olvida, nadie puede abrir la copia, "
+                "tampoco este programa."
+            )
+        )
+        warning.setWordWrap(True)
+        self.signed_note = QLabel(
+            self.tr(
+                "Este documento está firmado con certificado: en la copia las firmas ya "
+                "no serán válidas. Puedes firmar la copia después."
+            )
+        )
+        self.signed_note.setWordWrap(True)
+        self.signed_note.setStyleSheet("color: palette(link);")
+        self.signed_note.setVisible(signed)
+        self.problem = QLabel()
+        self.problem.setWordWrap(True)
+        self.problem.setStyleSheet("color: palette(link);")
+        buttons = QDialogButtonBox()
+        buttons.addButton(self.tr("Crear la copia"), QDialogButtonBox.ButtonRole.AcceptRole)
+        buttons.addButton(self.tr("Cancelar"), QDialogButtonBox.ButtonRole.RejectRole)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout = QVBoxLayout(self)
+        layout.addWidget(explanation)
+        layout.addWidget(self.take_off)
+        layout.addWidget(self.change)
+        layout.addWidget(self.fields)
+        layout.addWidget(warning)
+        layout.addWidget(self.signed_note)
+        layout.addWidget(self.problem)
+        layout.addWidget(buttons)
+        if not has_password:
+            self.first.setFocus()
+
+    def _show(self, shown: bool) -> None:
+        mode = QLineEdit.EchoMode.Normal if shown else QLineEdit.EchoMode.Password
+        self.first.setEchoMode(mode)
+        self.second.setEchoMode(mode)
+
+    @property
+    def removing(self) -> bool:
+        return self.has_password and self.take_off.isChecked()
+
+    @property
+    def password(self) -> str:
+        return "" if self.removing else self.first.text()
+
+    def accept(self) -> None:
+        if not self.removing:
+            if len(self.first.text()) < MIN_LENGTH:
+                self.problem.setText(
+                    self.tr("La contraseña tiene que tener al menos {0} caracteres.").format(
+                        MIN_LENGTH
+                    )
+                )
+                self.first.setFocus()
+                return
+            if self.first.text() != self.second.text():
+                self.problem.setText(self.tr("Las dos contraseñas no son iguales."))
+                self.second.setFocus()
+                return
         super().accept()
