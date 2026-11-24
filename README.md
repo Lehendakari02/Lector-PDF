@@ -8,18 +8,35 @@ Pensado para el día a día:
 - ✏️ **Estudiar y anotar**: subrayar, resaltar, notas y dibujo, guardado dentro del propio PDF.
 - 📝 **Rellenar** formularios y escribir sobre cualquier documento.
 - ✍️ **Firmar** con firma manuscrita o con **certificado digital** (FNMT, DNIe) con validez legal.
-- 📑 **Organizar** páginas: unir, dividir, reordenar, rotar.
+- 📑 **Organizar** páginas: unir, dividir, reordenar, rotar, comprimir, comparar.
 
 Tus documentos nunca salen de tu ordenador. Los PDFs que guarda son estándar y se abren en cualquier otro lector.
 
 ## Estado
 
-Versión 0.1: **el lector**. Abrir PDFs en pestañas, buscar sin tildes ni mayúsculas,
-copiar texto, índice y miniaturas, modo oscuro y papel sepia, imprimir, PDFs con
-contraseña y actualización con un clic.
+Versión 1.0: **todo lo previsto para leer, estudiar, rellenar, firmar y organizar**.
 
-Lo siguiente es estudiar y anotar (subrayar, notas, dibujo). Las funciones que aún
-no están hechas aparecen en el programa en gris. El avance está en [`PLAN.md`](PLAN.md).
+- **Leer**: pestañas que vuelven al abrir, buscador sin tildes ni mayúsculas (la ñ
+  no es una n, encuentra palabras partidas con guion), índice, miniaturas, modo
+  oscuro y papel sepia, imprimir y actualización con un clic.
+- **Estudiar**: subrayar, resaltar y tachar con cualquier color, notas, texto sobre
+  la página, dibujo con presión del lápiz, formas, herramientas favoritas, márgenes
+  para apuntes, hojas en blanco, marcadores, panel de anotaciones, resumen, modo
+  repaso, saltar a un artículo, dos documentos lado a lado, biblioteca del temario
+  y enlaces entre documentos.
+- **Documentos escaneados**: reconocer el texto (OCR en español, sin internet).
+- **Rellenar y firmar**: formularios, «Mis datos», sellos, firma manuscrita y firma
+  con certificado digital (FNMT, archivo .p12/.pfx, DNIe), también de varios
+  documentos a la vez, y comprobar las firmas de un PDF.
+- **Organizar**: ordenar, girar, eliminar e insertar páginas; unir, dividir y
+  extraer; de foto a PDF; exportar como imagen o texto; tapar datos de verdad;
+  comprimir; poner o quitar la contraseña; comparar dos versiones de un documento.
+- **Nunca perder trabajo**: diario de recuperación tras un apagón, versiones
+  anteriores y recuperar lo que se descartó con «No guardar».
+- **Ayuda** dentro del programa (F1) y buscador de funciones (Ctrl+K).
+
+Lo siguiente es cambiar el texto original del documento (Fase 6). El avance está en
+[`PLAN.md`](PLAN.md).
 
 ## Descarga
 
