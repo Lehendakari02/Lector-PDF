@@ -37,6 +37,7 @@ from app.core.history import RESTORE_SETTING
 from app.core.interface_size import NORMAL_SIZE, SIZE_SETTING, SIZES, wanted_size
 from app.core.paths import is_portable
 from app.core.updates import CHECK_SETTING
+from app.ui import help_topics
 from app.ui.keys_tab import KeysTab
 from app.ui.theme import Paper, Theme
 from app.ui.when import days_text
@@ -172,6 +173,13 @@ class SettingsDialog(QDialog):
         self.restore_box.setChecked(window.history.restore_wanted)
         self.restore_box.toggled.connect(lambda on: self.settings.set(RESTORE_SETTING, on))
         layout.addWidget(self.restore_box)
+        self.tips_box = QCheckBox(self.tr("Enseñar un &truco del programa (uno al día como mucho)"))
+        self.tips_box.setToolTip(
+            self.tr("Una franja pequeña con algo que el programa sabe hacer y cómo se hace")
+        )
+        self.tips_box.setChecked(help_topics.tips_wanted(self.settings))
+        self.tips_box.toggled.connect(lambda on: self.settings.set(help_topics.TIPS_SETTING, on))
+        layout.addWidget(self.tips_box)
 
         # ---- memory ----
         layout.addWidget(self._heading(self.tr("Memoria")))

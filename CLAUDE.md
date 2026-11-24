@@ -72,6 +72,9 @@ Reglas:
   recuerda el último modo usado en cada documento.
 - **Buscador de funciones** (Ctrl+K): escribes "firmar", "unir", "rotar"… y aparece la
   función, esté en el modo que esté. Así nada queda escondido.
+- **Ayuda dentro del programa** (F1): qué hace cada función y cómo se usa, con
+  buscador y «Hazlo ahora». Toda función nueva lleva su página
+  (`app/ui/help_topics.py`; una prueba lo comprueba).
 - Accesibilidad: botones grandes y con nombre (no solo iconos), descripción al pasar el
   ratón, todo usable con teclado, tamaño de la interfaz ajustable, buen contraste en
   modo claro y oscuro.

@@ -1,12 +1,14 @@
 """The function finder (Ctrl+K): type a few letters and pick a function."""
 
 from PySide6.QtCore import QEvent, Qt
+from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import (
     QDialog,
     QLabel,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QPushButton,
     QVBoxLayout,
     QWidget,
 )
@@ -29,6 +31,8 @@ class CommandPalette(QDialog):
         self.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
         self.resize(620, 470)
         self.chosen: Feature | None = None
+        self.help_wanted: Feature | None = None  # F1: how is this one used?
+        self.help_query: str | None = None  # nothing found: look in the help
 
         self.query = QLineEdit()
         self.query.setObjectName("paletteQuery")
@@ -49,8 +53,15 @@ class CommandPalette(QDialog):
         self.empty = QLabel(self.tr("No hay ninguna función con esas palabras."))
         self.empty.setObjectName("paletteEmpty")
         self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.ask_help = QPushButton(self.tr("Buscarlo en la ayuda"))
+        self.ask_help.setToolTip(self.tr("La ayuda explica también lo que no tiene botón"))
+        self.ask_help.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.ask_help.setAutoDefault(False)  # Intro with nothing found does nothing
+        self.ask_help.clicked.connect(self._look_in_help)
 
-        hint = QLabel(self.tr("↑ ↓ para moverte · Intro para elegir · Esc para cerrar"))
+        hint = QLabel(
+            self.tr("↑ ↓ para moverte · Intro para elegir · F1 cómo se usa · Esc para cerrar")
+        )
         hint.setObjectName("paletteHint")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -60,6 +71,7 @@ class CommandPalette(QDialog):
         layout.addWidget(self.query)
         layout.addWidget(self.results, 1)
         layout.addWidget(self.empty)
+        layout.addWidget(self.ask_help, 0, Qt.AlignmentFlag.AlignHCenter)
         layout.addWidget(hint)
 
         self.query.textChanged.connect(self._refresh)
@@ -93,6 +105,7 @@ class CommandPalette(QDialog):
         found = self.results.count() > 0
         self.results.setVisible(found)
         self.empty.setVisible(not found)
+        self.ask_help.setVisible(not found)
         if found:
             self.results.setCurrentRow(0)
 
@@ -103,8 +116,46 @@ class CommandPalette(QDialog):
         self.chosen = item.data(Qt.ItemDataRole.UserRole)
         self.accept()
 
+    def _look_in_help(self) -> None:
+        self.help_query = self.query.text()
+        self.accept()
+
+    def _help_for_current(self) -> None:
+        item = self.results.currentItem()
+        if item is None:
+            self._look_in_help()
+            return
+        self.help_wanted = item.data(Qt.ItemDataRole.UserRole)
+        self.accept()
+
+    def _is_help_key(self, event) -> bool:
+        """F1, or the key the user gave to the help instead."""
+        pressed = QKeySequence(event.keyCombination())
+        action = getattr(self.parentWidget(), "help_action", None)
+        keys = action.shortcuts() if action is not None else []
+        return event.key() == Qt.Key.Key_F1 or any(key == pressed for key in keys)
+
+    def event(self, event) -> bool:  # noqa: D102
+        # The key of the help belongs to this window while it is open: it
+        # explains the function chosen in the list.
+        if event.type() == QEvent.Type.ShortcutOverride and self._is_help_key(event):
+            event.accept()
+            return True
+        if event.type() == QEvent.Type.KeyPress and self._is_help_key(event):
+            self._help_for_current()
+            return True
+        return super().event(event)
+
     def eventFilter(self, watched, event) -> bool:  # noqa: N802 (Qt naming)
-        """Let the arrow keys move through the list while typing."""
+        """Let the arrow keys move through the list while typing; F1 tells how
+        the chosen function is used."""
+        help_key = event.type() in (QEvent.Type.ShortcutOverride, QEvent.Type.KeyPress)
+        if watched is self.query and help_key and self._is_help_key(event):
+            if event.type() == QEvent.Type.ShortcutOverride:
+                event.accept()  # not a shortcut of the window: it is ours
+            else:
+                self._help_for_current()
+            return True
         if watched is self.query and event.type() == QEvent.Type.KeyPress:
             key = event.key()
             moves = {

@@ -1757,6 +1757,7 @@ Notas de las mejoras:
 | 5.6 | Tapar datos de verdad | Tapo mi DNI y no se puede recuperar copiando el texto | ✅ |
 | 5.7 | Comprimir, poner/quitar contraseña | El PDF ocupa menos / pide contraseña | ✅ |
 | 5.8 | Comparar dos versiones de un documento | Veo qué ha cambiado entre dos versiones de una ley | ⬜ |
+| 5.8b | Ayuda dentro del programa (F1), pedida por Julen el 24/11 | Busco «foto» en la ayuda, leo cómo se hace y «Hazlo ahora» me lleva a la función | ✅ |
 | 5.9 | Versión 1.0 | — | ⬜ |
 
 Notas de la Fase 5:
@@ -1896,6 +1897,35 @@ Notas de la Fase 5:
     reconocer…») en lugar de dar por reconocida la página.
   - Regla para el resto de la fase: cada orden nueva que cambie páginas se
     añade a `_breaks_signatures` (`ui/pdf_view.py`) y define `layout`.
+
+- **5.8b Ayuda dentro del programa** (`ui/help_topics.py`, `ui/help_window.py`).
+  Pedida y aprobada por Julen el 24/11/2026: «ni yo me acuerdo de todo lo que
+  tiene», y de un programa propio no hay vídeos ni foros en internet. Se fija en
+  la ayuda de Word y Adobe (buscar por lo que quieres hacer) y en los «consejos»
+  de VS Code y Edge, sin internet.
+  - **Ayuda (F1, botón «?» arriba a la derecha, Menú → Ayuda → Manual de
+    ayuda…):** a la izquierda, «¿Qué quieres hacer?» y la lista de páginas por
+    modo (Leer, Estudiar, Rellenar y firmar, Organizar), más «Guardar y no
+    perder nada» y «Comodidad y ajustes». A la derecha, la página: en qué modo
+    está, su tecla de ahora (cambia si se cambia en Ajustes → Teclado), «Cómo se
+    hace» paso a paso y «Bueno saber». **«Hazlo ahora»** lleva a la función. No
+    bloquea la ventana: se puede leer mientras se prueba.
+  - Busca con las reglas del buscador (sin tildes ni mayúsculas, la ñ no es una
+    n) en el título, la descripción, los pasos y palabras de la calle
+    («juntar», «escanear», «apagón», «fosforito»).
+  - **En Ctrl+K:** F1 sobre una función abre su página («F1 cómo se usa» en la
+    línea de abajo). Si no encuentra ninguna función, «Buscarlo en la ayuda».
+  - **Truco del día:** al abrir, una franja «¿Sabías que…?» (21 trucos, uno al
+    día como mucho, sin repetir) con «Ver cómo se hace», «Otro truco», «No
+    enseñar más trucos» y «Cerrar». Ajuste en General → Al abrir el programa
+    (activado).
+  - Hay una página por cada función (64) y 15 más para lo que no tiene botón
+    (recuperar tras un apagón, versiones anteriores, pestañas, teclas, lápiz,
+    lector de pantalla…). **Regla para lo que venga:** cada función nueva lleva
+    su página en `help_topics.py`; una prueba falla si una función que ya
+    funciona no tiene pasos. Las que aún no existen (Comparar, hasta la 5.8) dicen «Todavía no
+    está disponible».
+  - La tecla F1 se puede cambiar en Ajustes → Teclado («Manual de ayuda»).
 
 ## Fase 6 – Editar el texto original
 | # | Tarea | Terminado cuando… | Estado |
