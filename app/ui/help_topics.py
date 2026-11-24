@@ -693,7 +693,24 @@ _HOW: dict[str, tuple[tuple[str, ...], tuple[str, ...], str]] = {
         ),
         "proteger clave cifrar quitar contraseña bloquear",
     ),
-    "compare": ((), (), "diferencias cambios versiones ley modificada"),
+    "compare": (
+        (
+            "Abre la versión nueva del documento.",
+            "Pulsa «Comparar» y elige la versión anterior.",
+            "Las dos se ven una al lado de la otra, con una lista de diferencias: lo "
+            "añadido, lo quitado y lo cambiado, con la página y las palabras de alrededor.",
+            "Elige una diferencia de la lista: se marca en las dos versiones y las dos van "
+            "a ese sitio. «Anterior» y «Siguiente» pasan de una a otra.",
+        ),
+        (
+            "Si la que elegiste era la nueva, pulsa «Intercambiar».",
+            "No cuenta como cambio dónde se parten las líneas o las páginas, ni el tipo de "
+            "comillas. Sí cuentan una letra, una tilde o una coma.",
+            "Un documento escaneado necesita antes «Reconocer texto».",
+            "Al cerrar la lista se quitan las marcas.",
+        ),
+        "diferencias cambios versiones ley modificada",
+    ),
 }
 
 # Pages with no button of their own.

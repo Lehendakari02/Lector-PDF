@@ -76,6 +76,7 @@ from app.core import (
     tab_sleep,
 )
 from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE, CommandError
+from app.core.compare import Comparison
 from app.core.doc_links import DocLink, relative_file, resolve
 from app.core.document import PdfDocument, PdfOpenError, engine_version
 from app.core.drawing import (
@@ -116,6 +117,7 @@ from app.core.ocr import OcrError
 from app.core.ocr_cache import FOLDER_NAME as OCR_CACHE_FOLDER
 from app.core.ocr_cache import OcrCache
 from app.core.paths import data_dir, is_portable
+from app.core.search import SearchHit
 from app.core.settings import Settings
 from app.core.signing import (
     NotAllowed,
@@ -140,6 +142,7 @@ from app.ui.about_dialog import AboutDialog
 from app.ui.batch_sign_dialog import BatchSignDialog
 from app.ui.color_menu import ColorMenu
 from app.ui.command_palette import CommandPalette
+from app.ui.compare_window import CompareWindow
 from app.ui.document_page import DocumentPage
 from app.ui.error_reporting import ErrorReporter, ProvokedError
 from app.ui.favourites_bar import FavouritesBar
@@ -485,6 +488,11 @@ class MainWindow(QMainWindow):
         # says whether to go on.
         self.compress_answer = None
         self.protect_answer = None
+        # Instead of asking for the other version to compare with: its path.
+        self.compare_answer: str | None = None
+        self.compare_window: CompareWindow | None = None
+        # The two documents being compared: (earlier, newer, result).
+        self._compared: tuple[DocumentPage, DocumentPage, Comparison] | None = None
         self.last_file_work: tuple | None = None  # the answer of the last copy written
         self._file_work: file_work.FileWork | None = None
         self._then_when_saved = None  # (page, what to do) once it is saved
@@ -564,6 +572,7 @@ class MainWindow(QMainWindow):
             "redact": lambda: self.cover_data(),
             "compress": lambda: self.compress_document(),
             "password": lambda: self.change_password(),
+            "compare": lambda: self.compare_versions(),
         }
         self._mark_pending_features()
         self._build_key_commands()
@@ -1765,6 +1774,157 @@ class MainWindow(QMainWindow):
             return False
         what = file_work.PROTECT if password else file_work.UNPROTECT
         return self._write_copy_apart(what, source, target, password, self.tr("Creando la copia…"))
+
+    # ---- «Comparar» ---------------------------------------------------------
+
+    def compare_versions(self, other: str | Path | None = None) -> bool:
+        """«Comparar»: what text changed between the document in front (taken
+        as the newer one) and another version of it, picked here. Both are then
+        seen side by side, with the list of changes in a window apart."""
+        page = self.current_document
+        if self.pdf_view.page_count == 0 or page.path is None:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return False
+        if other is None:
+            if self.compare_answer is not None:
+                other = self.compare_answer
+            else:
+                other, _filter = QFileDialog.getOpenFileName(
+                    self,
+                    self.tr("Elige la versión anterior de «{0}»").format(page.title),
+                    str(page.path.parent),
+                    self.tr("Documentos PDF (*.pdf)"),
+                )
+            if not other:
+                return False
+        other = Path(other).absolute()
+        if other.resolve() == page.path.resolve():
+            self._show_problem(
+                self.tr("Comparar"),
+                self.tr("Es el mismo archivo. Elige la otra versión del documento."),
+            )
+            return False
+        passwords = {
+            open_page.path: self._source_of(open_page).password
+            for open_page in self.documents
+            if open_page.path
+        }
+        older = combine.Source(other, passwords.get(other))
+        return self._compare(older, self._source_of(page))
+
+    def _compare(self, older: combine.Source, newer: combine.Source) -> bool:
+        """Compare in a process of its own, then show both and the changes."""
+        if self._file_work is not None and not self._file_work.finished:
+            return False
+        while True:
+            work = file_work.FileWork(
+                file_work.COMPARE, older.path, older.password, newer.path, newer.password
+            )
+            self._file_work = work
+            answer = self._wait_for(work, self.tr("Comparar"), self.tr("Comparando…"))
+            if answer is None:
+                return False
+            self.last_file_work = answer
+            if answer[0] != "needs_password":
+                break
+            locked = Path(answer[1])
+            unlocked = self.ask_password(locked)
+            if unlocked is None:
+                return False
+            if locked == older.path:
+                older = combine.Source(older.path, unlocked.password)
+            else:
+                newer = combine.Source(newer.path, unlocked.password)
+        if answer[0] == "no_text":
+            self._show_problem(
+                self.tr("Comparar"),
+                self.tr(
+                    "«{0}» no tiene texto: sus páginas son imágenes. Reconoce el texto "
+                    "(modo Estudiar) y vuelve a comparar."
+                ).format(Path(answer[1]).name),
+            )
+            return False
+        if answer[0] != "compared":
+            self._combine_failed(combine.CombineError(answer[-1]), "comparar")
+            return False
+        result: Comparison = answer[1]
+        pages = []
+        for source in (older, newer):
+            # The earlier version, if not open yet, is only being looked at.
+            if not self.open_document(source.path, remember=source is newer):
+                return False
+            pages.append(self.current_document)
+        self._clear_compare_marks()
+        self._compared = (pages[0], pages[1], result)
+        self.document_tabs.setCurrentIndex(self.documents.index(pages[1]))
+        self.show_beside(pages[0])
+        if self.compare_window is None:
+            self.compare_window = CompareWindow(self)
+            self.compare_window.picked.connect(self.show_change)
+            self.compare_window.swap_asked.connect(self._swap_compared)
+            self.compare_window.finished.connect(self._clear_compare_marks)
+        self.compare_window.show_result(result, pages[0].title, pages[1].title)
+        self.compare_window.show()
+        self.compare_window.raise_()
+        self.statusBar().showMessage(self.compare_window.summary.text(), STATUS_MESSAGE_MS)
+        return True
+
+    def _wait_for(self, work: file_work.FileWork, title: str, label: str) -> tuple | None:
+        """Wait for work in a process of its own, with a window that can stop
+        it. None if it was stopped."""
+        progress = QProgressDialog(label, self.tr("Cancelar"), 0, 0, self)
+        progress.setWindowTitle(title)
+        progress.setMinimumDuration(400)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        answer = work.answer()
+        while answer is None and not progress.wasCanceled():
+            QApplication.processEvents(QEventLoop.ProcessEventsFlag.AllEvents, 50)
+            time.sleep(0.02)
+            answer = work.answer()
+        work.stop()
+        progress.close()
+        if answer is None:
+            self.last_file_work = ("cancelled",)
+            self.statusBar().showMessage(self.tr("Cancelado."), STATUS_MESSAGE_MS)
+        return answer
+
+    def show_change(self, index: int) -> None:
+        """Mark one change on both versions and bring it into view."""
+        if self._compared is None:
+            return
+        older, newer, result = self._compared
+        if not 0 <= index < len(result.changes):
+            return
+        change = result.changes[index]
+        for page, spots, at in (
+            (older, change.old_spots, change.old_page),
+            (newer, change.new_spots, change.new_page),
+        ):
+            if page not in self.documents:
+                continue
+            hits = [SearchHit(spot.page, spot.rects, "", "", "") for spot in spots]
+            page.view.set_search_marks(hits, hits[0] if hits else None)
+            if hits:
+                page.view.show_search_hit(hits[0])
+            elif 0 <= at < page.view.page_count:
+                page.view.scroll_to_page(at)
+
+    def _swap_compared(self) -> None:
+        """«Intercambiar»: the one taken as newer was the earlier one."""
+        if self._compared is None:
+            return
+        older, newer, _result = self._compared
+        if older not in self.documents or newer not in self.documents:
+            return
+        self._compare(self._source_of(newer), self._source_of(older))
+
+    def _clear_compare_marks(self, *_args) -> None:
+        if self._compared is None:
+            return
+        for page in self._compared[:2]:
+            if page in self.documents:
+                page.view.set_search_marks([])
+        self._compared = None
 
     def _write_copy_apart(
         self, what: str, source: combine.Source, target: Path, extra: str | None, label: str

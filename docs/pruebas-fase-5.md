@@ -143,3 +143,16 @@ PDF. Ve marcando lo que funcione y dime lo que no.
 7. Comprime la copia con contraseña: la comprimida también la pide.
 8. Durante una compresión larga, pulsa «Cancelar»: se para y no queda ningún
    archivo a medias.
+
+## Tarea 5.8 – Comparar dos versiones
+
+1. Ten dos versiones de una ley o de un tema (por ejemplo, la consolidada de
+   antes y la de ahora del BOE). Abre la nueva. Modo Organizar → **Comparar**
+   → elige la anterior.
+2. Las dos se ven una al lado de la otra y sale la lista de diferencias, con
+   cuántas hay. La primera está marcada en las dos.
+3. Baja por la lista con las flechas o «Siguiente»: cada diferencia se marca
+   y las dos páginas van a su sitio.
+4. Pulsa «Intercambiar»: lo añadido pasa a quitado y al revés.
+5. Cierra la lista: las marcas desaparecen.
+6. Compara un escaneado sin reconocer: dice que no tiene texto.
