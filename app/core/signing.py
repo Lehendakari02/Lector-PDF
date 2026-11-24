@@ -378,7 +378,8 @@ def _unlock(writer: IncrementalPdfFileWriter, password: str | None) -> None:
         # file's trailer. The signing library needs it as an object of its own:
         # the new part of the file gets one. Tried with Adobe's rules and
         # PyMuPDF; with an opening password the result cannot be read by
-        # PyMuPDF, so those are refused rather than spoilt.
+        # PyMuPDF, so those are refused rather than spoilt. (What this program
+        # protects or saves has it apart already: protection.protection_apart.)
         if password:
             raise SigningError("This protection with a password is not supported")
         writer._encrypt = writer.add_object(writer._encrypt)

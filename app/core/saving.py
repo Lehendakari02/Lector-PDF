@@ -112,6 +112,8 @@ def write_copy(doc, target: str | Path, password: str | None = None) -> Path:
     """
     import pymupdf
 
+    from app.core.protection import protection_apart
+
     target = Path(target)
     temp = temp_path_for(target)
     try:
@@ -131,6 +133,9 @@ def write_copy(doc, target: str | Path, password: str | None = None) -> Path:
             doc.save(str(temp), garbage=1, deflate=True, encryption=pymupdf.PDF_ENCRYPT_KEEP)
             with open(temp, "rb+") as written:
                 os.fsync(written.fileno())
+            if doc.is_encrypted or doc.xref_get_key(-1, "Encrypt")[0] != "null":
+                # So that it can still be signed with a certificate afterwards.
+                protection_apart(temp, password)
     except OSError as error:
         _discard(temp)
         raise SaveError(_kind_of(error, target), str(error)) from error

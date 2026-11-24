@@ -1531,9 +1531,9 @@ Notas de la Fase 4:
     en Adobe. Al firmar varios, los abiertos usan su contraseña.
   - **Limitación conocida:** los PDF con contraseña de apertura protegidos por
     PyMuPDF (y otros programas que guardan la protección dentro del final del
-    archivo) no se firman: el resultado no lo podría leer PyMuPDF. **Para la
-    tarea 5.7** (poner contraseña): comprobar que lo que guarde este programa
-    se puede firmar después, o avisar de firmar antes de proteger.
+    archivo) no se firman: el resultado no lo podría leer PyMuPDF. Resuelto en
+    la tarea 5.7 para lo que escribe este programa: lo que protege o guarda
+    con contraseña se puede firmar después (`protection.protection_apart`).
   - Firma visible bien colocada en páginas giradas y recortadas; un campo de
     texto «Firma1» ya no impide firmar; la ventana del PIN va sobre la ventana
     principal; mientras se firman varios, la ventana principal espera; no se
@@ -1755,7 +1755,7 @@ Notas de las mejoras:
 | 5.4 | De foto a PDF (recortar, enderezar, mejorar) | Hago una foto a un papel y queda como escaneado | ✅ |
 | 5.5 | Exportar páginas como imagen o el documento como texto | Saco una página en PNG | ✅ |
 | 5.6 | Tapar datos de verdad | Tapo mi DNI y no se puede recuperar copiando el texto | ✅ |
-| 5.7 | Comprimir, poner/quitar contraseña | El PDF ocupa menos / pide contraseña | ⬜ |
+| 5.7 | Comprimir, poner/quitar contraseña | El PDF ocupa menos / pide contraseña | ✅ |
 | 5.8 | Comparar dos versiones de un documento | Veo qué ha cambiado entre dos versiones de una ley | ⬜ |
 | 5.8b | Ayuda dentro del programa (F1), pedida por Julen el 24/11 | Busco «foto» en la ayuda, leo cómo se hace y «Hazlo ahora» me lleva a la función | ✅ |
 | 5.9 | Versión 1.0 | — | ⬜ |
@@ -1849,6 +1849,39 @@ Notas de la Fase 5:
     lo tapado. La firma con certificado deja de valer (avisa al guardar).
   - Las «Versiones anteriores» del programa (en este ordenador) guardan cómo
     estaba antes de guardar, para poder volver.
+- **5.7 Comprimir y contraseña** (`core/compress.py`, `core/protection.py`,
+  `core/file_work.py`). Las dos crean una **copia** junto al documento («nombre
+  (comprimido).pdf», «(con contraseña)», «(sin contraseña)»); el documento no
+  cambia. Con cambios sin guardar, primero pregunta «Guardar y seguir». Se
+  escriben en un proceso aparte, con «Cancelar», sin bloquear la ventana.
+  - **Comprimir:** *Normal* (se escribe ordenado: fuera lo que no se usa, lo
+    repetido una vez, todo empaquetado; se ve exactamente igual) o *Fuerte*
+    (además, fotos y páginas escaneadas en color o gris de más de 200 ppp
+    quedan a 150 ppp en JPEG, solo si ocupa menos; los escaneados en blanco y
+    negro no se tocan, porque las letras se emborronarían). Dice el tamaño de
+    antes y después; si apenas reduce (menos del 3 %), no crea la copia y lo
+    dice. Recuerda el nivel elegido. Mantiene la contraseña si la tiene.
+  - **Contraseña:** sin contraseña, pide la nueva dos veces (mínimo 4
+    caracteres, «Mostrar lo que escribo»), avisa de que si se olvida nadie
+    puede abrir la copia. Con contraseña: «Quitar la contraseña» o «Cambiarla
+    por otra». AES-256, la del estándar que abren Adobe y los navegadores;
+    quien la sabe puede hacer de todo (imprimir, copiar, rellenar, firmar).
+    Un PDF que su autor protegió con permisos (se abre pero no deja imprimir o
+    copiar) no se cambia: lo explica, como Adobe sin la contraseña de autor.
+  - **Se puede firmar después:** PyMuPDF escribe la protección dentro del
+    final del archivo y la librería de firma la necesita como objeto aparte.
+    Al proteger, comprimir o guardar un PDF con contraseña se añade al final
+    una pequeña parte con la misma protección como objeto
+    (`protection_apart`): así lo protegido aquí se firma con certificado.
+  - En un documento firmado, las dos avisan de que en la copia las firmas ya
+    no valen.
+- **Para seguir (24/11):** 5.1 a 5.7 terminadas. Falta 5.8 (Comparar dos
+  versiones: texto añadido, quitado o cambiado, p. ej. una ley modificada) y
+  5.9 (Versión 1.0). Desde ahora, una tarea por hilo (lo pidió Julen para
+  gastar menos). Reglas que siguen valiendo: cada orden nueva que cambie
+  páginas va en `_breaks_signatures` (`ui/pdf_view.py`); nunca
+  `Document.select` (usar `page_orders._rearrange`); lo que escribe un PDF
+  con contraseña pasa por `protection.protection_apart` para poder firmarse.
 - **Arreglo pedido por Julen (23/11):** con un marcador o con «Texto» en la
   mano, un clic en tu propio texto lo coge (como en PowerPoint) y arrastrándolo
   se mueve; un segundo clic, doble clic o Intro lo abre para escribir.
