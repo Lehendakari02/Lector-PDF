@@ -25,6 +25,7 @@ from app.core.page_orders import (
     _drop_fields,
     _field_roots,
     copy_of_pages,
+    put_back_pages,
 )
 
 Box = tuple[float, float, float, float]
@@ -96,33 +97,9 @@ class CoverData:
         return sorted(by_page)
 
     def undo(self, doc) -> list[int]:
-        import pymupdf
-
-        copy = self.copy
-        if copy is None or not copy.kept:
-            raise CommandError("no copy of the pages was kept")
-        try:
-            kept = pymupdf.open("pdf", copy.kept)
-        except Exception as error:
-            raise CommandError(f"the copy of the pages cannot be read: {error}") from error
-        if kept.page_count != len(copy.pages_):
-            raise CommandError("the copy does not have those pages")
-        try:
-            with kept:
-                roots: set[int] = set()
-                # From the last: each copy goes after its page, which then goes.
-                # The document is never left without pages.
-                for index in reversed(range(len(copy.pages_))):
-                    page = copy.pages_[index]
-                    doc.insert_pdf(kept, from_page=index, to_page=index, start_at=page + 1)
-                    roots |= _field_roots(doc, [page])
-                    doc.delete_page(page)
-                _drop_fields(doc, roots - _field_roots(doc, range(doc.page_count)))
-            copy._mend(doc)
-        except Exception as error:
-            raise CommandError(f"cannot put the pages back: {error}") from error
+        pages = put_back_pages(doc, self.copy)
         setattr(doc, COVERED, max(0, getattr(doc, COVERED, 0) - 1))
-        return list(copy.pages_)
+        return pages
 
     def to_dict(self) -> dict:
         copy = self.copy.to_dict() if self.copy is not None else None

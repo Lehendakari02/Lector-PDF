@@ -66,6 +66,7 @@ from app.core import (
     places,
     redaction,
     sheets,
+    text_edit,
 )
 from app.core.batch_signing import Placement, corner_box
 from app.core.commands import (
@@ -383,6 +384,10 @@ class PdfView(QAbstractScrollArea):
     field_refused = Signal(str)  # a field that cannot be changed: why
     doc_link_clicked = Signal(object)  # a link to another document (doc_links.DocLink)
     link_wanted = Signal(object, str)  # "Enlazar a…": (page, rects) and their words
+    correction_wanted = Signal()  # "Corregir texto…" in the menu of the right button
+    # The original text was corrected: the font borrowed for letters the
+    # document's own font lacks ("" if none was needed).
+    text_corrected = Signal(str)
     picked_changed = Signal()  # an annotation is picked, or not any more
     item_copied = Signal()  # the picked annotation was copied, to paste it
     pen_seen_changed = Signal()  # a pen touched a page for the first time
@@ -839,6 +844,8 @@ class PdfView(QAbstractScrollArea):
         self.pages_changed.emit(list(pages))
         if getattr(order, "text_change", False):
             self.text_changed.emit(list(pages))
+        if how == "do" and isinstance(order, text_edit.ChangeText):
+            self.text_corrected.emit(order.look)
 
     def _store_scanned(self, pages: object, count: int, recognised: object = ()) -> None:
         if self._document is None or count != self.page_count:
@@ -2992,6 +2999,35 @@ class PdfView(QAbstractScrollArea):
         self.clear_selection()
         return True
 
+    def selected_line(self) -> tuple[int, tuple, str] | None:
+        """The text selected, if it is all in one line of one page (as
+        «Corregir texto» needs it): (page, boxes as seen, text). None if not."""
+        chosen = self.selection()
+        if chosen is None:
+            return None
+        (first, start), (last, stop) = chosen
+        text = self._texts.get(first)
+        if first != last or text is None:
+            return None
+        stop = min(stop, len(text))
+        while start < stop and text.chars[start].isspace():
+            start += 1
+        while stop > start and text.chars[stop - 1].isspace():
+            stop -= 1
+        if start >= stop or len({text.lines[at] for at in range(start, stop)}) != 1:
+            return None
+        boxes = tuple(tuple(map(float, box)) for box in selection_rects(text, start, stop))
+        return first, boxes, text.chars[start:stop]
+
+    def correct_text(self, page: int, boxes, old: str, new: str) -> bool:
+        """Write ``new`` in place of the original text ``old`` that lies in
+        ``boxes`` of a page (one line). If it cannot be done, ``edit_failed``
+        says why; when it is done, ``text_corrected``."""
+        if self._document is None or not 0 <= page < self.page_count or not boxes:
+            return False
+        self.clear_selection()  # the letters of the page are different afterwards
+        return self._do(text_edit.change_text(page, boxes, old, new))
+
     def cover_text(self, query: str) -> bool:
         """Cover every place where this text is written. If it is not in the
         document, ``edit_failed`` says so."""
@@ -4504,6 +4540,9 @@ class PdfView(QAbstractScrollArea):
         link = menu.addAction(self.tr("Enlazar a…"))
         link.setEnabled(self.has_selection)
         link.triggered.connect(lambda _checked=False: self.ask_link())
+        correct = menu.addAction(self.tr("Corregir texto…"))
+        correct.setEnabled(self.has_selection)
+        correct.triggered.connect(lambda _checked=False: self.correction_wanted.emit())
         menu.addSeparator()
         undo = menu.addAction(self.tr("Deshacer"))
         undo.setEnabled(self.can_undo)
@@ -4633,6 +4672,7 @@ def _breaks_signatures(order) -> bool:
             page_orders.DeletePages,
             page_orders.InsertPages,
             redaction.CoverData,
+            text_edit.ChangeText,
         ),
     )
 

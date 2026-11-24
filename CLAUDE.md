@@ -328,6 +328,11 @@ de empresa o colaboración en línea.
   y enlaces no se muevan.
 - Por eso las pruebas de cada función que guarda algo incluyen abrir el resultado en
   Edge y en Adobe y comparar.
+- Corregir texto (Fase 6) escribe con la fuente del propio documento. Como los PDF
+  suelen guardar la fuente solo con las letras usadas, una letra que el documento
+  no usa se toma de la misma fuente de Windows (que se mete entera en el PDF) o de
+  la estándar más parecida. El texto nuevo se pone entre las órdenes de dibujo de
+  la página, detrás del texto que lo precede, para que todos lo lean en su sitio.
 
 ## 8. Forma de trabajar
 - El usuario no programa: dirige, prueba y decide. Claude programa todo.

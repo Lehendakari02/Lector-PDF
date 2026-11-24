@@ -1423,14 +1423,14 @@ Notas de la Fase 3:
 ## Fase 4 – Firma con certificado digital
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
-| 4.1 | Firmar con certificado instalado en Windows (FNMT), partiendo de la prueba 0.8 | El PDF firmado sale válido en VALIDe y en Adobe | 🔶 hecho; falta tu prueba con el certificado FNMT real en VALIDe y Adobe |
+| 4.1 | Firmar con certificado instalado en Windows (FNMT), partiendo de la prueba 0.8 | El PDF firmado sale válido en VALIDe y en Adobe | 🔶 válido en Adobe con tu certificado FNMT real (probado en tu ordenador el 23/11); falta VALIDe |
 | 4.2 | Firmar con archivo .p12/.pfx | Ídem | 🔶 hecho; falta tu prueba con tu copia .pfx del certificado FNMT |
-| 4.3 | Firma visible o invisible; sello de tiempo opcional; recordar preferencias | Firmar es elegir dónde y poner el PIN | 🔶 hecho (PR 88); falta tu prueba en Adobe, Edge y VALIDe |
-| 4.4 | Firmar varios documentos de una vez | Firmo 10 documentos poniendo el PIN una vez | 🔶 hecho (PR 89); falta tu prueba con el certificado FNMT (¿pide el PIN una vez?) |
+| 4.3 | Firma visible o invisible; sello de tiempo opcional; recordar preferencias | Firmar es elegir dónde y poner el PIN | 🔶 visible, invisible y con sello de tiempo válidas en Adobe (23/11); faltan Edge y VALIDe |
+| 4.4 | Firmar varios documentos de una vez | Firmo 10 documentos poniendo el PIN una vez | ✅ probado con tu certificado FNMT el 23/11: 3 de 3 firmados sin volver a pedir el PIN |
 | 4.5 | Firmar con DNIe y lector de tarjetas | Firmo con el DNIe (cuando tenga lector) | 🔶 hecho (PR 90); falta tu prueba con el DNIe y un lector |
-| 4.6 | Ver y verificar firmas existentes | Abro un PDF firmado y me dice quién lo firmó y si es válido | 🔶 hecho (PR 91); falta tu prueba con PDFs firmados de verdad |
+| 4.6 | Ver y verificar firmas existentes | Abro un PDF firmado y me dice quién lo firmó y si es válido | 🔶 hecho (PR 91); falta tu prueba con PDFs firmados por otros (de la administración, de una empresa) |
 | 4.7 | Versión 0.6 | — | ✅ Release v0.6.0 publicada (23/11/2026) |
-| 4.8 | Arreglos de la revisión del código de la Fase 4 | Todo lo de la revisión arreglado y probado | 🔶 hecho (pull request de la rama `claude/project-thread-bdtogg`); falta tu prueba (`docs/pruebas-pendientes.md`) |
+| 4.8 | Arreglos de la revisión del código de la Fase 4 | Todo lo de la revisión arreglado y probado | 🔶 hecho (PR 93); la firma en el hueco y anotar un PDF firmado, probados en tu ordenador el 23/11; lo que queda está en `docs/pruebas-pendientes.md` |
 
 Notas de la Fase 4:
 - **4.1: Firmar con el certificado instalado en Windows (22/11/2026).**
@@ -1758,7 +1758,7 @@ Notas de las mejoras:
 | 5.7 | Comprimir, poner/quitar contraseña | El PDF ocupa menos / pide contraseña | ✅ |
 | 5.8 | Comparar dos versiones de un documento | Veo qué ha cambiado entre dos versiones de una ley | ✅ |
 | 5.8b | Ayuda dentro del programa (F1), pedida por Julen el 24/11 | Busco «foto» en la ayuda, leo cómo se hace y «Hazlo ahora» me lleva a la función | ✅ |
-| 5.9 | Versión 1.0 | — | 🔶 el programa dice 1.0.0; falta que Julen cree la Release v1.0.0 |
+| 5.9 | Versión 1.0 | — | ✅ Release v1.0.0 publicada (24/11/2026) |
 
 Notas de la Fase 5:
 - **5.1 Ordenar, girar y eliminar páginas.** En las miniaturas (panel lateral):
@@ -1902,7 +1902,7 @@ Notas de la Fase 5:
   disponible». Se pone al día `README.md`. La Fase 6 (cambiar el texto
   original) llegará después como 1.1. Las pruebas a mano de la Fase 5 siguen
   en `docs/pruebas-fase-5.md` y las de antes en `docs/pruebas-pendientes.md`.
-  Falta que Julen cree la Release v1.0.0 (título «Lector-PDF 1.0»).
+  Julen publicó la Release v1.0.0 el 24/11/2026.
   Las pruebas en Windows ya tardan unos 14 minutos y se cortaban a los 15
   (también en `main` tras la 5.8): el límite sube a 30 (`pruebas.yml`).
 - **Para seguir (24/11):** Fase 5 terminada (5.1 a 5.9). Lo siguiente es la Fase 6. Desde ahora, una tarea por hilo (lo pidió Julen para
@@ -1958,7 +1958,46 @@ Notas de la Fase 5:
 ## Fase 6 – Editar el texto original
 | # | Tarea | Terminado cuando… | Estado |
 |---|-------|-------------------|--------|
-| 6.1 | Corregir texto puntual | Cambio una palabra del documento y se ve natural | ⬜ |
+| 6.1 | Corregir texto puntual | Cambio una palabra del documento y se ve natural | 🔶 hecho; falta tu prueba (`docs/pruebas-pendientes.md`, «Corregir texto») |
+
+Notas de la Fase 6:
+- **6.1 Corregir texto puntual (24/11/2026)** (`core/text_edit.py`,
+  `core/pdf_content.py`). Se fija en «Editar texto» de Acrobat, en una línea.
+  - **Cómo se usa:** seleccionar la palabra o la frase (una sola línea) y
+    pulsar «Corregir texto» (modo Organizar, clic derecho o Ctrl+K). Una
+    ventana con el texto de ahora para escribir cómo debe decir. Deshacer lo
+    devuelve. Página de ayuda y lugar en Ctrl+K como las demás.
+  - **Se ve natural:** se quitan solo esas letras (lo dibujado, las imágenes,
+    las notas y el resto del texto siguen igual; se comprueba después que no
+    falta ninguna otra letra) y el texto nuevo se escribe con **la misma
+    fuente del documento**, su tamaño, su color y su escala. El resto de la
+    línea se corre lo justo. Una línea justificada sigue llegando al margen
+    (los huecos entre palabras crecen o encogen hasta la mitad), un título
+    centrado sigue centrado y una línea normal puede crecer hasta el margen
+    derecho de la página, nunca encima de otro texto. Si aun así no cabe, la
+    letra nueva se estrecha como mucho un 7 %; si no, dice «no cabe» y no
+    cambia nada (Acrobat pasaría palabras a la línea siguiente: no se hace
+    en esta tarea).
+  - **Fuentes recortadas:** los PDF suelen guardar la fuente solo con las
+    letras usadas. Una letra se toma de la fuente del documento solo si el
+    documento la usa en algún sitio (o si la fuente está entera). Si falta,
+    se usa la misma fuente instalada en Windows (Arial, Times New Roman,
+    Calibri, Cambria… también para Arimo, Tinos, Carlito y Caladea, que son
+    sus gemelas) y, si no está, la estándar más parecida (Helvetica, Times o
+    Courier). La barra de estado dice qué fuente se ha usado. Una fuente de
+    Windows se mete entera en el PDF (puede añadir 1 o 2 MB, solo en ese caso).
+  - **Se lee en su sitio:** el texto nuevo no se pone al final de la página
+    sino entre las órdenes de dibujo, justo después del texto que lo precede
+    (`pdf_content.insertion_point`). Así el buscador, la selección, copiar,
+    el lector de pantalla y Edge lo leen dentro de su frase.
+  - **No se toca:** páginas escaneadas o texto reconocido (es una foto), texto
+    inclinado o vertical, letras de otras líneas encima (lo dice y no hace
+    nada) y varias líneas a la vez.
+  - **Como tapar datos:** guarda una copia de la página para deshacer aunque se
+    haya guardado; está en `_breaks_signatures` (avisa si el PDF está firmado,
+    y la ventana de corregir también lo dice).
+  - Probado con el BOE y con los PDF de `tests/ejemplos` (más de 80 palabras
+    al azar cambiadas sin fallos) y con fuentes recortadas como las de Word.
 
 ## Ideas para más adelante
 Versión para tableta o móvil · Mac/Linux.

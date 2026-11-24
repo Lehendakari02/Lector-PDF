@@ -375,6 +375,36 @@ def copy_of_pages(doc, pages) -> DeletePages:
     )
 
 
+def put_back_pages(doc, copy: "DeletePages | None") -> list[int]:
+    """Put the pages kept by ``copy_of_pages`` in place of the pages there
+    now (to undo covering data or changing the text). Returns those pages."""
+    import pymupdf
+
+    if copy is None or not copy.kept:
+        raise CommandError("no copy of the pages was kept")
+    try:
+        kept = pymupdf.open("pdf", copy.kept)
+    except Exception as error:
+        raise CommandError(f"the copy of the pages cannot be read: {error}") from error
+    if kept.page_count != len(copy.pages_):
+        raise CommandError("the copy does not have those pages")
+    try:
+        with kept:
+            roots: set[int] = set()
+            # From the last: each copy goes after its page, which then goes.
+            # The document is never left without pages.
+            for index in reversed(range(len(copy.pages_))):
+                page = copy.pages_[index]
+                doc.insert_pdf(kept, from_page=index, to_page=index, start_at=page + 1)
+                roots |= _field_roots(doc, [page])
+                doc.delete_page(page)
+            _drop_fields(doc, roots - _field_roots(doc, range(doc.page_count)))
+        copy._mend(doc)
+    except Exception as error:
+        raise CommandError(f"cannot put the pages back: {error}") from error
+    return list(copy.pages_)
+
+
 def delete_pages(pages) -> DeletePages:
     return DeletePages(_clean_pages(pages))
 

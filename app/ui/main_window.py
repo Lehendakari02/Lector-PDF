@@ -74,6 +74,7 @@ from app.core import (
     stamps,
     symbols,
     tab_sleep,
+    text_edit,
 )
 from app.core.commands import HIGHLIGHT, MARKUP_KINDS, STRIKEOUT, UNDERLINE, CommandError
 from app.core.compare import Comparison
@@ -480,6 +481,8 @@ class MainWindow(QMainWindow):
         # and the text «Buscar y tapar» covers.
         self.cover_warning_answer: bool | None = None
         self.cover_text_answer: str | None = None
+        # For the tests: what «Corregir texto» writes, without asking.
+        self.correct_text_answer: str | None = None
         self.export_target_answer = None
         # Instead of the «De foto a PDF» window: takes it and says whether to go on.
         self.photo_scan_answer = None
@@ -569,6 +572,7 @@ class MainWindow(QMainWindow):
             "insert_pages": lambda: self.insert_pages(),
             "photo_to_pdf": lambda: self.photo_to_pdf(),
             "export": lambda: self.export_pages(),
+            "edit_text": lambda: self.correct_text(),
             "redact": lambda: self.cover_data(),
             "compress": lambda: self.compress_document(),
             "password": lambda: self.change_password(),
@@ -1148,6 +1152,75 @@ class MainWindow(QMainWindow):
             STATUS_MESSAGE_MS,
         )
         return True
+
+    def correct_text(self, new: str | None = None) -> bool:
+        """«Corregir texto»: write something else in place of the words
+        selected (in one line), with the document's own font."""
+        view = self.pdf_view
+        if view.page_count == 0:
+            self.statusBar().showMessage(self.tr("Abre primero un documento."), STATUS_MESSAGE_MS)
+            return False
+        if not view.has_selection:
+            self.statusBar().showMessage(
+                self.tr(
+                    "Selecciona primero la palabra o la frase que quieres cambiar "
+                    "(doble clic elige una palabra)."
+                ),
+                STATUS_MESSAGE_MS,
+            )
+            return False
+        chosen = view.selected_line()
+        if chosen is None:
+            self.statusBar().showMessage(
+                self.tr("Elige texto de una sola línea: se corrige línea a línea."),
+                STATUS_MESSAGE_MS,
+            )
+            return False
+        page, boxes, old = chosen
+        if new is None:
+            new = self.correct_text_answer
+        if new is None:
+            new, ok = self._ask_correction(old)
+            if not ok:
+                return False
+        new = " ".join(new.split())
+        if new == " ".join(old.split()):
+            return False
+        if not view.correct_text(page, boxes, old, new):
+            return False
+        self.statusBar().showMessage(self.tr("Cambiando el texto…"), STATUS_MESSAGE_MS)
+        return True
+
+    def _ask_correction(self, old: str) -> tuple[str, bool]:
+        document = self.current_document
+        label = self.tr(
+            "Escribe cómo debe decir. Se escribe con la misma letra del documento y el "
+            "resto de la línea se ajusta solo."
+        )
+        if document is not None and save_checks.is_signed(document.path, document.password):
+            label += "\n\n" + self.tr(
+                "Este documento está firmado con certificado: al guardar el cambio, la "
+                "firma dejará de valer."
+            )
+        dialog = QInputDialog(self)
+        dialog.setWindowTitle(self.tr("Corregir texto"))
+        dialog.setLabelText(label)
+        dialog.setTextValue(old)
+        dialog.setOkButtonText(self.tr("Cambiar"))
+        dialog.setCancelButtonText(self.tr("Cancelar"))
+        dialog.resize(max(dialog.width(), 520), dialog.height())
+        ok = bool(dialog.exec())
+        return dialog.textValue(), ok
+
+    def _text_corrected(self, look: str) -> None:
+        if look:
+            message = self.tr(
+                "Texto cambiado. Alguna letra no está en la fuente del documento y se ha "
+                "escrito con {0}. Deshacer (Ctrl+Z) lo devuelve."
+            ).format(look)
+        else:
+            message = self.tr("Texto cambiado. Deshacer (Ctrl+Z) lo devuelve.")
+        self.statusBar().showMessage(message, STATUS_MESSAGE_MS * 2)
 
     # ---- organising pages --------------------------------------------------
 
@@ -3330,7 +3403,9 @@ class MainWindow(QMainWindow):
         )
 
     def _edit_failed(self, details: str) -> None:
-        if "no text" in details:
+        if details.startswith("text_edit:"):
+            message = self._correction_failed(details)
+        elif "no text" in details:
             message = self.tr("No se ha podido hacer el cambio: ahí no hay texto que marcar.")
         elif "text is not in the document" in details:
             message = self.tr("Ese texto no está en el documento: no se ha tapado nada.")
@@ -3344,6 +3419,37 @@ class MainWindow(QMainWindow):
         else:
             message = self.tr("No se ha podido hacer el cambio.")
         self.statusBar().showMessage(message, STATUS_MESSAGE_MS)
+
+    def _correction_failed(self, details: str) -> str:
+        reasons = {
+            text_edit.NOT_THERE: self.tr(
+                "El texto elegido ya no está ahí: vuelve a seleccionarlo."
+            ),
+            text_edit.NOT_ONE_LINE: self.tr("Elige texto de una sola línea."),
+            text_edit.SCANNED: self.tr(
+                "Esa página es una foto (escaneada): su texto no se puede cambiar. Puedes "
+                "taparlo o escribir encima."
+            ),
+            text_edit.NOT_LEVEL: self.tr(
+                "Ese texto está inclinado o en vertical: no se puede corregir."
+            ),
+            text_edit.TOO_LONG: self.tr(
+                "El texto nuevo no cabe en esa línea. Prueba con uno más corto; no se ha "
+                "cambiado nada."
+            ),
+            text_edit.NO_LETTER: self.tr(
+                "Alguno de esos caracteres no está en ninguna letra del ordenador; no se ha "
+                "cambiado nada."
+            ),
+            text_edit.CROWDED: self.tr(
+                "Ahí hay letras de otras líneas encima: no se ha cambiado nada para no "
+                "estropearlas."
+            ),
+        }
+        for code, message in reasons.items():
+            if details.startswith(code):
+                return message
+        return self.tr("No se ha podido cambiar el texto.")
 
     # ---- saving ---------------------------------------------------------
 
@@ -4284,6 +4390,8 @@ class MainWindow(QMainWindow):
         view.my_data_items = self._my_data_items
         view.field_refused.connect(lambda why: self.statusBar().showMessage(why, STATUS_MESSAGE_MS))
         view.link_wanted.connect(lambda area, words, p=page: self._link_asked(p, area, words))
+        view.correction_wanted.connect(lambda: self.correct_text())
+        view.text_corrected.connect(self._text_corrected)
         view.doc_link_clicked.connect(lambda link, p=page: self.follow_doc_link(p, link))
         self.pages.addWidget(page)
         return page

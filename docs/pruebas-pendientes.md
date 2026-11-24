@@ -98,6 +98,25 @@ tiempo, varias a la vez, PDF protegido, anotar un PDF firmado).
 27. **Copiar informe de error** (Ayuda): se pega en el Bloc de notas sin tu
     nombre de usuario.
 
+## Corregir texto (Fase 6, tarea 6.1)
+
+Con un PDF hecho con Word (un contrato, un tema tuyo) y con el BOE:
+
+1. **Una palabra:** doble clic en una palabra → Organizar → «Corregir texto» →
+   escribe otra → se ve como si siempre hubiera estado ahí (misma letra, tamaño
+   y color) y el resto de la línea se corre sin montarse.
+2. **Línea justificada:** cambia una palabra en medio de un párrafo del BOE →
+   la línea sigue llegando al margen derecho.
+3. **Título centrado:** cambia una palabra de un título → sigue centrado.
+4. **Una letra que el documento no usa** (por ejemplo una «Ñ» o una «Q»
+   mayúscula) → abajo dice qué letra de Windows ha usado; ¿se nota?
+5. **Buscar y copiar:** busca la palabra nueva → la encuentra; selecciona la
+   frase entera y cópiala al Bloc de notas → sale en su orden.
+6. **No cabe:** escribe algo muy largo → dice «no cabe» y no cambia nada.
+7. **Deshacer, guardar y Edge:** Ctrl+Z la devuelve; vuelve a cambiarla,
+   guarda y abre el PDF en Edge → se ve igual y se puede buscar.
+8. **Escaneado:** en una página escaneada dice que es una foto y no la toca.
+
 ## Formularios y firma a mano (con tus datos)
 
 1. **Rellenar** un formulario oficial: Tab y Mayús+Tab, casillas, opciones
