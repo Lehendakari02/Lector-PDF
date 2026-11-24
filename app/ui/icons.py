@@ -233,6 +233,10 @@ ICONS: dict[str, str] = {
     "export": (
         '<path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/>'
     ),
+    "edit_text": (
+        '<path d="M4 6.5h9M4 11h6M4 15.5h4"/>'
+        '<path d="M17.5 6.5l2.5 2.5-7 7H10.5v-2.5z"/><path d="M4 20h16"/>'
+    ),
     "redact": (
         '<path d="M5 6h14M5 18.5h9"/>'
         '<rect x="4" y="9.5" width="16" height="5.5" rx="1" fill="{colour}"/>'

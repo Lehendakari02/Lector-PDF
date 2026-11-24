@@ -339,6 +339,13 @@ FEATURES: list[Feature] = [
         "export", ORGANIZE, "Exportar", "Guardar páginas como imagen o como texto", "imagen png jpg"
     ),
     _f(
+        "edit_text",
+        ORGANIZE,
+        "Corregir texto",
+        "Cambiar una palabra o una frase del propio documento",
+        "editar cambiar texto original palabra errata error modificar sustituir reemplazar",
+    ),
+    _f(
         "redact",
         ORGANIZE,
         "Tapar datos",
@@ -380,7 +387,7 @@ GROUP_STARTS = frozenset(
         "sign_drawn",
         "merge",
         "photo_to_pdf",
-        "redact",
+        "edit_text",
         "compare",
     }
 )

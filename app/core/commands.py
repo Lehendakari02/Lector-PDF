@@ -223,6 +223,7 @@ def command_from_dict(data: dict) -> Command:
     import app.core.pictures  # noqa: F401
     import app.core.redaction  # noqa: F401
     import app.core.sheets  # noqa: F401
+    import app.core.text_edit  # noqa: F401
     import app.core.text_layer  # noqa: F401
 
     try:

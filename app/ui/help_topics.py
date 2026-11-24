@@ -651,6 +651,27 @@ _HOW: dict[str, tuple[tuple[str, ...], tuple[str, ...], str]] = {
         ("Las imágenes pueden salir con o sin tus anotaciones.",),
         "imagen png jpg txt texto convertir",
     ),
+    "edit_text": (
+        (
+            "Selecciona la palabra o la frase que quieres cambiar (doble clic elige una "
+            "palabra). Tiene que estar en una sola línea.",
+            "Pulsa «Corregir texto» (en Organizar, o con el botón derecho) y escribe cómo "
+            "debe decir.",
+            "Guarda para que el cambio quede en el archivo.",
+        ),
+        (
+            "Se escribe con la misma letra, tamaño y color del documento, y el resto de la "
+            "línea se ajusta solo: una línea justificada sigue llegando al margen y un "
+            "título centrado sigue centrado.",
+            "Si la letra del documento no tiene alguno de los caracteres, se usa la misma "
+            "letra de Windows o la más parecida, y te lo dice.",
+            "Si el texto nuevo no cabe en la línea, te lo dice y no cambia nada.",
+            "Las páginas escaneadas son una foto: su texto no se puede cambiar.",
+            "Deshacer lo devuelve como estaba. Si el documento está firmado con "
+            "certificado, al guardar la firma deja de valer.",
+        ),
+        "editar cambiar palabra errata error fecha nombre modificar sustituir reemplazar",
+    ),
     "redact": (
         (
             "Pulsa «Tapar datos» y arrastra un recuadro sobre lo que quieres borrar.",
@@ -962,6 +983,7 @@ TIPS: list[tuple[str, str]] = [
     ("Un enlace puede abrir otro PDF justo en el artículo que citas.", "link"),
     ("«Versiones anteriores» te deja volver a como estaba un PDF esta mañana.", "versions"),
     ("Puedes tapar un DNI de verdad antes de enviar un documento.", "redact"),
+    ("¿Una errata en el documento? Selecciónala y pulsa «Corregir texto».", "edit_text"),
     ("Puedes firmar con tu certificado FNMT o tu DNIe, con validez legal.", "sign_certificate"),
     ("Puedes cambiar la tecla de cualquier función en Ajustes → Teclado.", "keys"),
     ("Con el modo lectura el papel se vuelve sepia, más cómodo para leer horas.", "reading_mode"),
