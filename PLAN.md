@@ -1903,6 +1903,8 @@ Notas de la Fase 5:
   original) llegará después como 1.1. Las pruebas a mano de la Fase 5 siguen
   en `docs/pruebas-fase-5.md` y las de antes en `docs/pruebas-pendientes.md`.
   Falta que Julen cree la Release v1.0.0 (título «Lector-PDF 1.0»).
+  Las pruebas en Windows ya tardan unos 14 minutos y se cortaban a los 15
+  (también en `main` tras la 5.8): el límite sube a 30 (`pruebas.yml`).
 - **Para seguir (24/11):** Fase 5 terminada (5.1 a 5.9). Lo siguiente es la Fase 6. Desde ahora, una tarea por hilo (lo pidió Julen para
   gastar menos). Reglas que siguen valiendo: cada orden nueva que cambie
   páginas va en `_breaks_signatures` (`ui/pdf_view.py`); nunca
