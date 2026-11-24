@@ -229,6 +229,7 @@ MARKERS_SETTING = "rotuladores"  # colour and opacity of each marking tool
 FAVOURITES_SETTING = "favoritas"  # the favourite tools, in the order of their bar
 TOOLBAR_NAMES, TOOLBAR_ICONS = "nombres", "iconos"
 TOP_SEARCH_WIDTH = 280
+TOP_SEARCH_MIN_WIDTH = 200  # in a narrow window it gives up some width first
 SIDE_PANEL_SETTING = "panel_lateral"  # "", "miniaturas", "indice" or "anotaciones"
 SUMMARY_FORMAT_SETTING = "resumen/formato"  # "pdf" or "docx": the last one chosen
 SHEET_SETTING = "hoja_nueva"  # the kind of sheet Insertar hoja puts: the last one chosen
@@ -819,7 +820,9 @@ class MainWindow(QMainWindow):
         self.search_box.addAction(
             icons.icon("search", icons.MUTED), QLineEdit.ActionPosition.LeadingPosition
         )
-        self.search_box.setFixedWidth(TOP_SEARCH_WIDTH)
+        self.search_box.setMaximumWidth(TOP_SEARCH_WIDTH)
+        self.search_box.setMinimumWidth(TOP_SEARCH_MIN_WIDTH)
+        self.search_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.search_box.setMinimumHeight(BAR_BUTTON_HEIGHT)
         self.search_box.textEdited.connect(self._top_search_typed)
         self.search_box.returnPressed.connect(self._top_search_enter)
@@ -855,8 +858,10 @@ class MainWindow(QMainWindow):
         layout.setSpacing(6)
         layout.addWidget(self.menu_button)
         layout.addWidget(self.mode_tabs)
-        layout.addStretch()
-        layout.addWidget(self.search_box)
+        layout.addStretch(1)
+        # The search box takes the free room first (up to its width), and gives
+        # it back first when the window is narrow.
+        layout.addWidget(self.search_box, 100)
         layout.addWidget(self.finder_button)
         layout.addWidget(self.help_button)
 
