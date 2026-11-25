@@ -1912,6 +1912,10 @@ Notas de la Fase 5:
   baja siempre la última. El programa no lo usa para actualizarse (su nombre no
   acaba en `-instalador.exe`; lo comprueba una prueba). Funciona desde la
   primera versión publicada después de este cambio.
+- **Pendiente antes de compartirlo con amigos (25/11/2026, decisión de Julen):**
+  quitar el aviso «Windows protegió su PC» (SmartScreen) con firma de código.
+  Primera opción, SignPath gratis para proyectos libres: la solicitud la hace
+  Julen. Hasta entonces no se comparte el enlace.
 - **Para seguir (24/11):** Fase 5 terminada (5.1 a 5.9). Lo siguiente es la Fase 6. Desde ahora, una tarea por hilo (lo pidió Julen para
   gastar menos). Reglas que siguen valiendo: cada orden nueva que cambie
   páginas va en `_breaks_signatures` (`ui/pdf_view.py`); nunca
