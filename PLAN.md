@@ -1912,14 +1912,14 @@ Notas de la Fase 5:
   baja siempre la última. El programa no lo usa para actualizarse (su nombre no
   acaba en `-instalador.exe`; lo comprueba una prueba). Funciona desde la
   primera versión publicada después de este cambio.
-- **Pendiente antes de compartirlo con amigos (25/11/2026, decisión de Julen):**
-  quitar el aviso «Windows protegió su PC» (SmartScreen) con firma de código.
-  Primera opción, SignPath gratis para proyectos libres: la solicitud la hace
-  Julen. Hasta entonces no se comparte el enlace. Lo que pide SignPath en la
-  web del proyecto (política de firma y privacidad) ya está en `README.md`.
-  Falta: Julen con verificación en dos pasos en GitHub, la solicitud en
-  signpath.org/apply y, cuando la aprueben, conectar la firma en
-  `ejecutable.yml` (con sus claves como secretos de GitHub, nunca aquí).
+- **Firma de código, para más adelante (25/11/2026).** SignPath rechazó la
+  solicitud gratuita: piden más visibilidad pública (estrellas, colaboradores,
+  menciones). Julen no quiere pagar ni publicarlo en la Microsoft Store, así que
+  se comparte con el aviso «Windows protegió su PC» (el README explica cómo
+  pasarlo). Pendiente: volver a pedirlo en signpath.org/apply cuando el proyecto
+  tenga más visibilidad; entonces se vuelve a poner en `README.md` la política
+  de firma que piden y se conecta la firma en `ejecutable.yml` (claves como
+  secretos de GitHub, nunca aquí).
 - **Para seguir (24/11):** Fase 5 terminada (5.1 a 5.9). Lo siguiente es la Fase 6. Desde ahora, una tarea por hilo (lo pidió Julen para
   gastar menos). Reglas que siguen valiendo: cada orden nueva que cambie
   páginas va en `_breaks_signatures` (`ui/pdf_view.py`); nunca
