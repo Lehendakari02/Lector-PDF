@@ -1915,7 +1915,11 @@ Notas de la Fase 5:
 - **Pendiente antes de compartirlo con amigos (25/11/2026, decisión de Julen):**
   quitar el aviso «Windows protegió su PC» (SmartScreen) con firma de código.
   Primera opción, SignPath gratis para proyectos libres: la solicitud la hace
-  Julen. Hasta entonces no se comparte el enlace.
+  Julen. Hasta entonces no se comparte el enlace. Lo que pide SignPath en la
+  web del proyecto (política de firma y privacidad) ya está en `README.md`.
+  Falta: Julen con verificación en dos pasos en GitHub, la solicitud en
+  signpath.org/apply y, cuando la aprueben, conectar la firma en
+  `ejecutable.yml` (con sus claves como secretos de GitHub, nunca aquí).
 - **Para seguir (24/11):** Fase 5 terminada (5.1 a 5.9). Lo siguiente es la Fase 6. Desde ahora, una tarea por hilo (lo pidió Julen para
   gastar menos). Reglas que siguen valiendo: cada orden nueva que cambie
   páginas va en `_breaks_signatures` (`ui/pdf_view.py`); nunca
