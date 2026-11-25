@@ -3,7 +3,9 @@ name: Crear programa
 # Builds the Windows program:
 # - on every pull request: a test build to download and try;
 # - when a version is published in "Releases": the installer and the portable
-#   version are attached to that release.
+#   version are attached to that release, plus a copy of the installer with a
+#   fixed name, so that one link always downloads the latest version:
+#   https://github.com/Lehendakari02/Lector-PDF/releases/latest/download/Instalar-Lector-PDF.exe
 on:
   pull_request:
   release:
@@ -173,6 +175,9 @@ jobs:
           # The program checks every download against these before installing it.
           sha256sum "Lector-PDF-$version-portatil.zip" "Lector-PDF-$version-instalador.exe" \
             > SHA256SUMS.txt
+          # Same installer under a fixed name, for the "latest" link to share. Its name
+          # must not end in "-instalador.exe", so the program never picks it to update.
+          cp "Lector-PDF-$version-instalador.exe" Instalar-Lector-PDF.exe
           gh release upload "$RELEASE_TAG" \
             "Lector-PDF-$version-portatil.zip" "Lector-PDF-$version-instalador.exe" \
-            SHA256SUMS.txt --clobber
+            Instalar-Lector-PDF.exe SHA256SUMS.txt --clobber
