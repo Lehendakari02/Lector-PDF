@@ -1905,6 +1905,21 @@ Notas de la Fase 5:
   Julen publicó la Release v1.0.0 el 24/11/2026.
   Las pruebas en Windows ya tardan unos 14 minutos y se cortaban a los 15
   (también en `main` tras la 5.8): el límite sube a 30 (`pruebas.yml`).
+- **Enlace para compartir (25/11/2026, pedido por Julen).** Cada versión
+  publicada lleva además `Instalar-Lector-PDF.exe` (el mismo instalador con
+  nombre fijo), así que
+  https://github.com/Lehendakari02/Lector-PDF/releases/latest/download/Instalar-Lector-PDF.exe
+  baja siempre la última. El programa no lo usa para actualizarse (su nombre no
+  acaba en `-instalador.exe`; lo comprueba una prueba). Funciona desde la
+  primera versión publicada después de este cambio.
+- **Pendiente antes de compartirlo con amigos (25/11/2026, decisión de Julen):**
+  quitar el aviso «Windows protegió su PC» (SmartScreen) con firma de código.
+  Primera opción, SignPath gratis para proyectos libres: la solicitud la hace
+  Julen. Hasta entonces no se comparte el enlace. Lo que pide SignPath en la
+  web del proyecto (política de firma y privacidad) ya está en `README.md`.
+  Falta: Julen con verificación en dos pasos en GitHub, la solicitud en
+  signpath.org/apply y, cuando la aprueben, conectar la firma en
+  `ejecutable.yml` (con sus claves como secretos de GitHub, nunca aquí).
 - **Para seguir (24/11):** Fase 5 terminada (5.1 a 5.9). Lo siguiente es la Fase 6. Desde ahora, una tarea por hilo (lo pidió Julen para
   gastar menos). Reglas que siguen valiendo: cada orden nueva que cambie
   páginas va en `_breaks_signatures` (`ui/pdf_view.py`); nunca

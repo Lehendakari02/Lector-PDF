@@ -123,6 +123,22 @@ def test_a_release_is_read_with_its_files():
     assert release.asset(portable=True).sha256 == ""
 
 
+def test_the_fixed_name_copy_is_never_taken_for_updating():
+    # Releases also carry "Instalar-Lector-PDF.exe" for the link that always
+    # downloads the latest version; the program updates from the named one.
+    release = parse_release(
+        github_release(
+            assets=[
+                github_asset("Instalar-Lector-PDF.exe"),
+                github_asset("Lector-PDF-0.2.0-instalador.exe"),
+            ]
+        )
+    )
+    assert release.asset(portable=False).name == "Lector-PDF-0.2.0-instalador.exe"
+    only_copy = parse_release(github_release(assets=[github_asset("Instalar-Lector-PDF.exe")]))
+    assert only_copy.asset(portable=False) is None
+
+
 @pytest.mark.parametrize(
     "data",
     [

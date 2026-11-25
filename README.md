@@ -40,8 +40,12 @@ Lo siguiente es cambiar el texto original del documento (Fase 6). El avance est�
 
 ## Descarga
 
+Para instalar la última versión en Windows 10 y 11, el enlace directo es
+[**Instalar-Lector-PDF.exe**](https://github.com/Lehendakari02/Lector-PDF/releases/latest/download/Instalar-Lector-PDF.exe)
+(siempre baja la más reciente; es el que se comparte).
+
 En la sección [**Releases**](https://github.com/Lehendakari02/Lector-PDF/releases)
-hay dos descargas de cada versión, para Windows 10 y 11:
+hay además dos descargas de cada versión:
 
 - `Lector-PDF-…-instalador.exe`: se instala sin pedir permisos de administrador.
 - `Lector-PDF-…-portatil.zip`: se descomprime y funciona sin instalar. Guarda sus
@@ -50,6 +54,26 @@ hay dos descargas de cada versión, para Windows 10 y 11:
 Windows puede avisar de que no conoce el programa ("Windows protegió su PC"),
 porque todavía no lleva firma de código: pulsa "Más información" y "Ejecutar de
 todas formas".
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/),
+certificate by [SignPath Foundation](https://signpath.org/).
+
+- Committers and reviewers: [Lehendakari02](https://github.com/Lehendakari02)
+- Approvers: [Lehendakari02](https://github.com/Lehendakari02)
+
+Every signed file is built automatically by GitHub Actions from the source code in
+this repository, and each release is approved by hand before it is signed.
+
+### Privacy
+
+This program will not transfer any information to other networked systems unless
+specifically requested by the user or the person installing or operating it. The
+only connections it makes are to GitHub, to check for and download new versions
+(can be turned off in Ajustes), and to a timestamp server when the user signs a
+document with a digital certificate and asks for a timestamp. Documents never
+leave the computer.
 
 ## Para desarrollo
 
