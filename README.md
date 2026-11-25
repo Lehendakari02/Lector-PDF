@@ -55,25 +55,12 @@ Windows puede avisar de que no conoce el programa ("Windows protegió su PC"),
 porque todavía no lleva firma de código: pulsa "Más información" y "Ejecutar de
 todas formas".
 
-## Code signing policy
+## Privacidad
 
-Free code signing provided by [SignPath.io](https://about.signpath.io/),
-certificate by [SignPath Foundation](https://signpath.org/).
-
-- Committers and reviewers: [Lehendakari02](https://github.com/Lehendakari02)
-- Approvers: [Lehendakari02](https://github.com/Lehendakari02)
-
-Every signed file is built automatically by GitHub Actions from the source code in
-this repository, and each release is approved by hand before it is signed.
-
-### Privacy
-
-This program will not transfer any information to other networked systems unless
-specifically requested by the user or the person installing or operating it. The
-only connections it makes are to GitHub, to check for and download new versions
-(can be turned off in Ajustes), and to a timestamp server when the user signs a
-document with a digital certificate and asks for a timestamp. Documents never
-leave the computer.
+El programa no envía nada a internet salvo lo que pide quien lo usa. Solo se
+conecta a GitHub para buscar y descargar versiones nuevas (se puede apagar en
+Ajustes) y, al firmar con certificado digital pidiendo sello de tiempo, al
+servidor de ese sello. Los documentos nunca salen del ordenador.
 
 ## Para desarrollo
 
